@@ -1,0 +1,42 @@
+syntax = "proto3";
+package voice_pipes.tts;
+
+import "params.proto";
+
+// Text-to-speech service — mirrors the TtsProvider trait.
+service TtsService {
+  // Batch: synthesize text into a single audio frame.
+  rpc Synthesize(SynthesizeRequest) returns (AudioFrame);
+  // Streaming: synthesize text, stream audio frames back.
+  rpc SynthesizeStream(SynthesizeRequest) returns (stream AudioFrame);
+  // Query provider metadata.
+  rpc GetInfo(Empty) returns (TtsInfo);
+}
+
+message Empty {}
+
+message SynthesizeRequest {
+  string text = 1;
+  optional SynthesisHints hints = 2;
+}
+
+message SynthesisHints {
+  optional string voice = 1;
+  optional string language = 2;
+  optional float speed = 3;
+  map<string, string> options = 4;
+}
+
+message AudioFrame {
+  bytes samples_i16 = 1;  // PCM i16 little-endian bytes
+  uint32 sample_rate = 2;
+  uint32 channels = 3;
+}
+
+// Provider metadata.
+message TtsInfo {
+  uint32 sample_rate = 1;
+  string provider_name = 2;
+  map<string, string> metadata = 3;
+  repeated voice_pipes.params.ParamDescriptor param_schema = 4;
+}

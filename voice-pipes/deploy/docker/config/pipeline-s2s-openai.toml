@@ -1,0 +1,39 @@
+# S2S benchmark variant: OpenAI Realtime.
+# Paired with pipeline-s2s-gemini.toml for A/B experiments — keep the
+# instructions and transport identical so provider latency is the only
+# variable under test. See scripts/bench-s2s-compare.ps1.
+
+[pipeline]
+name = "bench-s2s-openai"
+
+# Off by default — captures hold raw audio and transcripts of both
+# sides. Set `enabled = true` to record sessions for the admin console's
+# Session History; `retention_days` (default 7) bounds how long they stay.
+[pipeline.audit]
+enabled = false
+
+[realtime_provider]
+provider = "openai-realtime"
+model = "gpt-realtime"
+voice = "alloy"
+vad = "server_vad"
+api_key_env = "OPENAI_API_KEY"
+instructions = "You are a concise voice assistant. Speak English unless the user explicitly asks for another language."
+
+[output]
+sample_rate = 24000
+
+[output.chunking]
+enabled = true
+frame_ms = 50
+
+[transport]
+enabled = true
+bind = "0.0.0.0"
+port = 8800
+
+# Refuse to start unless VP_CLIENT_TOKEN and VP_INTERNAL_TOKEN are set.
+# The launcher generates them into voice-pipes/.env; compose passes them
+# through by name. For a loopback-only dev box set `required = false`.
+[auth]
+required = true

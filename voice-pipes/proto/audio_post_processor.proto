@@ -1,0 +1,122 @@
+syntax = "proto3";
+package voice_pipes.post;
+
+// Generic, domain-agnostic audio post-processor.
+//
+// Two services, one package; a server may implement either or both:
+//
+//   * `AudioPostProcessor` (unary `Process`) -- the INLINE contract. voice-pipes
+//     streams each outbound audio chunk (post-TTS in the cascade engine, or per
+//     audio-delta in the realtime engine) to this service and attaches the
+//     returned `extras_json` verbatim to the chunk's client-facing
+//     `audio_meta.extras` frame. Audio waits for the response.
+//   * `AudioAnnotator` (bidi `Annotate`) -- the OFF-PATH contract used by
+//     `mode = "annotate"`. voice-pipes tees a copy of the audio, batches it into
+//     `batch_ms` segments tagged with `utterance_id` + `start_ms`, and forwards
+//     every response as an `audio_annotation` frame. Audio never waits.
+//     A unary-only service still works in annotate mode: voice-pipes probes
+//     `AudioAnnotator.GetInfo` and, when it is unimplemented or `services`
+//     lacks "Annotate", calls `Process` per segment and wraps the response.
+//
+// voice-pipes never parses the payload -- blendshapes, visemes, phonemes, or
+// any other metadata live entirely in the service.
+//
+// Statelessness contract:
+//
+//   * `Process`: a single client and gRPC connection are shared across every
+//     session and both engines, so the service MUST derive its output from the
+//     request alone. Everything it needs -- audio, sample rate, utterance id,
+//     end-of-utterance boundary, static options -- rides the request.
+//   * `Annotate`: one stream is opened PER SESSION, so a service MAY keep
+//     per-stream context (that is the point of the stream). It must still be
+//     correct if a stream is cut and reopened mid-utterance -- `start_ms` +
+//     `utterance_id` make every request self-describing, and the static
+//     `options` are re-sent on the first request of every stream.
+service AudioPostProcessor {
+  // Process one audio chunk and return opaque JSON metadata.
+  rpc Process(ProcessRequest) returns (ProcessResponse);
+  // Liveness / identity probe.
+  rpc GetInfo(InfoRequest) returns (InfoResponse);
+}
+
+message ProcessRequest {
+  // PCM audio, signed 16-bit little-endian, `channels`-interleaved.
+  // Empty on the end-of-utterance sentinel.
+  bytes  audio = 1;
+  uint32 sample_rate = 2;
+  uint32 channels = 3;
+  // Server-side utterance id; a new value marks a new logical utterance.
+  uint32 utterance_id = 4;
+  // Monotonic per-processor-instance sequence number (gap detection / logs).
+  uint64 seq = 5;
+  // True on the end-of-utterance sentinel (which carries no audio). A
+  // service that keeps optional per-utterance context should reset it here.
+  bool   end_of_utterance = 6;
+  // Static, domain-specific knobs forwarded verbatim from the vp config's
+  // `[[audio_post_processor]].options` table.
+  map<string, string> options = 7;
+}
+
+message ProcessResponse {
+  // Opaque JSON object, attached verbatim to the chunk's `audio_meta.extras`.
+  // An empty string attaches nothing.
+  string extras_json = 1;
+}
+
+message InfoRequest {}
+
+message InfoResponse {
+  string name = 1;
+  bool   healthy = 2;
+  // RPCs this server implements: "Process" and/or "Annotate". voice-pipes
+  // uses `Annotate` for `mode = "annotate"` when it is listed and falls back
+  // to per-segment `Process` otherwise. An empty list (older servers) means
+  // "Process" only.
+  repeated string services = 3;
+}
+
+// Off-path annotator: one bidirectional stream per voice-pipes session.
+service AudioAnnotator {
+  // Requests arrive in audio order; responses may be sent at any time and at
+  // any granularity (per segment, per frame, or coalesced) -- voice-pipes
+  // forwards each one as it arrives. Ending the stream from the server side
+  // makes voice-pipes reopen it after the circuit-breaker cooldown.
+  rpc Annotate(stream AnnotateRequest) returns (stream AnnotateResponse);
+  // Capability / liveness probe; must report "Annotate" in `services`.
+  rpc GetInfo(InfoRequest) returns (InfoResponse);
+}
+
+message AnnotateRequest {
+  string session_id = 1;
+  // Server-side utterance id; 0 is reserved for warm-up traffic.
+  uint32 utterance_id = 2;
+  // Audio offset of the first sample within the utterance, in ms of audio.
+  uint64 start_ms = 3;
+  // PCM s16le, `channels`-interleaved. Empty on the end-of-utterance
+  // sentinel and on cancel; a warm-up request carries a short span of
+  // silence so the service can exercise its full inference path.
+  bytes  audio = 4;
+  uint32 sample_rate = 5;
+  uint32 channels = 6;
+  // True on the last request of the utterance (may carry zero bytes).
+  bool   end_of_utterance = 7;
+  // Drop pending work for `utterance_id` and any earlier utterance (barge-in).
+  bool   cancel = 8;
+  // Synthetic session-start request; output is discarded by voice-pipes.
+  bool   warmup = 9;
+  // `[audio_post_processor.options]`, sent on the FIRST request of the stream
+  // only (empty afterwards).
+  map<string, string> options = 10;
+}
+
+message AnnotateResponse {
+  uint32 utterance_id = 1;
+  // Utterance offset (ms of audio) of the first described sample.
+  uint64 start_ms = 2;
+  uint64 duration_ms = 3;
+  // Free-form discriminator, e.g. "blendshapes"; voice-pipes never interprets it.
+  string kind = 4;
+  // Opaque JSON object, forwarded verbatim as `audio_annotation.extras`.
+  // Empty or invalid JSON is skipped (logged), the stream stays open.
+  string extras_json = 5;
+}

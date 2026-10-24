@@ -1,0 +1,48 @@
+[package]
+name = "voice-pipes-llm-gguf"
+version.workspace = true
+edition = "2024"
+description = "A local GGUF language model (candle) as a voice-pipes text-processor plugin, on the SDK only"
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+voice-pipes-sdk.workspace = true
+anyhow.workspace = true
+arc-swap.workspace = true
+async-trait.workspace = true
+# Pinned to =0.9.1 in the workspace: candle-kernels 0.9.2 added new MoE CUDA
+# kernels (moe_gguf, moe_wmma, moe_wmma_gguf) compiled by NVCC with /MT
+# (static CRT), which conflicts at link time with the prebuilt onnxruntime in
+# the `ort` crate (linked /MD). Unpin once candle ships an MoE crate whose
+# build script honors the dynamic CRT on MSVC.
+candle-core.workspace = true
+candle-transformers.workspace = true
+# Only to switch its kernels to CUDA with the rest of candle.
+candle-nn = { workspace = true, optional = true }
+parking_lot.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+# Hashes the history prefix recorded in the audit trail.
+sha2.workspace = true
+tokenizers = { workspace = true, features = ["onig"] }
+tokio = { workspace = true, features = ["sync", "rt", "macros"] }
+tokio-util.workspace = true
+tracing.workspace = true
+
+[features]
+# Run the model on an NVIDIA GPU.
+cuda = ["candle-core/cuda", "dep:candle-nn", "candle-nn/cuda"]
+
+[dev-dependencies]
+voice-pipes-sdk = { workspace = true, features = ["testing"] }
+tokio = { workspace = true, features = ["sync", "rt", "macros", "time"] }
+# Parses the wizard entry's output in its test.
+toml.workspace = true

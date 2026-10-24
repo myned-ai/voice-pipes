@@ -1,0 +1,64 @@
+[package]
+name = "voice-pipes-bench"
+version.workspace = true
+edition = "2024"
+description = "Benchmarking & automated voice-testing extension for voice-pipes (host extension)."
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = []
+# AI-driven synthetic callers (OpenAI Realtime / Gemini Live) that drive the
+# pipeline like a human tester. Off by default — parity with the old
+# voice-pipes `synthetic-caller` feature. The realtime client itself comes from
+# voice-pipes' `realtime` feature, which this feature turns on, and the two
+# providers are plugins the binary registers (the CLI's `synthetic-caller`
+# feature links them); `voice-pipes-net` here only installs the crypto
+# provider before the TLS WebSocket callers run.
+synthetic-caller = ["dep:voice-pipes-net", "voice-pipes/realtime"]
+# Add the VAP detector to the turn-detection comparison, linking the plugin
+# crate for the bake-off.
+turn-vap = ["dep:voice-pipes-turn-vap"]
+
+[dependencies]
+# The whole engine: this is a host extension, not a provider plugin, so it
+# needs OrchestratorState, the wire protocol, the realtime client, etc.
+voice-pipes.workspace = true
+voice-pipes-gym.workspace = true
+
+axum.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "time", "fs", "net", "io-util", "signal", "process"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+chrono = { workspace = true, features = ["serde"] }
+dashmap.workspace = true
+futures-util.workspace = true
+sha2.workspace = true
+tracing.workspace = true
+uuid = { workspace = true, features = ["v4"] }
+anyhow.workspace = true
+async-trait.workspace = true
+toml.workspace = true
+tokio-tungstenite.workspace = true
+
+# Only needed by the `synthetic-caller` feature to install the ring crypto
+# provider before the TLS WebSocket callers run.
+voice-pipes-net = { workspace = true, optional = true }
+# The VAP detector, for the turn-detection bake-off (feature `turn-vap`).
+voice-pipes-turn-vap = { workspace = true, optional = true }
+
+[dev-dependencies]
+# tests/stt_corpus.rs scores Parakeet; the library itself needs no provider.
+voice-pipes-stt-parakeet.workspace = true
+tokio = { workspace = true, features = ["test-util"] }
+tempfile.workspace = true
+async-stream.workspace = true
+tokio-util = { workspace = true, features = ["rt"] }
+

@@ -1,0 +1,75 @@
+# Voice Pipes
+
+> A modular, observable real-time voice AI runtime in Rust. STT, LLM and TTS providers plug into a streaming pipeline with neural VAD, barge-in and per-turn metrics; speech-to-speech providers sit behind the same session protocol; the local stack runs with no cloud keys.
+
+Three audiences: people building a voice agent (configure, run, deploy), people connecting a client (WebSocket protocol, SDKs), people writing a provider or component (plugin SDK).
+
+## Getting started
+
+- [Documentation home](README.md): the three doors and the full page list
+- [Concepts](getting-started/concepts.md): pipeline, provider, session, turn, VAD vs turn detection vs barge-in, worker vs orchestrator
+- [Quickstart with Docker](getting-started/quickstart-docker.md): one-command stack, ports, env vars for cloud keys
+- [Quickstart from source](getting-started/quickstart-source.md): toolchain, build, models, run one stage, `live`, `serve`
+- [Your first agent](getting-started/first-agent.md): swap the LLM, change the voice, tune turn-taking, serve it, go speech-to-speech
+
+## Guides
+
+- [Configuration](guides/configuration.md): TOML sections, nested vs flat provider options, env vars, validation
+- [Providers](guides/providers/README.md): support matrix; one page per provider under guides/providers/{stt,tts,llm,s2s}/
+- [Turn detection and interruptions](guides/turn-detection-and-interruptions.md)
+- [VAD](guides/vad.md)
+- [Tool calling](guides/tool-calling.md): client-side tools (`[[client_tool]]`, `trigger_action`/`client_tool_result`), server-side via the agent gRPC link
+- [Audio annotators](guides/audio-annotators.md): off-path per-audio metadata (`mode = "annotate"`)
+- [Observability](guides/observability.md): captures layout, per-turn component metrics, client reports, health, OpenTelemetry
+- [Benchmarking and evals](guides/benchmarking-and-evals.md)
+- [Performance tuning & optimization](guides/performance-and-optimization.md): speculative prefill, KV-cache, VAP turn detection, memory locking, and production fleet hosting topologies
+- [Fleet](guides/fleet.md): worker and orchestrator files, dispatch, drain, addresses in containers
+- [Deployment](guides/deployment.md): compose stack, images, ports, auth tokens, hardening
+- [GPU and CUDA](guides/gpu-and-cuda.md)
+- [Admin console](guides/admin-console.md)
+- [Troubleshooting](guides/troubleshooting.md)
+
+## Clients
+
+- [Building a client](clients/building-a-client.md): binary framing, control plane, error codes, client FSM
+- [Wire protocol](clients/protocol.md): every message, event and capture artefact (canonical)
+- [Protocol walkthrough](clients/protocol-walkthrough.md)
+- [TypeScript SDK](clients/typescript-sdk.md), [React SDK integration](clients/react-sdk-integration.md)
+- [Playground extensions](clients/playground-extensions.md)
+
+## Extending
+
+- [Plugin SDK](extending/plugin-sdk.md): STT, TTS, LLM providers in an external crate
+- [Custom component](extending/custom-component.md)
+- [Wizard descriptor](extending/wizard-descriptor.md)
+- [gRPC split mode](extending/grpc-split-mode.md)
+- [Gateway: transports and engines](extending/gateway-transports-and-engines.md)
+- [Community integrations](extending/community-integrations.md)
+
+## Reference
+
+- [CLI](reference/cli.md), [Configuration](reference/config.md), [Cargo features](reference/cargo-features.md)
+- [Pipeline events](reference/events.md), [HTTP API](reference/http-api.md), [Admin API](reference/admin-api.md)
+- [Metrics glossary](reference/metrics-glossary.md), [Session diagnostic guide](reference/session-diagnostic-guide.md), [VPO metrics](reference/vpo-metrics.md), [VPO telemetry](reference/vpo-telemetry.md), [VPO protocol](reference/vpo-protocol.md)
+- [TTS benchmarking](reference/tts-benchmarking.md)
+- Workspace Agent Skills: [`skills/voice-pipes-session-diagnostic`](../skills/voice-pipes-session-diagnostic/SKILL.md) (session health triage), [`skills/voice-pipes-plugin-builder`](../skills/voice-pipes-plugin-builder/SKILL.md) (provider plugin scaffolding)
+
+## Explanation
+
+- [Streaming architecture](explanation/architecture.md), [The interruption model](explanation/interruption-model.md), [Composable VAD](explanation/composable-vad.md), [Per-turn metrics](explanation/per-turn-metrics.md)
+- [LLM conversation history](explanation/llm-conversation-history.md), [Session history](explanation/session-history.md), [Admin console architecture](explanation/admin-console-architecture.md)
+- [TTS streaming latency](explanation/tts-streaming-latency.md), [STT provider comparison](explanation/stt-provider-comparison.md), [Comparison with other frameworks](explanation/comparison.md)
+- [Design decisions](explanation/decisions/README.md)
+
+## Contributing
+
+- [Development setup](contributing/development-setup.md), [Engineering rules](contributing/engineering-rules.md), [Testing](contributing/testing.md), [Documentation style](contributing/docs-style.md), [Release process](contributing/release-process.md), [Roadmap](roadmap.md)
+
+## Instructions for AI coding agents
+
+- Configuration is one TOML file. `[stt]`/`[tts]`/`[realtime_provider]` take provider-specific keys in a nested `[x.options]` table; `[[text_processor]]` and `[[audio_post_processor]]` are flat. `client_tools_path` must precede the first table header. Unknown keys are errors.
+- A cascade file has `[stt]`, `[[text_processor]]`, `[tts]`; a speech-to-speech file has `[realtime_provider]`; never both.
+- Providers are Cargo features on the `voice-pipes` crate; enable them on the CLI crate as `--features voice-pipes/<feature>`. Each provider page names its feature, config block and env var.
+- New providers implement the `voice-pipes-sdk` factory + provider traits in their own crate and register with one call; see the Plugin SDK guide and `voice-pipes-sdk/llms.txt`. Built-in providers also need a wizard descriptor and a docs page.
+- Runtime paths never panic: factories return `ConfigError`, locks are `parking_lot`. `cargo clippy --workspace --all-targets --features "voice-pipes/realtime,voice-pipes/text-grpc" -- -D warnings` must stay clean.
+- Behaviour, config or protocol changes update the matching page under docs/ and a line under `[Unreleased]` in CHANGELOG.md. `pwsh scripts/docs-check.ps1` and `bash scripts/leak-check.sh` must pass. Never link from docs/ into docs/internal/.

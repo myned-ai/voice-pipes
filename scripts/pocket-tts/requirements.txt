@@ -1,0 +1,9 @@
+# Dependencies for the Pocket-TTS sidecar prototypes in this directory.
+# Tested with Python 3.11.
+pocket-tts
+torch
+numpy
+grpcio>=1.81
+grpcio-tools>=1.81   # serve_pocket_grpc.py compiles the protos at import time
+fastapi              # serve_pocket_streaming.py only
+uvicorn              # serve_pocket_streaming.py only

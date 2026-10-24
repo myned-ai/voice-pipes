@@ -1,0 +1,27 @@
+# Gemini Live Speech-to-Speech (S2S) Pipeline
+#
+# Connects directly to Google's Gemini Live bidirectional audio WebSocket.
+# Full-duplex speech-in, speech-out with native interruption and sub-400ms TTFB.
+# Zero model downloads required — runs immediately with a GEMINI_API_KEY.
+#
+# Usage (terminal voice loop):
+#   export GEMINI_API_KEY="your-api-key"
+#   voice-pipes --config examples/live/gemini-live.toml interactive
+#
+# Serve to browser / Admin Console Playground:
+#   voice-pipes --config examples/live/gemini-live.toml serve --worker-config examples/orchestrate/worker-standalone.toml
+
+[pipeline]
+name = "gemini-live"
+
+[realtime_provider]
+provider = "gemini-live"
+model = "gemini-3.8-live"
+voice = "Puck"
+vad = "server_vad"
+instructions = "You are a concise, friendly voice assistant. Respond in one or two short sentences."
+# api_key_env = "GEMINI_API_KEY"  # default
+
+[pipeline.audit]
+enabled = true
+captures_dir = "captures"

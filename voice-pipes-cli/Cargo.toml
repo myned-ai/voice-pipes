@@ -1,0 +1,193 @@
+[package]
+name = "voice-pipes-cli"
+version.workspace = true
+edition = "2024"
+description = "Voice Pipes command-line binary — composition root assembling the engine + host extensions."
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme.workspace = true
+default-run = "voice-pipes"
+
+# The user-facing binary keeps the name `voice-pipes`.
+[lints]
+workspace = true
+
+[[bin]]
+name = "voice-pipes"
+path = "src/main.rs"
+
+[features]
+# The batteries: what `cargo install` and the images get without asking.
+# `--no-default-features` builds exactly the features named, nothing else.
+default = ["realtime", "stt-parakeet", "tts-piper", "vad-silero", "llm-gguf", "llm-openai-compat", "s2s-gemini", "s2s-openai", "s2s-elevenlabs", "telemetry", "wizard", "audio-device", "session-sqlite"]
+
+# The interactive S2S loop subcommand is gated on realtime (mirrors the engine).
+realtime = ["voice-pipes/realtime"]
+# Build the benchmarking extension with its AI synthetic callers, and the
+# two providers they talk through.
+synthetic-caller = ["voice-pipes-bench/synthetic-caller", "s2s-openai", "s2s-gemini"]
+
+# ── Engine feature pass-through ──────────────────────────────
+# Forward the engine's optional parts so deployers can select them on this
+# binary crate by bare name (e.g. `-p voice-pipes-cli --features stt-grpc`).
+# CUDA for every linked ONNX plugin (`dep?/feature` enables nothing the
+# build does not already link); the engine opens no ONNX session itself.
+# A test holds the list complete.
+
+# CUDA for every linked ONNX plugin.
+ort-cuda = [
+    "voice-pipes-stt-parakeet?/ort-cuda",
+    "voice-pipes-stt-moonshine?/ort-cuda",
+    "voice-pipes-tts-piper?/ort-cuda",
+    "voice-pipes-stt-nemotron?/ort-cuda",
+    "voice-pipes-stt-nemotron35?/ort-cuda",
+    "voice-pipes-tts-kokoro?/ort-cuda",
+]
+# A plugin with every linked ONNX provider on CUDA: the same as naming the
+# plugin and `ort-cuda`, kept for the builds that already name it.
+stt-moonshine-cuda = ["stt-moonshine", "ort-cuda"]
+stt-grpc = ["voice-pipes/stt-grpc"]
+tts-grpc = ["voice-pipes/tts-grpc"]
+text-grpc = ["voice-pipes/text-grpc"]
+post-grpc = ["voice-pipes/post-grpc"]
+telemetry = ["voice-pipes/telemetry"]
+# `config-wizard`.
+wizard = ["voice-pipes/wizard"]
+# `live`, `listen` and `interactive` (local microphone and speaker).
+audio-device = ["voice-pipes/audio-device"]
+# The orchestrator's SQLite session store.
+session-sqlite = ["voice-pipes/session-sqlite"]
+
+# ── Plugin recognisers ───────────────────────────────────────
+# Out-of-tree providers built on the SDK. The engine knows nothing of them:
+# this crate links the plugin and registers its factory and wizard entries in
+# `main` before the engine runs, so the pipeline finds it by name like any
+# built-in one. A new plugin is one dependency, one feature and one pair of
+# registration lines; listing it in `default-plugins` below builds it by default.
+
+# NVIDIA Parakeet TDT, the default recogniser.
+stt-parakeet = ["dep:voice-pipes-stt-parakeet"]
+stt-nemotron35 = ["dep:voice-pipes-stt-nemotron35"]
+# Useful Sensors Moonshine (English), local ONNX.
+stt-moonshine = ["dep:voice-pipes-stt-moonshine"]
+# NVIDIA Nemotron-Speech-Streaming (English), from a one-time ONNX export.
+stt-nemotron = ["dep:voice-pipes-stt-nemotron"]
+stt-nemotron-cuda = ["stt-nemotron", "ort-cuda"]
+# Google Cloud Speech-to-Text v2 (Chirp 3), streaming over gRPC.
+stt-google = ["dep:voice-pipes-stt-google"]
+# AssemblyAI streaming STT (v3 WebSocket). The wizard's default recogniser.
+stt-assemblyai = ["dep:voice-pipes-stt-assemblyai"]
+stt-nemotron35-cuda = ["stt-nemotron35", "ort-cuda"]
+
+# ── Plugin voices ────────────────────────────────────────────
+# Piper VITS, local ONNX with espeak-ng phonemes: the default voice.
+tts-piper = ["dep:voice-pipes-tts-piper"]
+# Kokoro-82M, local ONNX with espeak-ng phonemes.
+tts-kokoro = ["dep:voice-pipes-tts-kokoro"]
+# Kyutai Pocket-TTS, over the `pocket-tts` HTTP sidecar.
+tts-pocket = ["dep:voice-pipes-tts-pocket"]
+# Its name before 1.0.
+tts-pocket-http = ["tts-pocket"]
+# OpenAI TTS, and servers speaking its API (the VibeVoice sidecar).
+tts-openai = ["dep:voice-pipes-tts-openai"]
+# ElevenLabs TTS (REST streaming, word timestamps).
+tts-elevenlabs = ["dep:voice-pipes-tts-elevenlabs"]
+# Google Gemini TTS (REST).
+tts-gemini = ["dep:voice-pipes-tts-gemini"]
+
+# ── Plugin LLMs ──────────────────────────────────────────────
+# Any server speaking the OpenAI chat-completions API: OpenAI, llama-server
+# (the wizard's Gemma presets), vLLM, Ollama. Built by default.
+llm-openai-compat = ["dep:voice-pipes-llm-openai-compat"]
+# Its name before 1.0.
+text-openai-compat = ["llm-openai-compat"]
+# A local GGUF model (candle), SmolLM2 by default. Built by default.
+llm-gguf = ["dep:voice-pipes-llm-gguf"]
+# Its name before 1.0.
+text-llm = ["llm-gguf"]
+# Run the local GGUF model on an NVIDIA GPU.
+cuda = ["llm-gguf", "voice-pipes-llm-gguf/cuda"]
+
+# ── Plugin VADs ──────────────────────────────────────────────
+# Silero, local ONNX: the backend `[vad] mode = "auto"` runs when its model
+# is on disk.
+vad-silero = ["dep:voice-pipes-vad-silero"]
+
+# ── Plugin turn detectors ────────────────────────────────────
+# Pipecat Smart Turn — audio-only semantic end-of-turn classifier (ONNX).
+turn-smart = ["dep:voice-pipes-turn-smart"]
+# Voice Activity Projection — two-channel anticipatory turn-taking (ONNX),
+# experimental. Needs a model exported by scripts/export-vap-onnx.py.
+turn-vap = ["dep:voice-pipes-turn-vap"]
+
+# ── Plugin speech-to-speech models ───────────────────────────
+# Each needs the engine's speech-to-speech client (`realtime`). Built by
+# default.
+
+# Google Gemini Live.
+s2s-gemini = ["realtime", "dep:voice-pipes-s2s-gemini"]
+s2s-openai = ["realtime", "dep:voice-pipes-s2s-openai"]
+s2s-elevenlabs = ["realtime", "dep:voice-pipes-s2s-elevenlabs"]
+
+[dependencies]
+voice-pipes.workspace = true
+# Benchmarking host extension. Drop this dependency (and the wiring in
+# main.rs's `orchestrate` arm) to ship a benchmark-free build.
+voice-pipes-bench.workspace = true
+# Installs the process-wide TLS crypto provider before anything connects.
+voice-pipes-net.workspace = true
+voice-pipes-stt-parakeet = { workspace = true, optional = true }
+voice-pipes-tts-piper = { workspace = true, optional = true }
+voice-pipes-vad-silero = { workspace = true, optional = true }
+voice-pipes-stt-moonshine = { workspace = true, optional = true }
+voice-pipes-stt-nemotron35 = { workspace = true, optional = true }
+voice-pipes-stt-nemotron = { workspace = true, optional = true }
+voice-pipes-stt-google = { workspace = true, optional = true }
+voice-pipes-tts-kokoro = { workspace = true, optional = true }
+voice-pipes-tts-pocket = { workspace = true, optional = true }
+voice-pipes-tts-openai = { workspace = true, optional = true }
+voice-pipes-stt-assemblyai = { workspace = true, optional = true }
+voice-pipes-tts-elevenlabs = { workspace = true, optional = true }
+voice-pipes-tts-gemini = { workspace = true, optional = true }
+voice-pipes-llm-openai-compat = { workspace = true, optional = true }
+voice-pipes-llm-gguf = { workspace = true, optional = true }
+voice-pipes-s2s-gemini = { workspace = true, optional = true }
+voice-pipes-s2s-openai = { workspace = true, optional = true }
+voice-pipes-s2s-elevenlabs = { workspace = true, optional = true }
+voice-pipes-turn-smart = { workspace = true, optional = true }
+voice-pipes-turn-vap = { workspace = true, optional = true }
+
+mimalloc.workspace = true
+anyhow.workspace = true
+clap = { workspace = true, features = ["derive"] }
+tracing.workspace = true
+tokio = { workspace = true, features = ["full"] }
+
+[dev-dependencies]
+# The pipeline tests with the local LLM (tests/pipeline_llm.rs).
+parking_lot.workspace = true
+serde_json.workspace = true
+tokio-util.workspace = true
+# Reads the workspace manifests in tests/workspace_rules.rs.
+toml.workspace = true
+# Read the workspace's Rust sources as syntax in tests/workspace_rules.rs, with
+# line numbers for the function-length rule.
+proc-macro2 = { workspace = true, features = ["span-locations"] }
+syn = { workspace = true, features = ["full", "visit"] }
+# The wizard descriptor types, in the plugin sidecar contract test.
+voice-pipes-sdk.workspace = true
+
+[package.metadata.voice-pipes]
+# Plugin features built by default, beside the engine's `batteries` (which the
+# engine-forwarding default features must equal). Each names a feature of this
+# crate that enables a provider crate. `cargo test -p voice-pipes-cli --test
+# workspace_rules` holds `default` to exactly the two.
+default-plugins = ["stt-parakeet", "tts-piper", "vad-silero", "llm-gguf", "llm-openai-compat", "s2s-gemini", "s2s-openai", "s2s-elevenlabs"]
+
+# cargo-dist: this is the only crate whose binary ships as a release artifact;
+# the engine's component server says `dist = false`.
+[package.metadata.dist]
+dist = true

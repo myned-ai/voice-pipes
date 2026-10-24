@@ -1,0 +1,14 @@
+# Worker config for benchmark variant: Pocket-TTS (HTTP sidecar)
+# Transport:  8803 (set in examples/bench-pocket-http.toml)
+# Debug API:  8088
+# Tags:       variant:pocket-http, tts:pocket-http
+#
+# The `tts:<provider>` tag is reserved for TTS-comparison experiments and
+# is what `run-benchmark-piper-vs-pocket.ps1` selects on. The `variant:*`
+# tag stays in line with the existing benchmark conventions.
+
+debug_port = 8088
+tags = ["variant:pocket-http", "tts:pocket-http"]
+
+[orchestrator]
+endpoint = "http://127.0.0.1:9090"

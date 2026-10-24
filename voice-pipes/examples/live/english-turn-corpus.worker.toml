@@ -1,0 +1,36 @@
+# Worker settings for the turn-corpus example, running on the host beside
+# the repo's Docker stack.
+#
+#   voice-pipes --config examples/live/english-turn-corpus.toml \
+#     serve --worker-config examples/live/english-turn-corpus.worker.toml
+#
+# Registering with the orchestrator means the console can dispatch to this
+# pipeline by name instead of anyone having to type a ws:// URL. It needs
+# `VP_INTERNAL_TOKEN` in the environment, matching the orchestrator's — both
+# live in voice-pipes/.env.
+
+id = "worker-english-corpus"
+max_concurrent = 4
+
+# 8086, not the usual 8081/8085: llama-server and worker-custom already hold
+# those in the running stack.
+debug_port = 8086
+# 0.0.0.0 rather than loopback because the orchestrator is in a container and
+# reaches back to this API for health and proxied parameter edits; it cannot
+# see the host's 127.0.0.1. The API is token-gated by `VP_INTERNAL_TOKEN`.
+debug_bind = "0.0.0.0"
+# How the orchestrator's container addresses this host.
+advertise_address = "host.docker.internal:8086"
+
+# What the *browser* should connect to, which is not what the orchestrator
+# would infer. Without this, dispatch rewrites the bind address and hands out
+# 127.0.0.1:8800 -- the port the Docker workers publish, not this one.
+transport_advertise_address = "localhost:8810"
+
+tags = ["english", "turn-corpus", "host"]
+
+[orchestrator]
+# Published on the host by the stack's compose file.
+endpoint = "http://localhost:9090"
+heartbeat_interval_s = 5
+register_timeout_s = 10

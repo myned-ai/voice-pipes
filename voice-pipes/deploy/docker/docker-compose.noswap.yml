@@ -1,0 +1,91 @@
+# No swap for the voice path.
+#
+# A worker that sits idle on a host short of memory has its models swapped
+# out, and the next caller waits while they come back: on a test box a worker
+# swapped out by 0.9 GB answered its first turn in 2.9-3.3 s against 1.3 s
+# warm, almost all of it in speech recognition paging its model back in
+# (scripts/idle_soak.py --squeeze-mb reproduces it in minutes). Capping each
+# container's memory and its memory-plus-swap at the same value forbids
+# swapping it at all; llama-server additionally locks its weights in RAM.
+#
+# Use it on top of the base file (and the Croatian one, when used):
+#
+#   docker compose -f voice-pipes/deploy/docker/docker-compose.yml `
+#       -f voice-pipes/deploy/docker/docker-compose.noswap.yml up -d ...
+#
+# The cost of the guarantee: a container that outgrows its limit is killed
+# (and restarted) instead of slowed, so the limits must fit the host. The
+# defaults below are each service's measured footprint with headroom, or a
+# generous figure where it depends on the configured models; check yours
+# with `docker stats` under load and set VP_MEM_<SERVICE> to size it. Their
+# sum must fit in the host's RAM with room for the OS: a host that cannot
+# hold every model at once needs more memory or fewer workers, and no
+# setting here changes that.
+
+x-no-swap: &no-swap
+  # memswap_limit equal to mem_limit: no swap allowed.
+  mem_limit: ${VP_MEM_WORKER:-4g}
+  memswap_limit: ${VP_MEM_WORKER:-4g}
+
+services:
+  orchestrator:
+    mem_limit: ${VP_MEM_ORCHESTRATOR:-512m}
+    memswap_limit: ${VP_MEM_ORCHESTRATOR:-512m}
+
+  worker-a:
+    <<: *no-swap
+  worker-b:
+    <<: *no-swap
+  worker-gpu:
+    mem_limit: ${VP_MEM_WORKER_GPU:-6g}
+    memswap_limit: ${VP_MEM_WORKER_GPU:-6g}
+  # The wizard's pipeline: its footprint is whatever models it was given.
+  worker-custom:
+    mem_limit: ${VP_MEM_WORKER_CUSTOM:-6g}
+    memswap_limit: ${VP_MEM_WORKER_CUSTOM:-6g}
+  worker-custom-gpu:
+    mem_limit: ${VP_MEM_WORKER_CUSTOM:-6g}
+    memswap_limit: ${VP_MEM_WORKER_CUSTOM:-6g}
+  # Measured 2026-09: corpus 3.6 GB, Nemotron 3.5 6 GB, Moonshine 1.2 GB.
+  worker-english-corpus:
+    mem_limit: ${VP_MEM_WORKER_ENGLISH_CORPUS:-5g}
+    memswap_limit: ${VP_MEM_WORKER_ENGLISH_CORPUS:-5g}
+  worker-english-nemotron35:
+    mem_limit: ${VP_MEM_WORKER_ENGLISH_NEMOTRON35:-8g}
+    memswap_limit: ${VP_MEM_WORKER_ENGLISH_NEMOTRON35:-8g}
+  worker-english-moonshine:
+    mem_limit: ${VP_MEM_WORKER_ENGLISH_MOONSHINE:-2g}
+    memswap_limit: ${VP_MEM_WORKER_ENGLISH_MOONSHINE:-2g}
+  worker-english-nemotron:
+    mem_limit: ${VP_MEM_WORKER_ENGLISH_NEMOTRON:-6g}
+    memswap_limit: ${VP_MEM_WORKER_ENGLISH_NEMOTRON:-6g}
+  # Speech-to-speech workers hold no models of their own.
+  worker-s2s-openai:
+    mem_limit: ${VP_MEM_WORKER_S2S:-1g}
+    memswap_limit: ${VP_MEM_WORKER_S2S:-1g}
+  worker-s2s-gemini:
+    mem_limit: ${VP_MEM_WORKER_S2S:-1g}
+    memswap_limit: ${VP_MEM_WORKER_S2S:-1g}
+  worker-s2s-elevenlabs:
+    mem_limit: ${VP_MEM_WORKER_S2S:-1g}
+    memswap_limit: ${VP_MEM_WORKER_S2S:-1g}
+
+  llama-server:
+    mem_limit: ${VP_MEM_LLAMA:-6g}
+    memswap_limit: ${VP_MEM_LLAMA:-6g}
+    # Lock the weights in RAM (llama.cpp reads LLAMA_ARG_* as its flags, so
+    # the command, which the Croatian file replaces, stays untouched). Without
+    # the memlock limit the lock fails and llama.cpp carries on unlocked.
+    environment:
+      - LLAMA_ARG_MLOCK=1
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+
+  pocket-tts:
+    mem_limit: ${VP_MEM_POCKET_TTS:-3g}
+    memswap_limit: ${VP_MEM_POCKET_TTS:-3g}
+  vibevoice:
+    mem_limit: ${VP_MEM_VIBEVOICE:-12g}
+    memswap_limit: ${VP_MEM_VIBEVOICE:-12g}

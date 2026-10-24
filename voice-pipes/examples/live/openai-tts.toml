@@ -1,0 +1,44 @@
+# Live mode: mic → VAD → STT → LLM → TTS → speaker (full real-time voice loop).
+#
+# Uses hosted OpenAI GPT-4o-mini for LLM + OpenAI for TTS.
+# No local model needed for TTS — requires OPENAI_API_KEY and ASSEMBLYAI_API_KEY env vars.
+#
+# Build:  cargo build --release -p voice-pipes-cli --features stt-assemblyai,tts-openai
+# Usage:  voice-pipes --config examples/live/openai-tts.toml live
+
+[pipeline]
+name = "live-openai-tts"
+
+[stt]
+provider = "assemblyai"
+model_name = "u3-rt-pro"
+sample_rate = 16000
+
+[turn_detection]
+mode = "provider"
+
+[barge_in]
+enabled = true
+min_chunks = 3
+speech_threshold = 2000.0
+
+[[text_processor]]
+type = "openai-compat"
+model = "gpt-4o-mini"
+system_prompt = "You are a helpful voice assistant. Be concise."
+max_tokens = 256
+temperature = 0.7
+
+[tts]
+provider = "openai"
+model_name = "tts-1"
+voice = "alloy"
+
+[pipeline.audit]
+enabled = true
+captures_dir = "captures"
+
+[transport]
+enabled = true
+bind = "0.0.0.0"
+port = 8800

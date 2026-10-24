@@ -1,0 +1,62 @@
+# The English cascade with Moonshine as the recogniser, for comparing against
+# Parakeet (pipeline-english-corpus.toml) and Nemotron
+# (pipeline-english-nemotron.toml):
+#   mic → Silero VAD → Moonshine Base (CPU) → Gemma 3 1B (llama-server) → Piper
+#
+# Everything except [stt] is the Parakeet pipeline's, on purpose: the VAD, the
+# turn detector and its timeout, the model and the voice are the same, so a
+# difference between two sessions is the recogniser's.
+#
+# Run by the `worker-english-moonshine` service in docker-compose.yml.
+
+[pipeline]
+name = "english-moonshine"
+
+[pipeline.audit]
+enabled = true
+
+[stt]
+provider = "moonshine"
+model_dir = "models/moonshine"
+
+# Moonshine emits no end-of-turn signal either, so the same VAD drives the turn.
+[vad]
+mode = "auto"
+model = "models/silero_vad.onnx"
+threshold = 0.5
+
+# The same detector and timeout as the Parakeet pipeline.
+[turn_detection]
+mode = "silence"
+silence_timeout_ms = 700
+
+[barge_in]
+enabled = true
+min_chunks = 3
+speech_threshold = 2000.0
+
+# The same Gemma 3 1B on the llama-server sidecar as the Parakeet pipeline.
+[[text_processor]]
+type = "openai-compat"
+base_url = "http://llama-server:8081/v1"
+model = "gemma-3-1b-it"
+system_prompt = "You are a voice assistant in a spoken conversation. Reply in one or two short sentences. Ask a follow-up question every other turn or so, to keep the conversation going."
+max_tokens = 128
+temperature = 0.7
+
+[tts]
+provider = "piper"
+model = "models/en_US-lessac-medium.onnx"
+
+# Small frames keep barge-in responsive.
+[output.chunking]
+enabled = true
+frame_ms = 50
+
+[transport]
+enabled = true
+bind = "0.0.0.0"
+port = 8800
+
+[auth]
+required = true

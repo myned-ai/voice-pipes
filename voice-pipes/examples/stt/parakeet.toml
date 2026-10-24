@@ -1,0 +1,14 @@
+# STT-only config with Parakeet-TDT (local, no VAD).
+#
+# Model required:
+#   - models/parakeet-tdt/   (Parakeet-TDT ONNX model directory)
+#
+# Build:  cargo build --release
+# Usage:  voice-pipes --config examples/stt/parakeet.toml stt --input recording.wav
+
+[pipeline]
+name = "stt-parakeet"
+
+[stt]
+provider = "parakeet-tdt"
+model_dir = "models/parakeet-tdt"

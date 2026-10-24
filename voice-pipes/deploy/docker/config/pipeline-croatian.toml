@@ -1,0 +1,97 @@
+# Croatian cascade for the Playground, in and out:
+#   mic → Google Chirp 3 STT (hr-HR) → local Gemma 4 E4B (answers in Croatian)
+#   → Croatian Pocket-TTS (myned-ai/pocket-tts-croatian) → speaker.
+#
+# Docker variant of examples/live/google-croatian.toml, run by the
+# `worker-croatian` service in docker-compose.croatian.yml.
+#
+# The TTS server is the Croatian Pocket-TTS fork (6-layer model), run on the
+# host from its checkout and reached from the container via host.docker.internal.
+# The fork's own text preparation keeps multi-sentence input complete; the
+# PyPI `pocket-tts` package with the same weights drops later sentences.
+#   cd ..\kyutai-pocket-tts-cro
+#   uv run pocket-tts serve --config pocket_tts/config/croatian.yaml --host 0.0.0.0 --port 8010
+#
+# Google auth: the host's gcloud Application Default Credentials are mounted
+# read-only at $HOME/.config/gcloud in the container; refresh with
+# `gcloud auth application-default login` if Chirp starts refusing.
+
+[pipeline]
+name = "croatian-cascade"
+
+[pipeline.audit]
+enabled = true
+
+[stt]
+provider    = "google"
+model_name  = "chirp_3"
+sample_rate = 16000
+
+[stt.options]
+location       = "eu"
+language_codes = ["hr-HR"]
+enable_voice_activity_events = true
+interim_results              = true
+
+# Google's end-of-speech events and finals drive the turn; the silence
+# fallback in `layered` still covers a missed signal.
+[turn_detection]
+mode = "layered"
+silence_timeout_ms = 700
+
+[barge_in]
+enabled = true
+min_chunks = 3
+speech_threshold = 2000.0
+
+[[text_processor]]
+type = "openai-compat"
+# Local Gemma 4 E4B served by the llama-server sidecar on the GPU.
+base_url = "http://llama-server:8081/v1"
+model = "gemma-4-E4B-it"
+# Short spoken replies; lists, digits and abbreviations read badly aloud.
+system_prompt = """
+You are a Croatian voice assistant. Always answer in Croatian, in one or two \
+short sentences. Never use lists, numbers, or abbreviations.
+"""
+max_tokens = 96
+temperature = 0.7
+
+[tts]
+provider = "pocket-http"
+endpoint = "http://host.docker.internal:8010"
+model    = "myned-ai/pocket-tts-croatian"
+# Custom reference voice: a 6 s clip (the fork caps prompts at 6 s) served over
+# local HTTP from models/pocket-tts-croatian/custom-voices, because the fork's
+# /tts route only takes voices as URLs. The fork runs on the host, so the URL
+# is resolved there:
+#   cd voice-pipes\models\pocket-tts-croatian\custom-voices
+#   python -m http.server 8013 --bind 127.0.0.1
+# Previous voice: hf://myned-ai/pocket-tts-croatian/voices/croatian_male_sample.wav
+voice    = "http://127.0.0.1:8013/recording14.wav"
+request_timeout_ms = 30000
+# Re-request a fragment whose first 2 s carry no sound (a generation that runs
+# to its cap in near-silence).
+silent_start_ms      = 2000
+silent_start_retries = 2
+
+# One synthesis request per sentence, no comma splits.
+[pipeline.text_chunking]
+min_soft_split_chars = 400
+min_soft_split_words = 80
+
+[output]
+sample_rate = 24000
+
+# Small frames keep barge-in responsive.
+[output.chunking]
+enabled = true
+frame_ms = 50
+
+[transport]
+enabled = true
+bind = "0.0.0.0"
+port = 8800
+
+[auth]
+required = true

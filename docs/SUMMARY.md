@@ -1,0 +1,120 @@
+# Summary
+
+[Voice Pipes](README.md)
+
+# Getting started
+
+- [Quickstart with Docker](getting-started/quickstart-docker.md)
+- [Quickstart from source](getting-started/quickstart-source.md)
+- [Your first agent](getting-started/first-agent.md)
+- [Example pipelines & features](guides/examples-and-features.md)
+- [Concepts](getting-started/concepts.md)
+
+# Guides
+
+- [Configuration](guides/configuration.md)
+- [Providers](guides/providers/README.md)
+  - [Parakeet TDT](guides/providers/stt/parakeet.md)
+  - [Moonshine](guides/providers/stt/moonshine.md)
+  - [Nemotron 3.5](guides/providers/stt/nemotron-3.5.md)
+  - [Nemotron streaming](guides/providers/stt/nemotron.md)
+  - [AssemblyAI](guides/providers/stt/assemblyai.md)
+  - [Google Cloud STT](guides/providers/stt/google.md)
+  - [gRPC STT client](guides/providers/stt/grpc.md)
+  - [Piper](guides/providers/tts/piper.md)
+  - [Kokoro](guides/providers/tts/kokoro.md)
+  - [Pocket-TTS](guides/providers/tts/pocket.md)
+  - [VibeVoice](guides/providers/tts/vibevoice.md)
+  - [OpenAI TTS and compatible endpoints](guides/providers/tts/openai.md)
+  - [Gemini TTS](guides/providers/tts/gemini.md)
+  - [ElevenLabs TTS](guides/providers/tts/elevenlabs.md)
+  - [gRPC TTS client](guides/providers/tts/grpc.md)
+  - [Local GGUF LLM](guides/providers/llm/local-gguf.md)
+  - [OpenAI-compatible LLM](guides/providers/llm/openai-compatible.md)
+  - [gRPC text processor client](guides/providers/llm/grpc.md)
+  - [Agent link](guides/providers/llm/agent-grpc.md)
+  - [OpenAI Realtime](guides/providers/s2s/openai-realtime.md)
+  - [Gemini Live](guides/providers/s2s/gemini-live.md)
+  - [ElevenLabs Agents](guides/providers/s2s/elevenlabs-agents.md)
+- [Turn detection and interruptions](guides/turn-detection-and-interruptions.md)
+- [Voice activity detection](guides/vad.md)
+- [Tool calling](guides/tool-calling.md)
+- [Audio annotators](guides/audio-annotators.md)
+- [Observability](guides/observability.md)
+- [Benchmarking and evals](guides/benchmarking-and-evals.md)
+- [Voice Pipes Gym (RL & evals)](guides/voice-pipes-gym.md)
+- [Performance tuning & optimization](guides/performance-and-optimization.md)
+- [Fleet: orchestrator and workers](guides/fleet.md)
+- [Deployment](guides/deployment.md)
+- [GPU and CUDA](guides/gpu-and-cuda.md)
+- [Admin console](guides/admin-console.md)
+- [Troubleshooting](guides/troubleshooting.md)
+
+# Clients
+
+- [Building a client](clients/building-a-client.md)
+- [Wire protocol](clients/protocol.md)
+- [Protocol walkthrough](clients/protocol-walkthrough.md)
+- [TypeScript SDK](clients/typescript-sdk.md)
+- [React SDK integration](clients/react-sdk-integration.md)
+- [Playground extensions](clients/playground-extensions.md)
+
+# Extending
+
+- [Plugin SDK](extending/plugin-sdk.md)
+- [SDK stability policy](extending/sdk-stability.md)
+- [Custom component](extending/custom-component.md)
+- [Wizard descriptor](extending/wizard-descriptor.md)
+- [gRPC split mode](extending/grpc-split-mode.md)
+- [Gateway: transports and engines](extending/gateway-transports-and-engines.md)
+- [Community integrations](extending/community-integrations.md)
+
+# Reference
+
+- [CLI](reference/cli.md)
+- [Configuration](reference/config.md)
+- [Cargo features](reference/cargo-features.md)
+- [Providers (wizard tables)](reference/providers.md)
+- [Pipeline events](reference/events.md)
+- [HTTP API](reference/http-api.md)
+- [Admin API](reference/admin-api.md)
+- [Metrics glossary](reference/metrics-glossary.md)
+- [Session diagnostic guide](reference/session-diagnostic-guide.md)
+- [VPO metrics](reference/vpo-metrics.md)
+- [VPO telemetry](reference/vpo-telemetry.md)
+- [VPO protocol](reference/vpo-protocol.md)
+- [TTS benchmarking](reference/tts-benchmarking.md)
+
+# Explanation
+
+- [Streaming architecture](explanation/architecture.md)
+- [The interruption model](explanation/interruption-model.md)
+- [Composable VAD](explanation/composable-vad.md)
+- [Per-turn metrics](explanation/per-turn-metrics.md)
+- [LLM conversation history](explanation/llm-conversation-history.md)
+- [Session history](explanation/session-history.md)
+- [Admin console architecture](explanation/admin-console-architecture.md)
+- [TTS streaming latency](explanation/tts-streaming-latency.md)
+- [STT provider comparison](explanation/stt-provider-comparison.md)
+- [How Voice Pipes compares](explanation/comparison.md)
+- [Voice Pipes Gym architecture](explanation/voice-pipes-gym.md)
+- [Design decisions](explanation/decisions/README.md)
+  - [Component trait and health registry](explanation/decisions/component-trait.md)
+  - [Open-schema per-turn metrics](explanation/decisions/per-turn-metrics-registry.md)
+  - [Pipeline error propagation and session modes](explanation/decisions/pipeline-error-propagation.md)
+  - [Provider factory registry](explanation/decisions/provider-registry.md)
+  - [Client-side tools](explanation/decisions/client-side-tools.md)
+  - [Off-path audio annotators](explanation/decisions/audio-annotators.md)
+  - [Throughput observability](explanation/decisions/throughput-observability.md)
+  - [Honest speech-to-speech latency](explanation/decisions/s2s-latency-measurement.md)
+  - [STT session lifecycle](explanation/decisions/stt-session-lifecycle.md)
+
+# Contributing
+
+- [Development setup](contributing/development-setup.md)
+- [Engineering rules](contributing/engineering-rules.md)
+- [Dependencies](contributing/dependencies.md)
+- [Testing](contributing/testing.md)
+- [Documentation style](contributing/docs-style.md)
+- [Release process](contributing/release-process.md)
+- [Roadmap](roadmap.md)

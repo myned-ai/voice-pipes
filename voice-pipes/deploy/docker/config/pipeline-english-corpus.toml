@@ -1,0 +1,98 @@
+# English cascade for collecting turn-detection test conversations, in
+# Docker beside the rest of the stack:
+#   mic → Silero VAD → Parakeet TDT v3 (CPU) → SmolLM2 (CPU) → Piper → speaker
+#
+# Fully local: no API keys and no sidecars, so this service starts with the
+# stack and needs nothing else running.
+#
+# The point of it is the recording. `record_session_audio` writes one stereo
+# WAV per session -- the user before the VAD on channel 0, the agent after
+# the chain on channel 1, on one timeline -- which is what
+# `voice-pipes-bench --test turn_detection` scores turn detectors against.
+# The per-utterance captures cannot serve that purpose: they are post-VAD and
+# stored one file per side, so the silence between turns and the relative
+# timing of the two speakers are gone.
+#
+# Run by the `worker-english-corpus` service in docker-compose.yml.
+
+[pipeline]
+name = "english-turn-corpus"
+
+[pipeline.audit]
+enabled = true
+record_session_audio = true
+session_audio_max_seconds = 1800
+
+[stt]
+provider = "parakeet-tdt"
+model_dir = "models/parakeet-tdt-v3"
+
+[stt.options]
+# One inference set per session the worker admits (max_concurrent = 4 in its
+# worker file). A batch recogniser holds a set for the whole of a decode, so
+# with fewer sets than sessions two callers who stop speaking in the same
+# second contend for one, and the loser waits five seconds and fails. Each
+# set is a full copy of the model in memory, about 250 MB here.
+pool_size = 4
+
+# Parakeet emits no end-of-turn signal, so a real VAD drives the turn.
+[vad]
+mode = "auto"
+model = "models/silero_vad.onnx"
+threshold = 0.5
+
+# A deliberately ordinary detector. The recording is taken before the VAD, so
+# whichever detector collects the corpus, every candidate is scored afterwards
+# on identical audio -- nothing about collection biases the comparison.
+[turn_detection]
+mode = "silence"
+silence_timeout_ms = 700
+
+[barge_in]
+enabled = true
+min_chunks = 3
+speech_threshold = 2000.0
+
+# SmolLM2 in-process: no sidecar, no API key, so this pipeline starts with
+# the stack and depends on nothing else.
+#
+# The model is loaded once per worker and shared across sessions; only the
+# conversation history is per session. That used to be the other way round,
+# and re-reading the GGUF on every connect took 44 s inside this container --
+# during which the session was not yet listening, so a caller spoke and
+# nothing was transcribed while every log line said the worker was healthy.
+[[text_processor]]
+type = "openai-compat"
+# Gemma 3 1B on the GPU via the llama-server sidecar, rather than a GGUF in
+# this process.
+#
+# In-process on the CPU, SmolLM2-135M spent 5.3 s ingesting a 56-token prompt
+# and then generated at 7 tok/s -- about 16 s for a single turn, against a
+# 300 ms time-to-first-token target. A bigger model in the same place would
+# only be slower; the fix is the device, not the weights. llama-server runs
+# the CUDA build with every layer offloaded, which is what makes a model of
+# this size answer inside a conversational budget.
+#
+# Requires the `llama` compose profile, and LLAMA_MODEL pointing at the GGUF.
+base_url = "http://llama-server:8081/v1"
+model = "gemma-3-1b-it"
+system_prompt = "You are a voice assistant in a spoken conversation. Reply in one or two short sentences. Ask a follow-up question every other turn or so, to keep the conversation going."
+max_tokens = 128
+temperature = 0.7
+
+[tts]
+provider = "piper"
+model = "models/en_US-lessac-medium.onnx"
+
+# Small frames keep barge-in responsive.
+[output.chunking]
+enabled = true
+frame_ms = 50
+
+[transport]
+enabled = true
+bind = "0.0.0.0"
+port = 8800
+
+[auth]
+required = true

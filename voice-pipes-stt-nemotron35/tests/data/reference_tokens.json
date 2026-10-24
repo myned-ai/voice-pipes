@@ -1,0 +1,136 @@
+{
+ "en-US/hello-how-are-you": {
+  "tokens": [
+   2777,
+   436,
+   290,
+   2892,
+   2,
+   1942,
+   2810
+  ],
+  "text": "Hello how are you",
+  "lang": null,
+  "prompt_id": 0
+ },
+ "en-US/mid-sentence-pause": {
+  "tokens": [
+   2,
+   179,
+   590,
+   2897,
+   47,
+   2959,
+   2811,
+   1607,
+   2866,
+   2,
+   815,
+   1411,
+   26,
+   12945,
+   1752,
+   150,
+   2979,
+   2827
+  ],
+  "text": "I was thinking that we could maybe try the other one",
+  "lang": null,
+  "prompt_id": 0
+ },
+ "en-US/short-yes": {
+  "tokens": [],
+  "text": "",
+  "lang": null,
+  "prompt_id": 0
+ },
+ "en-US/quiet-speech": {
+  "tokens": [
+   3013,
+   113,
+   2810,
+   2,
+   826,
+   422,
+   2,
+   271,
+   2873
+  ],
+  "text": "Can you hear me now",
+  "lang": null,
+  "prompt_id": 0
+ },
+ "en-US/room-tone-only": {
+  "tokens": [],
+  "text": "",
+  "lang": null,
+  "prompt_id": 0
+ },
+ "auto/hello-how-are-you": {
+  "tokens": [
+   2777,
+   436,
+   290,
+   2892,
+   2,
+   1942,
+   2810
+  ],
+  "text": "Hello how are you",
+  "lang": null,
+  "prompt_id": 101
+ },
+ "auto/mid-sentence-pause": {
+  "tokens": [
+   2,
+   179,
+   590,
+   2897,
+   47,
+   2959,
+   2811,
+   1607,
+   2866,
+   2,
+   815,
+   1411,
+   26,
+   12945,
+   1752,
+   150,
+   2979,
+   2827
+  ],
+  "text": "I was thinking that we could maybe try the other one",
+  "lang": null,
+  "prompt_id": 101
+ },
+ "auto/short-yes": {
+  "tokens": [],
+  "text": "",
+  "lang": null,
+  "prompt_id": 101
+ },
+ "auto/quiet-speech": {
+  "tokens": [
+   3013,
+   113,
+   2810,
+   2,
+   826,
+   422,
+   2,
+   271,
+   2873
+  ],
+  "text": "Can you hear me now",
+  "lang": null,
+  "prompt_id": 101
+ },
+ "auto/room-tone-only": {
+  "tokens": [],
+  "text": "",
+  "lang": null,
+  "prompt_id": 101
+ }
+}

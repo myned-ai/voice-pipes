@@ -1,0 +1,7 @@
+{
+  "system": "Curious user persona for benchmark smoke tests.",
+  "turns": [
+    { "transcript": "Hello, can you hear me?" },
+    { "transcript": "Tell me a short joke." }
+  ]
+}

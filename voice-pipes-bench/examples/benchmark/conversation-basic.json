@@ -1,0 +1,33 @@
+{
+  "id": "suite-conversation-basic",
+  "name": "Basic two-turn conversation",
+  "description": "Smoke test: assistant must complete two text turns of small talk.",
+  "created_at": "2026-05-07T00:00:00Z",
+  "scenarios": [
+    {
+      "id": "convo-greet-then-followup",
+      "name": "greet then follow-up",
+      "input": {
+        "type": "conversation",
+        "turns": [
+          {
+            "id": "t1",
+            "input": { "type": "text", "text": "Hello there." },
+            "expected": {
+              "transcript_contains": ["hello"]
+            }
+          },
+          {
+            "id": "t2",
+            "input": { "type": "text", "text": "What's the weather like?" }
+          }
+        ]
+      },
+      "expected": {
+        "turns_completed": 2,
+        "max_latency_ms_per_turn": 4000,
+        "max_latency_drift_pct": 50.0
+      }
+    }
+  ]
+}

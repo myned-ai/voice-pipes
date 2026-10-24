@@ -1,0 +1,97 @@
+# TTS Benchmark Text Corpus
+#
+# Stratified text fixtures for TTS-only A/B benchmarking. Each entry has a
+# stable `id` so cross-run joins (e.g. comparing `pocket-http` today vs
+# `pocket-http` after a model upgrade) line up.
+#
+# Buckets: short (≤10 words) | medium (≈30 words) | long (≈100 words)
+# Classes: plain | numerics | punctuation | mixed
+#
+# Consumed by the `TtsOnlyCorpus` scenario type, per the benchmark's
+# stratification spec (Layer 3). Until that scenario type ships, this file is a
+# specification artifact: the v1 PowerShell driver
+# (run-benchmark-piper-vs-pocket.ps1) speaks audio-file scenarios via the
+# existing benchmark API and uses this corpus only for documentation.
+
+schema_version = 1
+language       = "en-US"
+
+# ── short / plain ──────────────────────────────────────────────
+[[entries]]
+id     = "short-plain-01"
+text   = "Hello there, how can I help you today?"
+bucket = "short"
+class  = "plain"
+
+[[entries]]
+id     = "short-plain-02"
+text   = "Sure, I can do that."
+bucket = "short"
+class  = "plain"
+
+# ── short / numerics ───────────────────────────────────────────
+[[entries]]
+id     = "short-numerics-01"
+text   = "Your order number is 4 8 2 1 9 7."
+bucket = "short"
+class  = "numerics"
+
+[[entries]]
+id     = "short-numerics-02"
+text   = "The meeting starts at 3:45 PM on May 6th, 2026."
+bucket = "short"
+class  = "numerics"
+
+# ── short / punctuation ────────────────────────────────────────
+[[entries]]
+id     = "short-punct-01"
+text   = "Wait — really? That's... interesting!"
+bucket = "short"
+class  = "punctuation"
+
+# ── medium / plain ─────────────────────────────────────────────
+[[entries]]
+id     = "medium-plain-01"
+text   = "I checked the latest weather forecast for the weekend, and it looks like you can expect mild temperatures, light winds, and only a small chance of rain on Saturday afternoon."
+bucket = "medium"
+class  = "plain"
+
+[[entries]]
+id     = "medium-plain-02"
+text   = "To reset your password, please open the settings menu, choose security, then select the option labelled change password and follow the on screen instructions to confirm the change."
+bucket = "medium"
+class  = "plain"
+
+# ── medium / numerics ──────────────────────────────────────────
+[[entries]]
+id     = "medium-numerics-01"
+text   = "Your account ending in 7421 was charged $129.95 on April 30th, 2026; the next billing cycle begins May 15th and the new monthly rate is $14.99 plus applicable taxes."
+bucket = "medium"
+class  = "numerics"
+
+# ── medium / mixed ─────────────────────────────────────────────
+[[entries]]
+id     = "medium-mixed-01"
+text   = "Sure — I've booked the 9:30 AM flight from SFO to JFK on June 12th. Confirmation code: A4K-7H2. Total cost was $478.20, charged to the card ending 3091."
+bucket = "medium"
+class  = "mixed"
+
+[[entries]]
+id     = "medium-punct-01"
+text   = "\"Wait,\" she said, \"are you sure?\" — Yes; I'm absolutely, positively, one-hundred-percent sure: this is the right answer (give or take a rounding error)."
+bucket = "medium"
+class  = "punctuation"
+
+# ── long / plain ───────────────────────────────────────────────
+[[entries]]
+id     = "long-plain-01"
+text   = """Voice technology has come a long way over the past decade. What used to require expensive cloud infrastructure can now run entirely on a laptop, with latency low enough to feel like a natural conversation. The trick is no longer just to recognise the words: it is to handle silences, hesitations, and overlapping speech in a way that respects the rhythm of human dialogue. Done well, the user forgets that they are talking to a machine at all."""
+bucket = "long"
+class  = "plain"
+
+# ── long / mixed ───────────────────────────────────────────────
+[[entries]]
+id     = "long-mixed-01"
+text   = """Here is your itinerary for the trip. Day 1, May 6th: depart at 7:15 AM, flight UA-882 from SFO to ORD, arriving 1:42 PM local time. Day 2, May 7th: 9:00 AM client meeting at 233 South Wacker Drive, suite 4500. Day 3, May 8th: return on AA-301, departing 6:55 PM ORD, arriving 9:33 PM SFO. Total estimated cost: $1,247.83. You will receive an SMS reminder 24 hours before each flight; reply STOP to opt out."""
+bucket = "long"
+class  = "mixed"

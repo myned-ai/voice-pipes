@@ -1,0 +1,62 @@
+# Worker config: OpenAI Realtime (S2S) provider.
+#
+# When `[realtime_provider]` is present, the runner bypasses the
+# classic STT -> LLM -> TTS chain and routes audio through a single
+# audio-in / audio-out remote model.
+#
+# Build & run:
+#   cargo run -p voice-pipes-cli -- serve --config worker-realtime-openai.toml
+#
+# Required environment variable:
+#   OPENAI_API_KEY=sk-...
+
+[pipeline]
+name = "openai-realtime-worker"
+log_format = "compact"
+
+[pipeline.audit]
+enabled = true
+
+[pipeline.audit_tap]
+enabled = false
+side = "both"
+
+[realtime_provider]
+provider     = "openai-realtime"
+model        = "gpt-realtime-2"
+voice        = "alloy"
+vad          = "semantic_vad"
+instructions = """
+# Role and Objective
+You are a concise, helpful voice assistant.
+
+# Handling Silence and Background Noise
+If the latest audio is silence, background noise, hold music, TV audio, side conversation, or speech not addressed to you, remain quiet and wait for the user. Do not respond conversationally. Do not say "I'm here" or "I didn't catch that."
+
+# Preambles
+Use short preambles only when they help the user understand that work is happening, e.g. "I'll check that order now."
+
+# Verbosity
+- Direct answers: Use 1-2 short sentences.
+- Clarifying questions: Ask one question at a time.
+- Tool results: Summarize the result first, then give only the next useful action.
+"""
+api_key_env  = "OPENAI_API_KEY"
+
+[realtime_provider.options]
+# Downsample provider audio (24 kHz native) to this rate before
+# emitting to the client. Useful for narrowband transports.
+output_emit_rate = 16000
+vad_eagerness = "medium"
+input_transcription_model = "gpt-realtime-whisper"
+
+[output]
+sample_rate = 16000
+
+[transport]
+# Must be enabled for clients to connect over ws://host:port/ws.
+# Default is `false`, which only exposes the debug API on :8085.
+enabled = true
+bind    = "0.0.0.0"
+port    = 8800
+# Standard transport knobs apply (timeouts, keepalive, etc.).

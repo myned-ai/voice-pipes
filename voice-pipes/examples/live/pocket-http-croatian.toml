@@ -1,0 +1,82 @@
+# Live mode: mic → VAD → STT → LLM → Croatian Pocket-TTS → speaker.
+#
+# ⚠ KNOWN LIMITATION — the STT half does not speak Croatian.
+#
+#   AssemblyAI's streaming models cover 18 languages and Croatian is not one of
+#   them. Feeding Croatian audio to `universal-3-5-pro` returns text, but it is
+#   Croatian phonetics spelled through a Polish-ish token space -- e.g. real
+#   ParlaSpeech-HR audio came back as "Drzawno izborno powiedęc ... zastępników
+#   chłowacki saboru" instead of "Državno izborno povjerenstvo ... zastupnike
+#   Hrvatskog sabora". `u3-rt-pro` returns no turns at all for Croatian.
+#
+#   So: speak ENGLISH to this pipeline. The LLM is told to answer in Croatian,
+#   which is what the TTS half is here to demonstrate. For Croatian-in, you need
+#   a Croatian-capable ASR (e.g. classla/wav2vec2-xls-r-parlaspeech-hr), which
+#   voice-pipes has no provider for yet.
+#
+# Prerequisites:
+#   - ASSEMBLYAI_API_KEY and OPENAI_API_KEY env vars set
+#   - HF auth for the private checkpoint:
+#       uvx --from huggingface_hub huggingface-cli login
+#   - Croatian sidecar running (keep the terminal open):
+#       uvx pocket-tts serve --config hf://myned-ai/pocket-tts-croatian/croatian.yaml `
+#           --host 127.0.0.1 --port 8000
+#
+# Build:  cargo build --release -p voice-pipes-cli --features "stt-assemblyai tts-pocket"
+# Usage:  voice-pipes --config examples/live/pocket-http-croatian.toml live
+
+[pipeline]
+name = "live-pocket-http-croatian"
+
+[stt]
+provider    = "assemblyai"
+model_name  = "universal-3-5-pro"
+sample_rate = 16000
+
+[stt.options]
+# Surfaces language_code/language_confidence on each turn -- useful here for
+# watching just how unsure the model is on Slavic input.
+language_detection = true
+
+[turn_detection]
+mode = "provider"
+
+[barge_in]
+enabled = true
+min_chunks = 3
+speech_threshold = 2000.0
+
+[[text_processor]]
+type = "openai-compat"
+model = "gpt-4o-mini"
+# One short sentence is not a style preference -- it is a workaround. This
+# checkpoint fails to emit EOS on multi-sentence input, padding each ≤50-token
+# chunk with seconds of silence. Sentence-at-a-time keeps it clean.
+system_prompt = """
+You are a Croatian voice assistant. Always answer in Croatian, in exactly one \
+short sentence of at most 12 words. Never use lists, numbers, or abbreviations.
+"""
+max_tokens = 64
+temperature = 0.7
+
+[tts]
+provider = "pocket-http"
+endpoint = "http://127.0.0.1:8000"
+model    = "myned-ai/pocket-tts-croatian"
+voice    = "hf://myned-ai/pocket-tts-croatian/voices/croatian_male_sample.wav"
+request_timeout_ms = 120000
+
+# The 24-layer Croatian model runs at ~1.0x real-time on CPU, so there is no
+# synthesis headroom. Small frames keep barge-in responsive anyway.
+[output.chunking]
+enabled = true
+frame_ms = 50
+
+[pipeline.audit]
+enabled = true
+captures_dir = "captures"
+
+[transport]
+enabled = true
+bind = "0.0.0.0"
+port = 8800

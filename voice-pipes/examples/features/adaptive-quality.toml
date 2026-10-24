@@ -1,0 +1,96 @@
+# Adaptive Network Quality & Custom Session Grading
+#
+# Demonstrates `[adaptive_quality]`, `[output.chunking]`, and `[grading]` on a
+# WebSocket worker (`voice-pipes serve`).
+#
+# `[adaptive_quality]` monitors client `arrival_rtf`, playback `underruns`, and
+# server socket `send_latency_ms` across four tiers (`Full` -> `Reduced` ->
+# `Minimal` -> `Critical`), progressively shedding non-essential wire load
+# (such as high-frequency annotations or large audio frames) before playback
+# stalls, and climbing back one tier at a time after `*_clean_secs`.
+#
+# `[grading]` customizes the per-session SLA targets and critical-path latency
+# bands written into session capture reports.
+#
+# Run (from `voice-pipes/` directory):
+#   cargo run --release -p voice-pipes-cli -- \
+#     --config examples/features/adaptive-quality.toml serve
+
+[pipeline]
+name = "feature-adaptive-quality"
+min_utterance_chars = 2
+
+[pipeline.audit]
+enabled = true
+captures_dir = "captures"
+
+[transport]
+enabled = true
+bind = "0.0.0.0"
+port = 8800
+max_sessions = 16
+write_timeout_ms = 5000
+
+[adaptive_quality]
+enabled = true
+downgrade_observations = 2
+reduced_arrival_rtf = 1.15
+minimal_arrival_rtf = 1.40
+critical_arrival_rtf = 2.00
+reduced_send_latency_ms = 250
+minimal_send_latency_ms = 750
+critical_send_latency_ms = 2000
+reduced_underruns = 1
+minimal_underruns = 3
+reduced_clean_secs = 30
+minimal_clean_secs = 45
+critical_clean_secs = 60
+
+[output]
+sample_rate = 16000
+
+[output.chunking]
+enabled = true
+frame_ms = 40
+
+[grading.levels]
+good = 600.0
+poor = 1200.0
+unusable = 2500.0
+
+[grading.targets]
+ttft_ms = 400.0
+ttfb_ms = 250.0
+endpointing_ms = 800.0
+barge_in_rtt_ms = 150.0
+rtf_max = 0.5
+
+[vad]
+mode = "silero"
+model = "models/silero_vad.onnx"
+speech_prob = 0.5
+min_speech_ms = 200
+min_silence_ms = 500
+
+[stt]
+provider = "parakeet-tdt"
+model_dir = "models/parakeet-tdt"
+
+[turn_detection]
+mode = "silence"
+silence_timeout_ms = 700
+
+[barge_in]
+enabled = true
+min_chunks = 3
+speech_threshold = 200.0
+
+[[text_processor]]
+type = "openai-compat"
+model = "gpt-4o-mini"
+system_prompt = "You are a concise voice assistant. Answer in one or two short sentences."
+max_tokens = 128
+
+[tts]
+provider = "piper"
+model = "models/en_US-lessac-medium.onnx"

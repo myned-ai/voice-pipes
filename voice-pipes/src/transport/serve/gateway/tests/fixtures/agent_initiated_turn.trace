@@ -1,0 +1,6 @@
+session_ready
+state_changed:processing
+state_changed:speaking
+turn_metrics:interrupted=false
+state_changed:draining
+state_changed:listening

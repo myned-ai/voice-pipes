@@ -1,0 +1,46 @@
+# Who must review a change, by path. The last matching line wins.
+#
+# Each provider crate has its own entry, so vendor and model code can be
+# given its own owners without making the engine's owners review it, and
+# the contracts and supply-chain policy keep a named reviewer.
+
+*                               @goran-j
+
+# Contracts and shared infrastructure: every provider builds on these.
+/voice-pipes-sdk/               @goran-j
+/voice-pipes-onnx/              @goran-j
+/voice-pipes-net/               @goran-j
+
+# Runtime and composition.
+/voice-pipes/                   @goran-j
+/voice-pipes-cli/               @goran-j
+/voice-pipes-gym/               @goran-j
+
+# Providers, one line each.
+/voice-pipes-stt-google/        @goran-j
+/voice-pipes-stt-parakeet/      @goran-j
+/voice-pipes-tts-piper/         @goran-j
+/voice-pipes-vad-silero/        @goran-j
+/voice-pipes-stt-moonshine/     @goran-j
+/voice-pipes-stt-nemotron/      @goran-j
+/voice-pipes-stt-nemotron35/    @goran-j
+/voice-pipes-tts-kokoro/        @goran-j
+/voice-pipes-tts-pocket/        @goran-j
+/voice-pipes-tts-openai/       @goran-j
+/voice-pipes-stt-assemblyai/   @goran-j
+/voice-pipes-tts-elevenlabs/   @goran-j
+/voice-pipes-tts-gemini/       @goran-j
+/voice-pipes-llm-openai-compat/ @goran-j
+/voice-pipes-llm-gguf/          @goran-j
+/voice-pipes-s2s-openai/        @goran-j
+/voice-pipes-s2s-gemini/        @goran-j
+/voice-pipes-s2s-elevenlabs/    @goran-j
+/voice-pipes-turn-smart/        @goran-j
+/voice-pipes-turn-vap/          @goran-j
+
+# Supply-chain policy and the gates that enforce it.
+/deny.toml                      @goran-j
+/Cargo.toml                     @goran-j
+/Cargo.lock                     @goran-j
+/scripts/dep-budget.*           @goran-j
+/.github/                       @goran-j

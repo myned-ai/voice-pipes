@@ -1,0 +1,83 @@
+# The English cascade with Nemotron as the recogniser, for comparing against
+# Parakeet (pipeline-english-corpus.toml) and Moonshine
+# (pipeline-english-moonshine.toml):
+#   mic → Silero VAD → Nemotron streaming 0.6B (CPU) → Gemma 3 1B (llama-server) → Piper
+#
+# Everything except [stt] is the Parakeet pipeline's, on purpose, so a
+# difference between two sessions is the recogniser's. That includes the
+# 700 ms silence timeout: Nemotron's own page suggests a longer VAD silence so
+# in-sentence pauses do not finalise early, which is worth trying once the
+# like-for-like comparison is done.
+#
+# Nemotron is the one recogniser here that streams frame by frame rather than
+# re-decoding a buffer, so its cost does not grow with the length of the
+# utterance. On a CPU it is heavier than Parakeet; the CUDA build is the
+# intended deployment. On English it is more accurate than Nemotron 3.5
+# (pipeline-english-nemotron35.toml): 3.3% against 5.0% WER on LibriSpeech
+# at equal latency, measured 2026-09-25.
+#
+# The model is not downloadable as ONNX. It has to be exported once from
+# NVIDIA's checkpoint (no longer gated) into models/nemotron-streaming/7-10-7 -- see
+# voice-pipes/scripts/README-export-nemotron.md. Until that directory exists
+# this worker cannot start, which is why its service sits behind the
+# `nemotron` compose profile.
+#
+# Run by the `worker-english-nemotron` service in docker-compose.yml.
+
+[pipeline]
+name = "english-nemotron"
+
+[pipeline.audit]
+enabled = true
+
+[stt]
+provider = "nemotron-streaming"
+model_dir = "models/nemotron-streaming/7-10-7"
+
+[stt.options]
+threads = 4
+blank_id = 1024
+max_tokens_per_step = 16
+pool_size = 1
+
+# Nemotron emits no end-of-turn signal either, so the same VAD drives the turn.
+[vad]
+mode = "auto"
+model = "models/silero_vad.onnx"
+threshold = 0.5
+
+# The same detector and timeout as the Parakeet pipeline.
+[turn_detection]
+mode = "silence"
+silence_timeout_ms = 700
+
+[barge_in]
+enabled = true
+min_chunks = 3
+speech_threshold = 2000.0
+
+# The same Gemma 3 1B on the llama-server sidecar as the Parakeet pipeline.
+[[text_processor]]
+type = "openai-compat"
+base_url = "http://llama-server:8081/v1"
+model = "gemma-3-1b-it"
+system_prompt = "You are a voice assistant in a spoken conversation. Reply in one or two short sentences. Ask a follow-up question every other turn or so, to keep the conversation going."
+max_tokens = 128
+temperature = 0.7
+
+[tts]
+provider = "piper"
+model = "models/en_US-lessac-medium.onnx"
+
+# Small frames keep barge-in responsive.
+[output.chunking]
+enabled = true
+frame_ms = 50
+
+[transport]
+enabled = true
+bind = "0.0.0.0"
+port = 8800
+
+[auth]
+required = true

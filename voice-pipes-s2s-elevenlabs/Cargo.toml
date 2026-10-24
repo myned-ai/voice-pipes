@@ -1,0 +1,33 @@
+[package]
+name = "voice-pipes-s2s-elevenlabs"
+version.workspace = true
+edition = "2024"
+description = "ElevenLabs Agents speech-to-speech as a voice-pipes plugin, on the SDK only"
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+voice-pipes-sdk.workspace = true
+# The plain-text credential check on an operator-supplied endpoint.
+voice-pipes-net.workspace = true
+anyhow.workspace = true
+parking_lot.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+voice-pipes-sdk = { workspace = true, features = ["testing"] }
+base64.workspace = true
+# The wire probe in examples/ opens its own socket.
+futures-util.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "time"] }
+voice-pipes-net = { workspace = true, features = ["ws"] }
+# Parses the wizard entry's output in its test.
+toml.workspace = true

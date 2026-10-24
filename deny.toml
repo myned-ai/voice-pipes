@@ -1,0 +1,108 @@
+# cargo-deny policy — run with `cargo deny check` (CI: core-tests.yml lint job).
+# https://embarkstudios.github.io/cargo-deny/checks/index.html
+#
+# Licenses: the workspace is Apache-2.0; only permissive, attribution-style
+# licenses are allowed in the dependency tree. The August 2026 audit found no
+# copyleft anywhere; this keeps it that way.
+
+[graph]
+# Every feature of every member: the union of all graphs anyone can build,
+# which contains each shipped shape (bare engine, CLI defaults, the CPU and
+# GPU images). cargo-deny reads metadata and compiles nothing, so the CUDA
+# features cost nothing here. Checking one feature set once let an image-only
+# dependency ship unchecked.
+all-features = true
+
+[advisories]
+version = 2
+# Each ignore carries the reason and the change that retires it. Re-run
+# `cargo deny check advisories` after that change and delete the entry.
+ignore = [
+    # rustls-pemfile is archived upstream (a thin wrapper over rustls-pki-types); it
+    # remains through tonic 0.12's TLS feature, used by the Google STT plugin.
+    # Retired by the tonic 0.14 migration.
+    { id = "RUSTSEC-2025-0134", reason = "tonic 0.12 tls transitive; removed by the tonic 0.14 migration" },
+    # paste is unmaintained but frozen; transitive via candle. No behaviour risk.
+    { id = "RUSTSEC-2024-0436", reason = "proc-macro transitive via candle; unmaintained but frozen" },
+]
+
+[licenses]
+version = 2
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "MIT",
+    "MIT-0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "BSL-1.0",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+    "OpenSSL",
+    "MPL-2.0",
+]
+confidence-threshold = 0.8
+
+[[licenses.clarify]]
+name = "ring"
+expression = "MIT AND ISC AND OpenSSL"
+license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
+
+[bans]
+# A second version of a crate is a second thing to patch and build. New ones
+# fail CI. The ones below are the older versions that third-party crates
+# pull in today (the `reason` names who); each entry skips that exact
+# version only, so the same crate at any other version still fails. The
+# bulk retires with candle (the local LLM, plan WS-9), tonic 0.14 /
+# OpenTelemetry, and cpal 0.16. Regenerate after such a change and delete
+# what no longer applies (cargo deny warns about unused skips).
+multiple-versions = "deny"
+skip = [
+    { crate = "axum@0.7.9", reason = "via tonic" },
+    { crate = "syn@2.0.118", reason = "the ecosystem is moving to syn 3 (serde, clap, thiserror and futures have); tonic's and bindgen's dependencies are still on 2" },
+    { crate = "axum-core@0.4.5", reason = "via axum" },
+    { crate = "base64@0.13.1", reason = "via spm_precompiled" },
+    { crate = "getrandom@0.2.17", reason = "via rand_core, ring" },
+    { crate = "getrandom@0.3.4", reason = "via ahash, jobserver" },
+    { crate = "hashbrown@0.12.3", reason = "via indexmap" },
+    { crate = "hashbrown@0.14.5", reason = "via dashmap" },
+    { crate = "hashbrown@0.16.1", reason = "via rsqlite-vfs, which rusqlite uses on wasm32 only; never built here" },
+    { crate = "indexmap@1.9.3", reason = "via tower" },
+    { crate = "jni-sys@0.3.1", reason = "via jni, ndk" },
+    { crate = "matchit@0.7.3", reason = "via axum" },
+    { crate = "r-efi@5.3.0", reason = "via getrandom" },
+    { crate = "rand@0.8.6", reason = "via opentelemetry_sdk, tower" },
+    { crate = "rand_chacha@0.3.1", reason = "via rand" },
+    { crate = "rand_core@0.6.4", reason = "via rand, rand_chacha" },
+    { crate = "socket2@0.5.10", reason = "via tonic" },
+    { crate = "thiserror@1.0.69", reason = "via candle-core, candle-nn" },
+    { crate = "thiserror-impl@1.0.69", reason = "via thiserror" },
+    { crate = "tower@0.4.13", reason = "via tonic" },
+    { crate = "windows-sys@0.52.0", reason = "via ring, socket2" },
+    { crate = "windows-sys@0.59.0", reason = "via console" },
+    { crate = "wit-bindgen@0.51.0", reason = "via wasip3" },
+]
+# A registry dependency without a version is never allowed; workspace path
+# dependencies are.
+wildcards = "deny"
+allow-wildcard-paths = true
+highlight = "all"
+# One TLS stack: rustls on the ring provider. A second implementation is a
+# second set of advisories, certificate-root behaviour and build toolchain.
+deny = [
+    { crate = "native-tls", reason = "rustls is the only TLS implementation" },
+    { crate = "openssl", reason = "rustls is the only TLS implementation" },
+    { crate = "openssl-sys", reason = "rustls is the only TLS implementation" },
+    { crate = "aws-lc-rs", reason = "ring is the only rustls crypto provider" },
+    { crate = "aws-lc-sys", reason = "ring is the only rustls crypto provider" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

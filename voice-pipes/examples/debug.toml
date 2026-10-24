@@ -1,0 +1,25 @@
+# Full debug/audit setup
+[pipeline]
+name = "debug-session"
+log_format = "json"
+
+[pipeline.audit]
+enabled = true
+captures_dir = "audit/"
+buffer_size = 512
+
+[pipeline.audit_tap]
+enabled = true
+side = "both"
+dir = "audit_wav/"
+
+[stt]
+provider = "parakeet-tdt"
+model_dir = "models/parakeet-tdt"
+
+[tts]
+provider = "piper"
+model = "models/en_US-lessac-medium.onnx"
+
+[output]
+sample_rate = 48000

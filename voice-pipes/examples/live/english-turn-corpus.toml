@@ -1,0 +1,87 @@
+# Live mode: collect English conversations for turn-detector scoring.
+#
+# Fully local — no API keys. The point of this config is the recording, not
+# the pipeline: `record_session_audio` writes one stereo WAV per session with
+# the user's microphone before the VAD gates it and the agent's speech after
+# the chain, on a single timeline. That is what the bake-off scores against.
+#
+# Build:  cargo build --release -p voice-pipes-cli
+# Usage:  voice-pipes --config examples/live/english-turn-corpus.toml \
+#             live --save-input captures
+#
+# Then score every detector on what you recorded:
+#
+#   VP_TURN_SESSIONS=voice-pipes/captures \
+#     cargo test --release -p voice-pipes-bench --test turn_detection \
+#       -- --ignored --nocapture
+#
+# How you talk matters more than how long you talk. Aim for a few minutes with
+# a deliberate mix:
+#   - short answers ("yes", "about three")
+#   - long ones that run past where a timeout would fire
+#   - sentences you pause in the middle of, as if thinking
+# That last kind is the whole game: it is where a fixed silence timeout cuts
+# you off and a semantic or anticipatory detector should not.
+
+[pipeline]
+name = "english-turn-corpus"
+
+[pipeline.audit]
+enabled = true
+# The default captures directory, which is also the one the admin console
+# watches. A directory of its own keeps a corpus tidy but puts these sessions
+# somewhere the console cannot look -- it resolves a single captures root --
+# so the pipeline built for recording would be the one pipeline whose
+# recordings you cannot play back. Sessions carry their pipeline name, which
+# is how the bake-off picks this corpus out of the rest.
+record_session_audio = true
+session_audio_max_seconds = 1800
+
+[vad]
+mode = "silero"
+model = "models/silero_vad.onnx"
+
+[stt]
+provider = "parakeet-tdt"
+model_dir = "models/parakeet-tdt-v3"
+
+# A deliberately ordinary detector: the corpus records what you said and when,
+# and the recording is taken *before* the VAD, so whichever detector collects
+# it, every candidate is scored afterwards on identical audio. Nothing here
+# biases the comparison.
+[turn_detection]
+mode = "silence"
+silence_timeout_ms = 700
+
+# SmolLM2 because it is the local GGUF that ships a tokenizer.json beside it;
+# the Gemma directories here carry weights only. Replies are short and plain,
+# which is fine and arguably helpful: the corpus is about the rhythm of the
+# exchange, not the agent's wit. For better replies, drop a tokenizer.json
+# next to a larger GGUF or point `tokenizer_path` at one.
+[[text_processor]]
+type = "llm"
+model = "models/smollm2/SmolLM2-135M-Instruct-Q4_K_M.gguf"
+system_prompt = "You are a voice assistant in a spoken conversation. Reply in one or two short sentences. Ask a follow-up question every other turn or so, to keep the conversation going."
+max_tokens = 128
+
+[tts]
+provider = "piper"
+model = "models/en_US-lessac-medium.onnx"
+
+[barge_in]
+enabled = true
+
+# Lets the same config serve the Playground as well as `live`:
+#   voice-pipes --config examples/live/english-turn-corpus.toml serve
+# then point the Playground at ws://localhost:8800/ws. Unused by `live`.
+#
+# Note the difference in how recording is switched on. `serve` writes into
+# `[pipeline.audit] captures_dir` above and needs no flag; `live` writes into
+# whatever `--save-input` names.
+# Port 8810, not the usual 8800: the Docker stack in this repo already
+# publishes workers on 8800-8802, and two listeners on one port is a
+# coin toss over which one the Playground actually reaches.
+[transport]
+enabled = true
+bind = "127.0.0.1"
+port = 8810

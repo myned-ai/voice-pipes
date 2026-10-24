@@ -1,0 +1,47 @@
+# Avatar worker — REALTIME engine (Gemini Live) with CLIENT-SIDE TOOLS.
+#
+# The provider model recognizes client-tool calls natively: voice-pipes
+# advertises the allowlist below alongside any agent-backend tools, and on a
+# matching FunctionCall it emits a `trigger_action` message to the CLIENT,
+# acks the model silently (no spoken filler, no response kick), and waits for
+# the client's `client_tool_result` control. The outcome is injected into the
+# model's context — spoken only when `speak_on_result` is set, or the
+# client's result asks for it.
+#
+# Server-side tools still go through the agent gateway ([agent] endpoint);
+# a client tool of the same name shadows a server tool.
+#
+# Prerequisites:
+#   - GEMINI_API_KEY env var set
+#
+# Build:  cargo build --release -p voice-pipes-cli
+# Usage:  voice-pipes --config examples/avatar/avatar-realtime-clienttools.toml serve
+
+# ── Client-side tools ─────────────────────────────────────────
+# Same declaration surface as the cascade config: inline tables, external
+# catalog file(s), and per-session Configure.options.client_tools.
+# (Top-level key — must appear before the first [table] header.)
+client_tools_path = "commands/client-tools.json"
+
+[pipeline]
+name = "avatar-realtime-clienttools"
+
+[realtime_provider]
+provider = "gemini-live"
+voice = "Puck"
+vad = "server_vad"
+instructions = "You are a friendly avatar. Be concise and natural."
+# api_key_env = "GEMINI_API_KEY"   # default for gemini-live
+
+[output]
+sample_rate = 24000
+
+# Inline tool, merged with the shared catalog (highlight, play_media).
+[[client_tool]]
+name = "navigate"
+description = "Navigate the avatar UI to a named screen."
+speak_on_result = false
+[client_tool.parameters]
+type = "object"
+properties = { screen = { type = "string" } }
+required = ["screen"]

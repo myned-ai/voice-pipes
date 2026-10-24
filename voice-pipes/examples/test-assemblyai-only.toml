@@ -1,0 +1,4 @@
+[stt]
+provider = "assemblyai"
+model_name = "u3-rt-pro"
+sample_rate = 16000

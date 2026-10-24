@@ -1,0 +1,463 @@
+name: core-tests
+
+# Core CI gate: rustfmt, clippy, and the test suites for every workspace
+# crate, plus the admin console: its backend (ruff, pytest), its frontend
+# (lint, type-check, vitest) and both of its images.
+
+on:
+  push:
+    paths:
+      - 'voice-pipes/**'
+      - 'voice-pipes-sdk/**'
+      - 'voice-pipes-bench/**'
+      - 'voice-pipes-cli/**'
+      - 'voice-pipes-onnx/**'
+      - 'voice-pipes-net/**'
+      - 'voice-pipes-stt-*/**'
+      - 'voice-pipes-tts-*/**'
+      - 'voice-pipes-llm-*/**'
+      - 'voice-pipes-s2s-*/**'
+      - 'voice-pipes-vad-*/**'
+      - 'voice-pipes-turn-*/**'
+      - 'deny.toml'
+      - 'supply-chain/**'
+      - 'voice-pipes-admin/frontend/**'
+      - 'voice-pipes-admin/backend/**'
+      - 'docs/**'
+      - 'scripts/**'
+      - '**/*.md'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/core-tests.yml'
+  pull_request:
+    paths:
+      - 'voice-pipes/**'
+      - 'voice-pipes-sdk/**'
+      - 'voice-pipes-bench/**'
+      - 'voice-pipes-cli/**'
+      - 'voice-pipes-onnx/**'
+      - 'voice-pipes-net/**'
+      - 'voice-pipes-stt-*/**'
+      - 'voice-pipes-tts-*/**'
+      - 'voice-pipes-llm-*/**'
+      - 'voice-pipes-s2s-*/**'
+      - 'voice-pipes-vad-*/**'
+      - 'voice-pipes-turn-*/**'
+      - 'deny.toml'
+      - 'supply-chain/**'
+      - 'voice-pipes-admin/frontend/**'
+      - 'voice-pipes-admin/backend/**'
+      - 'docs/**'
+      - 'scripts/**'
+      - '**/*.md'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/core-tests.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: core-tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docs:
+    name: docs gate (links, plan index, leak check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: docs-check (broken links, PLAN-STATUS completeness)
+        # Ubuntu runners ship pwsh; the script is read-only and needs no deps.
+        run: pwsh scripts/docs-check.ps1
+      - name: leak-check (private names, personal paths, account ids)
+        run: bash scripts/leak-check.sh
+      - name: compose-check (no host-port collisions, sidecars and debug APIs on loopback)
+        # Reads the file as Docker resolves it; the runner image ships the
+        # Compose plugin.
+        run: python3 scripts/compose-check.py
+
+  lint:
+    name: rustfmt + clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: ALSA headers (the batteries include `audio-device`, which builds cpal)
+        # `alsa-sys` looks for `alsa.pc` via pkg-config; the ubuntu-latest
+        # image ships neither, so every job that compiles the engine needs
+        # this or the build dies in a build script with no mention of audio.
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - name: rustfmt
+        run: cargo fmt --all --check
+      - name: clippy
+        # Zero-warning baseline established 2026-08 — keep it that way.
+        run: cargo clippy --workspace --all-targets --features "voice-pipes/realtime,voice-pipes/text-grpc" -- -D warnings
+      # A workspace build unifies features across crates, so a library that
+      # uses a dependency feature it never declares still compiles there.
+      # Built one at a time, each library has only what it asks for.
+      - name: Each library crate builds on its own
+        run: |
+          for crate in $(cargo metadata --no-deps --format-version 1 | python3 -c 'import json, sys; print(" ".join(p["name"] for p in json.load(sys.stdin)["packages"] if any("lib" in t["kind"] for t in p["targets"])))'); do
+            echo "::group::$crate"
+            cargo check -p "$crate" || exit 1
+            echo "::endgroup::"
+          done
+      - name: cargo deny (licenses, advisories, sources, bans) over every feature
+        # Policy in deny.toml, which checks the all-features graph: a superset of
+        # every shape that ships. Each ignored advisory carries the change that retires it.
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
+        with:
+          command: check
+
+  engine-tests:
+    name: workspace tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -o pipefail {0}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: ALSA headers (the batteries include `audio-device`, which builds cpal)
+        # `alsa-sys` looks for `alsa.pc` via pkg-config; the ubuntu-latest
+        # image ships neither, so every job that compiles the engine needs
+        # this or the build dies in a build script with no mention of audio.
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      # Each test step's output is kept, and the last step fails if any test
+      # printed "skipping": a test needing a model or a key is #[ignore]d,
+      # so one that skips has passed without running.
+      - name: engine lib and integration tests (runner, gateway, pipeline, realtime, text, vad, agent link, transport, fleet)
+        # `--tests` runs every target in voice-pipes/tests/, so a new suite is
+        # picked up without editing this file; the model-backed ones are
+        # #[ignore]d. text-grpc adds the agent-link/gateway/tool-backend
+        # suites; realtime adds the speech-to-speech ones. protoc is vendored.
+        run: cargo test -p voice-pipes --lib --tests --features "batteries,text-grpc" 2>&1 | tee -a test-output.txt
+      - name: every wizard test passes alone (none leans on what another registered)
+        # The plugin registries are process-wide and the wizard's menus
+        # depend on them; each test runs in a fresh process here.
+        run: python3 scripts/each-test-alone.py config_wizard -- -p voice-pipes --lib --features "batteries,text-grpc"
+      - name: every other library crate (SDK, shared crates, every plugin)
+        # By exclusion, so a new crate is tested the day it joins the
+        # workspace. The engine, the CLI and the bench have their own steps.
+        run: cargo test --workspace --exclude voice-pipes --exclude voice-pipes-cli --exclude voice-pipes-bench 2>&1 | tee -a test-output.txt
+      - name: the SDK's phonemiser against the real espeak-ng
+        # Those tests are #[ignore]d so a machine without espeak-ng does not
+        # fail them; here the program is installed and they are asked for.
+        run: |
+          sudo apt-get install -y espeak-ng
+          cargo test -p voice-pipes-sdk --lib -- --ignored espeak 2>&1 | tee -a test-output.txt
+      - name: library docs build without broken links (SDK, shared crates, every plugin)
+        # A link to an item made private, or to one that no longer exists, is
+        # an error, so no crate's API can change behind its documentation.
+        env:
+          RUSTDOCFLAGS: "-D warnings"
+        run: cargo doc --no-deps --workspace --exclude voice-pipes --exclude voice-pipes-cli --exclude voice-pipes-bench --features voice-pipes-onnx/mel,voice-pipes-onnx/session
+      - name: bench crate tests (with the VAP bake-off, the one provider it links)
+        run: cargo test -p voice-pipes-bench --features turn-vap 2>&1 | tee -a test-output.txt
+      - name: cli builds + smoke tests
+        run: cargo test -p voice-pipes-cli 2>&1 | tee -a test-output.txt
+      - name: no test passed by skipping
+        # `tee` hides a failing cargo exit code from the steps above; this
+        # step fails on either.
+        run: |
+          set -euo pipefail
+          if grep -nE "^test result: FAILED|error: test failed" test-output.txt; then exit 1; fi
+          if grep -niE "\bskipp(ing|ed)\b" test-output.txt; then
+            echo "a test printed 'skipping': make it #[ignore] and fail on a missing prerequisite"
+            exit 1
+          fi
+      - name: generated reference pages are current, hand-written ones cover every enumerable item
+        # Renders docs/reference/{cli,cargo-features,providers}.md from the code and
+        # compares; also checks providers/events/features/config drift. See
+        # docs/contributing/docs-style.md.
+        run: python3 scripts/gen-reference.py --check --bin target/debug/voice-pipes
+
+  image-features:
+    name: clippy + engine tests with the worker images' features
+    # The jobs above build two features; the worker images build every
+    # provider the wizard offers. Code behind a feature only the images turn
+    # on is otherwise compiled first by `docker build`, after merge. The list
+    # is read from docker-compose.yml, not copied, so it cannot drift.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: ALSA headers (the batteries include `audio-device`, which builds cpal)
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: image-features
+      - name: read the CPU image's feature list
+        id: features
+        run: |
+          echo "cli=$(python3 scripts/image-features.py cli)" >> "$GITHUB_OUTPUT"
+          echo "engine=$(python3 scripts/image-features.py engine)" >> "$GITHUB_OUTPUT"
+      - name: clippy, the CLI crate as the image builds it
+        run: cargo clippy -p voice-pipes-cli --all-targets --features "${{ steps.features.outputs.cli }},turn-vap" -- -D warnings
+      # The features no image enables ride along (every one that builds
+      # without CUDA): without them here, the gRPC component servers and
+      # clients and the gRPC post-processor, and their tests, are compiled by
+      # no job. VAP turn detection is a plugin, linked into the CLI shapes.
+      - name: clippy, the engine with the image's engine features and the rest that build without CUDA
+        run: cargo clippy -p voice-pipes --all-targets --features "${{ steps.features.outputs.engine }},component-server,stt-grpc,tts-grpc,post-grpc" -- -D warnings
+      - name: engine lib tests with the same features
+        run: cargo test -p voice-pipes --lib --features "${{ steps.features.outputs.engine }},component-server,stt-grpc,tts-grpc,post-grpc"
+      # The gRPC recogniser and voice too, so the factory check (build
+      # refuses what validate refuses) sees every factory there is.
+      - name: CLI tests with the plugins compiled in (their wizard choices against the images)
+        run: cargo test -p voice-pipes-cli --features "${{ steps.features.outputs.cli }},turn-vap,stt-grpc,tts-grpc"
+
+  bare-engine:
+    name: engine with no providers (build, tests, crate budget, workspace rules)
+    # The engine must stay a runtime an adopter can take without any provider.
+    # Built on its own: `--workspace` unifies features across members and would
+    # hide a provider leaking into the bare build.
+    # No ALSA headers here, on purpose: audio devices are the `audio-device`
+    # feature, and a build that needs them without asking fails this job.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: bare-engine
+      - name: clippy, no default features
+        run: cargo clippy -p voice-pipes --no-default-features --all-targets -- -D warnings
+      - name: tests, no default features
+        run: cargo test -p voice-pipes --no-default-features
+      - name: the binary with no default features (lint and tests)
+        run: |
+          cargo clippy -p voice-pipes-cli --no-default-features --all-targets -- -D warnings
+          cargo test -p voice-pipes-cli --no-default-features
+      - name: the bench crate's features on their own (a feature must name what it needs)
+        run: |
+          cargo check -p voice-pipes-bench --all-targets --features synthetic-caller
+          cargo clippy -p voice-pipes-bench --all-targets --features turn-vap -- -D warnings
+      - name: crates per build shape, bare engine held to its budget
+        run: python3 scripts/dep-budget.py
+      - name: workspace rules (manifests and sources read as syntax; each rule with a negative test)
+        # No default features: the rules read manifests, and the CLI's
+        # defaults include cpal, whose ALSA headers this job does not install.
+        run: cargo test -p voice-pipes-cli --no-default-features --test workspace_rules
+
+  image:
+    name: the CPU image builds and registers what CI tested
+    # What ships is what was tested: build the engine image as the release
+    # workflow does (its features from scripts/image-features.py), then
+    # compare the providers its binary registers with a native build of the
+    # same features. A provider the image lacks, or has extra, fails here.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: ALSA headers (the image features include `audio-device`)
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: image-native
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - id: features
+        run: echo "cli=$(python3 scripts/image-features.py cli)" >> "$GITHUB_OUTPUT"
+      - name: native build with the image's features
+        run: cargo build -p voice-pipes-cli --features "${{ steps.features.outputs.cli }}"
+      - name: build the engine image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: voice-pipes/Dockerfile
+          build-args: FEATURES=${{ steps.features.outputs.cli }}
+          load: true
+          tags: voice-pipes:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: the image registers exactly the providers of the tested build
+        run: |
+          set -euo pipefail
+          target/debug/voice-pipes inspect --format json > native.json
+          docker run --rm voice-pipes:ci inspect --format json > image.json
+          python3 scripts/compare-inspect.py native.json image.json
+
+  msrv:
+    name: the declared minimum Rust version builds every crate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: ALSA headers (the CLI's defaults include `audio-device`)
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
+      - id: msrv
+        run: echo "version=$(python3 -c 'import tomllib;print(tomllib.load(open("Cargo.toml","rb"))["workspace"]["package"]["rust-version"])')" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: ${{ steps.msrv.outputs.version }}
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: msrv
+      - name: cargo check on the minimum Rust version
+        run: cargo check --workspace --all-targets --features "voice-pipes/realtime,voice-pipes/text-grpc"
+
+  release-targets:
+    name: the release binary builds on ${{ matrix.os }}
+    # The release workflow builds Windows and macOS binaries; without this a
+    # platform-specific break is first seen at release time.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: release-${{ matrix.os }}
+      - name: cargo check, the CLI as released (its default features)
+        run: cargo check -p voice-pipes-cli
+
+  supply-chain:
+    name: every dependency audited or exempted (cargo vet)
+    # A crate added to the graph needs an audit (imported from a public audit
+    # set, or `cargo vet certify`) or a recorded exemption; see CONTRIBUTING.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: supply-chain
+      - name: install cargo-vet (cached with the toolchain's bin directory)
+        run: cargo install cargo-vet --locked --version 0.10.2
+      - name: cargo vet
+        run: cargo vet --locked
+
+  sdk-semver:
+    name: SDK API compatibility
+    # A change that breaks the SDK's public API must say so in its version.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: sdk-semver
+      - name: install cargo-semver-checks (cached with the toolchain's bin directory)
+        run: cargo install cargo-semver-checks --locked
+      - name: voice-pipes-sdk against the base branch
+        run: cargo semver-checks -p voice-pipes-sdk --baseline-rev "origin/${{ github.base_ref || 'main' }}"
+
+  packages:
+    name: every crate builds from its published files
+    # What `cargo publish` would upload, built on its own: a file a crate
+    # needs but does not package, or metadata crates.io refuses, fails here
+    # rather than halfway through a release. Uploads nothing.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: packages
+      - name: install the audio headers the CLI's default build needs
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
+      - name: cargo publish --dry-run, every crate
+        run: cargo publish --workspace --dry-run
+
+  client-fsm-tests:
+    name: vitest client SDK FSM
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: voice-pipes-admin/frontend
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: voice-pipes-admin/frontend/package-lock.json
+      - run: npm ci
+      - name: vitest SDK (FSM + session core)
+        run: npx vitest run --run src/lib/sdk/__tests__
+
+  admin-backend:
+    name: admin backend (ruff, pytest)
+    # ubuntu-24.04 ships Python 3.12, the one version the backend supports
+    # (app/core/runtime.py), so no setup action is needed; a venv keeps the
+    # install off the system interpreter.
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: voice-pipes-admin/backend
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: install from the locks
+        run: |
+          python3 -c 'import sys; v = sys.version_info[:2]; assert v == (3, 12), f"runner has Python {v}, the backend is tested on 3.12"'
+          python3 -m venv .venv
+          .venv/bin/pip install --require-hashes -r requirements.txt -r requirements-dev.txt
+          .venv/bin/pip check
+      - name: ruff (rule set in ruff.toml)
+        run: .venv/bin/ruff check .
+      - name: pytest
+        # The golden health replay skips, saying so, without a capture
+        # corpus (VP_GOLDEN_CAPTURES_DIR); everything else runs.
+        run: .venv/bin/python -m pytest -q -rs app
+
+  admin-frontend:
+    name: admin frontend on Node ${{ matrix.node }} (lint, tsc, vitest, build) and admin images
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The Node versions package.json's `engines` admits (npm refuses any
+        # other, see .npmrc): 22 is what the frontend image builds with
+        # (node:22-alpine), 24 the current LTS a native install is likely on.
+        node: ['22', '24']
+    defaults:
+      run:
+        working-directory: voice-pipes-admin/frontend
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: 'npm'
+          cache-dependency-path: voice-pipes-admin/frontend/package-lock.json
+      - run: npm ci
+      - name: eslint
+        run: npm run lint
+      - name: type-check
+        run: npx tsc -b
+      - name: vitest (full suite)
+        run: npx vitest run
+      - name: production build
+        run: npm run build
+      - name: build the admin frontend image
+        if: matrix.node == '22'
+        run: docker build -t vp-admin-frontend:ci .
+      - name: build the admin backend image
+        if: matrix.node == '22'
+        working-directory: voice-pipes-admin/backend
+        run: docker build -t vp-admin-backend:ci .
+      - name: frontend image serves its security headers
+        if: matrix.node == '22'
+        # The nginx config the image ships, checked live.
+        run: |
+          docker run -d --rm --name vp-admin-frontend-ci -p 127.0.0.1:3000:3000 vp-admin-frontend:ci
+          for i in $(seq 1 30); do curl -sf -o /dev/null http://127.0.0.1:3000/ && break; sleep 1; done
+          headers=$(curl -sI http://127.0.0.1:3000/)
+          echo "$headers"
+          for h in 'X-Content-Type-Options: nosniff' 'X-Frame-Options: DENY' 'Referrer-Policy:' 'Cache-Control: no-cache'; do
+            grep -qi "^$h" <<<"$headers" || { echo "missing: $h"; exit 1; }
+          done
+          docker stop vp-admin-frontend-ci

@@ -1,0 +1,158 @@
+[package]
+name = "voice-pipes"
+version.workspace = true
+edition = "2024"
+description = "Modular real-time voice AI runtime — composable STT/LLM/TTS pipeline engine with barge-in, per-turn metrics, and S2S provider backends."
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme = "README.md"
+# What the crate builds from. The rest of this directory (the VibeVoice
+# sidecar, deploy files, Dockerfiles, scripts, examples, fixtures) belongs to
+# the repository, not to the published crate.
+include = ["src/**", "proto/**", "build.rs", "config/wizard_models.json", "README.md"]
+
+# ── Static verification (M-STATIC-VERIFICATION) ─────────────
+[lints]
+workspace = true
+
+[features]
+# No default features: the engine is a runtime an adopter can take without any
+# provider, and adds only what they name. The binary (voice-pipes-cli) turns
+# on the batteries by default.
+default = []
+# Everything the CLI builds of the engine by default, in one name: the
+# out-of-the-box providers and the local tools. For the engine's own tests
+# and for embedders who want the same set. The CLI adds the plugin crates
+# named in its `default-plugins` list.
+batteries = ["telemetry", "realtime", "wizard", "audio-device", "session-sqlite"]
+# The interactive setup wizard (`config-wizard`): terminal prompts.
+wizard = ["dep:dialoguer"]
+# Local microphone and speaker (`live`, `listen`, `interactive`); needs the
+# platform audio headers at build time (ALSA on Linux).
+audio-device = ["dep:cpal"]
+# The orchestrator's SQLite session store (`provider = "sqlite"`); the
+# in-memory and file stores need nothing extra.
+session-sqlite = ["dep:rusqlite"]
+
+# ── STT providers ────────────────────────────────────────────
+stt-grpc = ["dep:tonic", "dep:prost", "dep:async-stream", "dep:tokio-stream", "dep:tonic-build", "dep:protoc-bin-vendored"]
+
+# ── TTS providers ────────────────────────────────────────────
+tts-grpc = ["dep:tonic", "dep:prost", "dep:tokio-stream", "dep:tonic-build", "dep:protoc-bin-vendored"]
+
+# ── Speech-to-speech client (provider-agnostic) ───────────────
+# The WebSocket client and session runner behind `[realtime_provider]`,
+# the `interactive` command and the benchmark's synthetic callers. The
+# providers themselves (OpenAI Realtime, Gemini Live, ElevenLabs Agents)
+# are plugin crates the binary registers.
+realtime = [
+    "dep:url",
+    "voice-pipes-net/ws",
+    "tokio-tungstenite/rustls-tls-native-roots",
+]
+
+# ── Text processors ─────────────────────────────────────────
+text-grpc = ["dep:tonic", "dep:prost", "dep:tokio-stream", "dep:tonic-build", "dep:protoc-bin-vendored"]
+
+# ── gRPC component server ───────────────────────────────────
+component-server = ["dep:tonic", "dep:prost", "dep:tokio-stream", "dep:tonic-build", "dep:protoc-bin-vendored", "dep:clap"]
+
+# ── Audio post-processors ───────────────────────────────────
+# Generic gRPC audio post-processor: streams each audio chunk to a remote
+# service and attaches its opaque JSON response to the chunk's
+# `audio_meta.extras`. Domain-agnostic (the avatar/blendshape meaning lives
+# entirely in the remote service).
+post-grpc = ["dep:tonic", "dep:prost", "dep:tonic-build", "dep:protoc-bin-vendored"]
+
+# ── Observability ────────────────────────────────────────────
+telemetry = [
+    "dep:tracing-opentelemetry",
+    "dep:opentelemetry",
+    "dep:opentelemetry_sdk",
+    "dep:opentelemetry-otlp",
+]
+
+[dependencies]
+# ── Plugin SDK (stable plugin trait boundary) ─────────────────
+voice-pipes-sdk.workspace = true
+voice-pipes-onnx.workspace = true
+# TLS, timeouts, redirects and endpoint checks for every network client.
+voice-pipes-net.workspace = true
+
+# ── Always required ──────────────────────────────────────────
+rtrb.workspace = true
+anyhow.workspace = true
+sha2.workspace = true
+tokio = { workspace = true, features = ["full"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+hound.workspace = true
+async-trait.workspace = true
+tracing.workspace = true
+tracing-subscriber = { workspace = true, features = ["env-filter", "json"] }
+clap = { workspace = true, features = ["derive"], optional = true }
+parking_lot.workspace = true
+arc-swap.workspace = true
+thiserror.workspace = true
+toml.workspace = true
+axum = { workspace = true, features = ["ws"] }
+tower-http = { workspace = true, features = ["cors"] }
+dashmap.workspace = true
+# `bundled` compiles SQLite from source so the orchestrator's sqlite session
+# store needs no system libsqlite3 (keeps the Docker image self-contained).
+rusqlite = { workspace = true, features = ["bundled"], optional = true }
+uuid = { workspace = true, features = ["v4"] }
+reqwest = { workspace = true, features = ["json", "stream", "http2", "charset", "rustls-tls-native-roots"] }
+chrono = { workspace = true, features = ["serde"] }
+cpal = { workspace = true, optional = true }
+tokio-util = { workspace = true, features = ["rt", "io"] }
+futures-util.workspace = true
+dialoguer = { workspace = true, optional = true }
+
+# ── Optional: the speech-to-speech WebSocket client ─────────
+tokio-tungstenite = { workspace = true, optional = true }
+url = { workspace = true, optional = true }
+
+# ── Optional: OpenTelemetry ──────────────────────────────────
+tracing-opentelemetry = { workspace = true, optional = true }
+opentelemetry = { workspace = true, optional = true }
+opentelemetry_sdk = { workspace = true, features = ["rt-tokio"], optional = true }
+opentelemetry-otlp = { workspace = true, features = ["tonic"], optional = true }
+
+# ── Optional: gRPC (tonic / prost) ──────────────────────────
+tonic = { workspace = true, optional = true }
+prost = { workspace = true, optional = true }
+async-stream = { workspace = true, optional = true }
+tokio-stream = { workspace = true, optional = true }
+
+# Published with the crate, not shipped as a release artifact: cargo-dist
+# would otherwise build this binary for every release, as it does the CLI.
+[package.metadata.dist]
+dist = false
+
+[[bin]]
+name = "voice-pipes-component"
+path = "src/bin/component_server.rs"
+required-features = ["component-server"]
+
+# Wire probe for the ElevenLabs alignment feature — dumps the
+# `alignment` payload shape of a live agent conversation.
+[build-dependencies]
+tonic-build = { workspace = true, optional = true }
+# Vendored protoc so gRPC features build without a system protobuf
+# install (dev machines and CI alike). Respects a user-set $PROTOC.
+protoc-bin-vendored = { workspace = true, optional = true }
+
+[dev-dependencies]
+# Paused-clock and time-advance helpers, for tests only.
+tokio = { workspace = true, features = ["test-util"] }
+async-stream.workspace = true
+tempfile.workspace = true
+# The streaming-conformance helper the hosted recognisers' tests share.
+voice-pipes-sdk = { workspace = true, features = ["testing"] }
+# `net` gives TcpListenerStream for in-process tonic test servers
+# (feature-unified with the optional main dependency).
+tokio-stream = { workspace = true, features = ["net"] }

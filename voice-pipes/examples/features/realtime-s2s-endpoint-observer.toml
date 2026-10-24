@@ -1,0 +1,56 @@
+# Realtime Speech-to-Speech (S2S) + Endpoint Observer + Remote Tool Backend
+#
+# Demonstrates a Speech-to-Speech pipeline (`[realtime_provider]`) with:
+#   1. `[realtime_provider.endpoint_observer]`: Voice Pipes' own non-intrusive
+#      end-of-speech observer on the uplink. It never gates or delays audio,
+#      but measures `provider_endpointing_ms` (how late the remote S2S provider
+#      noticed the user stopped speaking) and anchors honest TTFB telemetry.
+#   2. `[agent]`: Mounts an external gRPC `AgentService` as the **tool backend**
+#      for the S2S model (`ListTools` + `ToolCall` -> `ToolResult`, including
+#      asynchronous `Pending` + `CompleteTool` flows) and enables idle prompts.
+#
+# Requires `OPENAI_API_KEY` in the environment (or swap `provider` to
+# `"gemini-live"` with `GEMINI_API_KEY` or `"elevenlabs"` with
+# `ELEVENLABS_API_KEY` + `ELEVENLABS_AGENT_ID`).
+#
+# Run (from `voice-pipes/` directory):
+#   cargo run --release -p voice-pipes-cli --features realtime -- \
+#     --config examples/features/realtime-s2s-endpoint-observer.toml serve
+
+[pipeline]
+name = "feature-realtime-s2s-observer"
+
+[pipeline.audit]
+enabled = true
+captures_dir = "captures"
+record_session_audio = true
+
+[transport]
+enabled = true
+bind = "127.0.0.1"
+port = 8800
+
+[realtime_provider]
+provider = "openai-realtime"
+model = "gpt-realtime"
+voice = "alloy"
+vad = "server_vad"
+instructions = "You are a helpful, concise voice assistant. Keep spoken replies to one or two short sentences."
+
+[realtime_provider.options]
+output_emit_rate = 16000
+
+[realtime_provider.endpoint_observer]
+enabled = true
+backend = "energy"
+energy_threshold = 200.0
+hangover_ms = 300
+min_speech_ms = 150
+
+[agent]
+# Optional: connect `examples/reference-agent/reference_agent.py` as the tool
+# backend for S2S function calls and idle re-engagement.
+endpoint = "http://127.0.0.1:50061"
+idle_timeout_ms = 10000
+idle_max_prompts = 2
+idle_message = "Are you still there?"

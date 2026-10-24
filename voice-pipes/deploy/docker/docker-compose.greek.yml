@@ -1,0 +1,41 @@
+# Greek cascade worker, added next to the default worker: Parakeet TDT 0.6B
+# v3 Greek fine-tune (local, CPU, fp32) → Gemma 4 E4B → Greek Pocket-TTS.
+#
+#   docker compose -f voice-pipes/deploy/docker/docker-compose.yml `
+#       -f voice-pipes/deploy/docker/docker-compose.greek.yml `
+#       --profile llama up -d llama-server worker-greek-parakeet
+#
+# Reuses the CPU worker image (it carries stt-parakeet and tts-pocket):
+# Parakeet runs on the CPU and Gemma and the TTS are reached over HTTP, so
+# the container needs no GPU. Pass docker-compose.croatian.yml too for its
+# llama-server override; on its own it runs llama-server as
+# docker-compose.yml defines it. The Greek Pocket-TTS server runs on the
+# host on :8011; see config/pipeline-greek-parakeet.toml.
+
+services:
+  worker-greek-parakeet:
+    image: docker-worker-custom
+    command:
+      - --config
+      - deploy/docker/config/pipeline-greek-parakeet.toml
+      - serve
+      - --worker-config
+      - deploy/docker/config/worker-greek-parakeet.toml
+    depends_on:
+      - orchestrator
+      - llama-server
+    ports:
+      - "8811:8800"
+    volumes:
+      - ../../models:/app/models
+      - ../../captures:/app/captures
+      - ../../audit:/app/audit
+      - ./config:/app/deploy/docker/config
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - VP_CLIENT_TOKEN
+      - VP_INTERNAL_TOKEN
+      - HOME=/tmp
+    user: "${VP_UID:-10001}:${VP_GID:-10001}"
+    restart: unless-stopped

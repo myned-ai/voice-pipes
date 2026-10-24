@@ -1,0 +1,9 @@
+# Component server: serves Piper TTS over gRPC on port 50051.
+#
+# Usage:
+#   cargo run --features component-server --bin voice-pipes-component -- \
+#     --config examples/grpc/worker-tts.toml --listen 0.0.0.0:50051
+
+[tts]
+provider = "piper"
+model = "models/en_US-lessac-medium.onnx"

@@ -1,0 +1,16 @@
+id = "worker-gpu"
+max_concurrent = 12
+debug_port = 8085
+# Must stay 0.0.0.0 inside the container: the orchestrator reaches this API
+# over the compose network via advertise_address. The host publication in
+# docker-compose.yml is bound to 127.0.0.1 and the API needs VP_INTERNAL_TOKEN.
+debug_bind = "0.0.0.0"
+# Compose service name: the orchestrator runs in its own container, so the
+# bind address is not reachable from it (proxied live edits 502 otherwise).
+advertise_address = "worker-gpu:8085"
+tags = ["gpu:true"]
+
+[orchestrator]
+endpoint = "http://orchestrator:9090"
+heartbeat_interval_s = 5
+register_timeout_s = 10

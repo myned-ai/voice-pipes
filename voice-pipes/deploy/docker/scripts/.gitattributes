@@ -1,0 +1,4 @@
+# These scripts are bind-mounted into Linux containers; force LF so a
+# Windows checkout (core.autocrlf=true) can't introduce CRLF and break
+# the in-container shell.
+*.sh text eol=lf

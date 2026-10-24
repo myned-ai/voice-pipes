@@ -1,0 +1,93 @@
+# Croatian cascade with local speech recognition, in and out:
+#   mic → Silero VAD → Parakeet TDT 0.6B v3 (hr, CPU) → local Gemma 4 E4B
+#   → Croatian Pocket-TTS → speaker.
+#
+# Same as pipeline-croatian.toml except the speech recognition: Parakeet v3
+# runs in-process on CPU instead of Google Chirp 3, so the session needs no
+# cloud credentials and costs nothing per turn. Measured on this machine:
+# 266 ms for 8.6 s of Croatian audio (about 32x real time).
+#
+# Parakeet v3 is the multilingual checkpoint (25 European languages including
+# Croatian); the default `models/parakeet-tdt` is the English-only v2. The
+# four ONNX/vocab files come from the `istupakov/parakeet-tdt-0.6b-v3-onnx`
+# Hugging Face repository.
+#
+# Run by the `worker-croatian-parakeet` service in docker-compose.croatian.yml.
+# It needs the Croatian Pocket-TTS fork on host :8010 and the llama-server
+# sidecar; see pipeline-croatian.toml for both.
+
+[pipeline]
+name = "croatian-cascade-parakeet"
+
+[pipeline.audit]
+enabled = true
+
+[stt]
+provider  = "parakeet-tdt"
+model_dir = "models/parakeet-tdt-v3"
+
+[stt.options]
+# One session is enough for a single playground user; raise for concurrency.
+pool_size = 1
+
+# Parakeet emits no end-of-turn signal, so a real VAD drives the turn.
+# `mode = "auto"` selects Silero when `model` points at its ONNX file.
+[vad]
+mode = "auto"
+model = "models/silero_vad.onnx"
+threshold = 0.5
+
+[turn_detection]
+mode = "silence"
+silence_timeout_ms = 700
+
+[barge_in]
+enabled = true
+min_chunks = 3
+speech_threshold = 2000.0
+
+[[text_processor]]
+type = "openai-compat"
+# Local Gemma 4 E4B served by the llama-server sidecar on the GPU.
+base_url = "http://llama-server:8081/v1"
+model = "gemma-4-E4B-it"
+# Short spoken replies; lists, digits and abbreviations read badly aloud.
+system_prompt = """
+You are a Croatian voice assistant. Always answer in Croatian, in one or two \
+short sentences. Never use lists, numbers, or abbreviations.
+"""
+max_tokens = 96
+temperature = 0.7
+
+[tts]
+provider = "pocket-http"
+endpoint = "http://host.docker.internal:8010"
+model    = "myned-ai/pocket-tts-croatian"
+# Custom reference voice, served over local HTTP; see pipeline-croatian.toml.
+voice    = "http://127.0.0.1:8013/recording14.wav"
+request_timeout_ms = 30000
+# Re-request a fragment whose first 2 s carry no sound (a generation that runs
+# to its cap in near-silence).
+silent_start_ms      = 2000
+silent_start_retries = 2
+
+# One synthesis request per sentence, no comma splits.
+[pipeline.text_chunking]
+min_soft_split_chars = 400
+min_soft_split_words = 80
+
+[output]
+sample_rate = 24000
+
+# Small frames keep barge-in responsive.
+[output.chunking]
+enabled = true
+frame_ms = 50
+
+[transport]
+enabled = true
+bind = "0.0.0.0"
+port = 8800
+
+[auth]
+required = true

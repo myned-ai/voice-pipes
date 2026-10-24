@@ -1,0 +1,34 @@
+{
+  "id": "suite-barge-in-cancel",
+  "name": "Barge-in via client cancel",
+  "description": "Send an initial prompt, fire {action:cancel} once TTS starts, then send a follow-up turn and verify recovery.",
+  "created_at": "2026-05-07T00:00:00Z",
+  "scenarios": [
+    {
+      "id": "barge-cancel-then-recover",
+      "name": "cancel mid-response then recover",
+      "input": {
+        "type": "barge_in",
+        "initial": {
+          "id": "t1",
+          "input": { "type": "text", "text": "Tell me a long story about the ocean." }
+        },
+        "interrupt": {
+          "mode": { "kind": "client_cancel" },
+          "fire_on": { "kind": "first_audio" }
+        },
+        "follow_up": {
+          "id": "t2",
+          "input": { "type": "text", "text": "Actually, just say hi." }
+        }
+      },
+      "expected": {
+        "must_interrupt": true,
+        "interruption_trigger": "client_cancel",
+        "max_barge_in_rtt_ms": 500,
+        "max_recovery_ms": 1500,
+        "follow_up_must_complete": true
+      }
+    }
+  ]
+}

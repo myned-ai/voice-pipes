@@ -1,0 +1,50 @@
+[pipeline]
+name = "live-kokoro"
+
+[vad]
+mode = "silero"
+model = "models/silero_vad.onnx"
+speech_prob = 0.5
+min_speech_ms = 100
+min_silence_ms = 50
+
+[stt]
+provider = "parakeet-tdt"
+model_dir = "models/parakeet-tdt"
+
+[stt.options]
+initial_buffer_ms = 800.0
+inference_step_ms = 1000.0
+
+[turn_detection]
+mode = "layered"
+silence_timeout_ms = 1000
+
+[barge_in]
+enabled = true
+min_chunks = 3
+speech_threshold = 200.0
+
+[tts]
+provider = "kokoro"
+model = "models/kokoro-v1.0.onnx"
+voice = "af_heart"
+voices = "models/voices-v1.0.bin"
+
+[pipeline.audit]
+enabled = true
+captures_dir = "captures"
+
+[transport]
+enabled = true
+bind = "0.0.0.0"
+port = 8800
+
+[[text_processor]]
+type = "llm"
+model = "models/llama3.2-3b/Llama-3.2-3B-Instruct-Q4_K_M.gguf"
+chat_template = "llama3"
+device = "cpu"
+system_prompt = "You are a friendly voice assistant named Pipes. Have a natural conversation. Keep responses to one or two short sentences."
+max_tokens = 128
+temperature = 0.6

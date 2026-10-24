@@ -1,0 +1,95 @@
+syntax = "proto3";
+package voice_pipes.stt;
+
+import "params.proto";
+
+// Speech-to-text service — mirrors the SttProvider trait.
+service SttService {
+  // Batch: transcribe a complete audio buffer.
+  rpc Transcribe(TranscribeRequest) returns (TranscriptionResult);
+  // Bidirectional streaming: audio chunks in, transcription results out.
+  rpc TranscribeStream(stream AudioChunk) returns (stream TranscriptionResult);
+  // Query provider metadata.
+  rpc GetInfo(Empty) returns (SttInfo);
+}
+
+message Empty {}
+
+message TranscribeRequest {
+  bytes samples_i16 = 1;  // PCM i16 little-endian bytes
+  uint32 sample_rate = 2;
+  uint32 channels = 3;
+}
+
+message AudioChunk {
+  bytes samples_i16 = 1;  // PCM i16 little-endian bytes
+  bool is_last = 2;
+  uint32 sample_rate = 3;
+  optional string language = 4;
+  optional uint64 slot_wait_ms = 5;
+}
+
+message TranscriptionResult {
+  string text = 1;
+  bool is_final = 2;
+  optional float confidence = 3;
+  optional string language = 4;
+  uint32 segment_index = 5;
+  optional uint64 start_time_ms = 6;
+  optional uint64 end_time_ms = 7;
+  repeated WordInfo words = 8;
+  optional bool is_end_of_turn = 9;
+  optional uint32 speaker_id = 10;
+  // Per-utterance streaming-inference metrics. Populated on the final result
+  // of a streaming utterance by providers that measure them; absent for
+  // non-final partials and providers that don't report. Backward-compatible:
+  // old servers that don't set this field will produce None on the client.
+  optional InferenceMetrics inference_metrics = 11;
+  // True when the provider detected that speech has started in the audio stream.
+  bool speech_started = 12;
+}
+
+message WordInfo {
+  string word = 1;
+  uint64 start_ms = 2;
+  uint64 end_ms = 3;
+  optional float confidence = 4;
+}
+
+// Per-utterance streaming-inference metrics.
+//
+// Field semantics follow Microsoft, "Pushing the Limits of On-Device
+// Streaming ASR" (arXiv:2604.14493v2, §3.2). Carried on the final
+// TranscriptionResult of a streaming utterance so the orchestrator can
+// surface them in the per-turn metrics snapshot.
+message InferenceMetrics {
+  // Total audio duration fed to the provider for this utterance (ms).
+  optional uint64 audio_duration_ms = 1;
+  // Number of encoder/decoder invocations performed across the utterance.
+  // Catches O(N²) regressions: should stay roughly proportional to audio
+  // length, not its square.
+  optional uint32 inference_count = 2;
+  // Real-time factor: audio_duration / total_inference_wall_time
+  // (higher = faster). Matches the Open ASR Leaderboard convention.
+  optional float rtfx = 3;
+  // Static algorithmic delay floor for this provider's streaming
+  // configuration (ms). For chunked transducers this is chunk + right
+  // context; for cache-aware streamers it equals the chunk size.
+  optional uint64 algorithmic_delay_ms = 4;
+  // Effective per-step latency: algorithmic_delay x (1 + 1/RTFx) (ms).
+  // Approximates the wall-clock wait between speech-end and partial-out.
+  optional uint64 effective_latency_ms = 5;
+  // Bound on the audio window re-encoded per inference step (ms).
+  // Absent / 0 = unbounded (re-encodes the full utterance every step).
+  optional uint32 streaming_window_ms = 6;
+}
+
+// Provider metadata returned by GetInfo.
+message SttInfo {
+  uint32 expected_sample_rate = 1;
+  string provider_name = 2;
+  map<string, string> metadata = 3;
+  repeated voice_pipes.params.ParamDescriptor param_schema = 4;
+  repeated string capabilities = 5;
+  bool needs_flush_silence = 6;
+}

@@ -1,0 +1,45 @@
+# Voice Pipes
+
+> Ultra-low-latency, modular conversational voice pipeline runtime written in Rust. Glass-to-glass latency under 500ms with swappable STT, TTS, LLM, VAD, and Turn Detection plugins.
+
+Voice Pipes orchestrates full-duplex conversational voice agents. It connects client audio over WebSockets to speech-to-text (STT), text processing (LLM / reasoning), and text-to-speech (TTS), with sub-second real-time turn detection and immediate audio interruption (barge-in).
+
+## Getting Started
+- [Quickstart with Docker](docs/getting-started/quickstart-docker.md): 5-minute zero-setup launch with orchestrator, worker, and admin console.
+- [First Agent Guide](docs/getting-started/first-agent.md): Configuring personas, voices, and LLMs in TOML.
+- [Concepts](docs/getting-started/concepts.md): Core primitives: frames, chunks, turns, pipelines, workers, and orchestrators.
+- [Quickstart from Source](docs/getting-started/quickstart-source.md): Native Cargo build on Linux, macOS, and Windows.
+
+## Plugin & Component Development (SDK 1.0)
+- [Plugin SDK Guide](docs/extending/plugin-sdk.md): Complete guide to building STT, TTS, LLM, VAD, S2S, and Turn plugins with `voice-pipes-sdk 1.x`.
+- [Custom Component Architecture](docs/extending/custom-component.md): Implementing the `Component` trait for health, degraded states, and telemetry.
+- [SDK Stability Policy](docs/extending/sdk-stability.md): SemVer guarantees for `voice-pipes-sdk 1.x`.
+- [Wizard Descriptor Guide](docs/extending/wizard-descriptor.md): Registering plugins into the interactive CLI setup wizard.
+
+## Provider Integrations
+- [Speech-to-Text Providers](docs/guides/providers/stt/): Local ONNX (Parakeet TDT, Nemotron, Moonshine) and Cloud (AssemblyAI, Google Cloud Speech).
+- [Text-to-Speech Providers](docs/guides/providers/tts/): Local ONNX (Kokoro, Piper) and Cloud (ElevenLabs, OpenAI, Gemini).
+- [LLM & Reasoning Processors](docs/guides/providers/llm/): Local GGUF via llama.cpp, OpenAI-compatible APIs (vLLM, Ollama, LM Studio), and gRPC split-mode.
+- [Speech-to-Speech Providers](docs/guides/providers/s2s/): Bidirectional streaming with Gemini Live and OpenAI Realtime.
+
+## Architecture & Core Mechanics
+- [System Architecture](docs/explanation/architecture.md): Worker, orchestrator, transport, and pipeline execution flow.
+- [Interruption & Barge-In Model](docs/explanation/interruption-model.md): How Voice Pipes cancels in-flight LLM tokens and audio playback instantaneously.
+- [Composable VAD Engine](docs/explanation/composable-vad.md): Multi-stage voice activity detection with Silero and energy thresholds.
+- [Per-Turn Metrics & Observability](docs/explanation/per-turn-metrics.md): Millisecond latency breakdowns across every pipeline stage.
+
+## Client Integration & Protocols
+- [WebSocket Protocol](docs/clients/protocol.md): Binary audio framing and JSON control protocol specification.
+- [Protocol Walkthrough](docs/clients/protocol-walkthrough.md): Annotated example of a complete voice session handshake and turns.
+- [TypeScript Client SDK](docs/clients/typescript-sdk.md): Official browser and Node.js client integration.
+- [React SDK Integration](docs/clients/react-sdk-integration.md): React hooks for audio capture, playback clock, and word-by-word karaoke sync.
+
+## Operations & Reference
+- [Configuration Reference](docs/reference/config.md): Complete TOML schema for pipelines, workers, and audio capture.
+- [CLI Reference](docs/reference/cli.md): Command-line options for `voice-pipes`, `voice-pipes-cli`, and benchmarking.
+- [Admin API Reference](docs/reference/admin-api.md): REST and Server-Sent Events API for the Admin BFF.
+- [Metrics Glossary](docs/reference/metrics-glossary.md): Definitions of TTFB, synthesis time, RTF, and barge-in latency metrics.
+- [Performance Tuning & Optimization Guide](docs/guides/performance-and-optimization.md): Latency breakdown, speculative execution, KV-cache, and production fleet hosting topologies.
+- [Session Diagnostic Guide](docs/reference/session-diagnostic-guide.md): Complete guide to session health diagnosis, critical-path breakdown, and LLM system prompt.
+- [Troubleshooting Guide](docs/guides/troubleshooting.md): Diagnosis of common audio, connection, and GPU errors.
+- [Agent Skills](skills/): AI assistant skills for session diagnostics (`skills/voice-pipes-session-diagnostic`) and plugin scaffolding (`skills/voice-pipes-plugin-builder`).

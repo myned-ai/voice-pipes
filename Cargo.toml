@@ -1,0 +1,221 @@
+[workspace]
+members = [
+    "voice-pipes",        # engine library
+    "voice-pipes-sdk",    # plugin SDK (stable trait boundary)
+    "voice-pipes-bench",  # benchmarking & voice-testing host extension
+    "voice-pipes-gym",    # native in-memory RL task environments & verifiers
+    "voice-pipes-cli",    # command-line binary (composition root)
+    "voice-pipes-onnx",   # inference-session pool shared by local ONNX providers, in and out of tree
+    "voice-pipes-net",    # the one network client policy every hosted provider uses
+    "voice-pipes-stt-nemotron35",  # first out-of-tree recogniser plugin, on the SDK only
+    "voice-pipes-stt-google",      # Google Cloud STT (Chirp 3), moved out of the engine
+    "voice-pipes-tts-kokoro",      # Kokoro TTS (local ONNX), moved out of the engine
+    "voice-pipes-tts-pocket",      # Pocket-TTS over its HTTP sidecar
+    "voice-pipes-tts-openai",    # OpenAI TTS (and VibeVoice)
+    "voice-pipes-stt-assemblyai", # AssemblyAI streaming STT (WebSocket)
+    "voice-pipes-tts-elevenlabs", # ElevenLabs TTS (REST)
+    "voice-pipes-tts-gemini",    # Gemini TTS (REST)
+    "voice-pipes-llm-openai-compat", # OpenAI-compatible LLMs (OpenAI, llama-server)
+    "voice-pipes-s2s-openai",        # OpenAI Realtime speech-to-speech
+    "voice-pipes-s2s-gemini",        # Gemini Live speech-to-speech
+    "voice-pipes-s2s-elevenlabs",    # ElevenLabs Agents speech-to-speech
+    "voice-pipes-turn-smart",        # Smart Turn semantic end-of-turn detector
+    "voice-pipes-turn-vap",          # VAP anticipatory turn detector
+    "voice-pipes-stt-nemotron",      # English Nemotron streaming STT (ONNX)
+    "voice-pipes-llm-gguf",          # local GGUF LLM (candle)
+    "voice-pipes-stt-parakeet",      # Parakeet TDT STT (ONNX), the default recogniser
+    "voice-pipes-tts-piper",         # Piper VITS TTS (ONNX), the default voice
+    "voice-pipes-vad-silero",        # Silero VAD (ONNX), the auto VAD
+    "voice-pipes-stt-moonshine",     # Moonshine STT (ONNX), English
+]
+resolver = "2"
+
+# One declaration per dependency: a version bump (or an advisory fix) is one
+# line here, and members cannot drift apart. Members add their own features
+# and `optional`; default features are decided here.
+[workspace.dependencies]
+voice-pipes = { path = "voice-pipes", version = "0.1.0" }
+voice-pipes-bench = { path = "voice-pipes-bench", version = "0.1.0" }
+voice-pipes-gym = { path = "voice-pipes-gym", version = "0.1.0" }
+voice-pipes-net = { path = "voice-pipes-net", version = "0.1.0" }
+voice-pipes-onnx = { path = "voice-pipes-onnx", version = "0.1.0" }
+voice-pipes-sdk = { path = "voice-pipes-sdk", version = "1.0.0" }
+voice-pipes-stt-google = { path = "voice-pipes-stt-google", version = "0.1.0" }
+voice-pipes-stt-nemotron35 = { path = "voice-pipes-stt-nemotron35", version = "0.1.0" }
+voice-pipes-tts-kokoro = { path = "voice-pipes-tts-kokoro", version = "0.1.0" }
+voice-pipes-tts-pocket = { path = "voice-pipes-tts-pocket", version = "0.1.0" }
+voice-pipes-tts-openai = { path = "voice-pipes-tts-openai", version = "0.1.0" }
+voice-pipes-stt-assemblyai = { path = "voice-pipes-stt-assemblyai", version = "0.1.0" }
+voice-pipes-tts-elevenlabs = { path = "voice-pipes-tts-elevenlabs", version = "0.1.0" }
+voice-pipes-tts-gemini = { path = "voice-pipes-tts-gemini", version = "0.1.0" }
+voice-pipes-llm-openai-compat = { path = "voice-pipes-llm-openai-compat", version = "0.1.0" }
+voice-pipes-s2s-openai = { path = "voice-pipes-s2s-openai", version = "0.1.0" }
+voice-pipes-s2s-gemini = { path = "voice-pipes-s2s-gemini", version = "0.1.0" }
+voice-pipes-s2s-elevenlabs = { path = "voice-pipes-s2s-elevenlabs", version = "0.1.0" }
+voice-pipes-turn-smart = { path = "voice-pipes-turn-smart", version = "0.1.0" }
+voice-pipes-turn-vap = { path = "voice-pipes-turn-vap", version = "0.1.0" }
+voice-pipes-stt-nemotron = { path = "voice-pipes-stt-nemotron", version = "0.1.0" }
+voice-pipes-llm-gguf = { path = "voice-pipes-llm-gguf", version = "0.1.0" }
+voice-pipes-stt-parakeet = { path = "voice-pipes-stt-parakeet", version = "0.1.0" }
+voice-pipes-tts-piper = { path = "voice-pipes-tts-piper", version = "0.1.0" }
+voice-pipes-vad-silero = { path = "voice-pipes-vad-silero", version = "0.1.0" }
+voice-pipes-stt-moonshine = { path = "voice-pipes-stt-moonshine", version = "0.1.0" }
+
+anyhow = "1"
+arc-swap = "1"
+async-stream = "0.3"
+async-trait = "0.1"
+axum = "0.8"
+base64 = "0.22"
+candle-core = "=0.11.0"
+candle-nn = "=0.11.0"
+candle-transformers = "=0.11.0"
+chrono = "0.4.38"
+clap = "4"
+cpal = "0.18"
+dashmap = "6"
+dialoguer = "0.11"
+futures-util = "0.3"
+gcp_auth = "0.12"
+hound = "3.5"
+mimalloc = "0.1"
+npyz = "0.8"
+opentelemetry = "0.27"
+opentelemetry-otlp = "0.27"
+opentelemetry_sdk = "0.27"
+# ort's defaults minus `tls-native`: its build script downloads ONNX Runtime
+# over TLS, and rustls (ring) is the workspace's only TLS stack.
+# Exact: a pre-release requirement admits every later rc, and each ort rc has
+# broken the API (rc.14 made `Session::builder` take an `Environment`), so an
+# install that resolves afresh (`cargo install` without `--locked`) would not
+# compile.
+ort = { version = "=2.0.0-rc.12", default-features = false, features = ["std", "ndarray", "tracing", "download-binaries", "tls-rustls", "copy-dylibs", "api-24"] }
+parking_lot = "0.12"
+proc-macro2 = "1"
+prost = "0.13"
+prost-types = "0.13"
+protoc-bin-vendored = "3"
+reqwest = { version = "0.12", default-features = false }
+rtrb = "0.3"
+rusqlite = "0.40"
+rustfft = "6.4.1"
+# No default features: they include the aws-lc-rs provider, and the workspace
+# uses ring only (deny.toml bans the other).
+rustls = { version = "0.23", default-features = false }
+serde = "1"
+serde_json = "1"
+sha2 = "0.10"
+syn = "2"
+tempfile = "3"
+thiserror = "2"
+tokenizers = { version = "0.22", default-features = false }
+tokio = "1"
+tokio-stream = "0.1"
+tokio-tungstenite = "0.29"
+tokio-util = "0.7"
+toml = "1"
+tonic = "0.12"
+tonic-build = "0.12"
+tower-http = "0.6"
+tracing = "0.1"
+tracing-opentelemetry = "0.28"
+tracing-subscriber = "0.3"
+url = "2"
+uuid = "1"
+zeroize = "1"
+zip = { version = "8", default-features = false }
+
+# One lint policy for every crate; each sets `[lints] workspace = true`.
+# Cargo allows no per-crate additions beside it, so a crate that needs one
+# (the SDK's `missing_docs`) sets it as a crate attribute with its reason.
+[workspace.lints.rust]
+ambiguous_negative_literals = "warn"
+missing_debug_implementations = "warn"
+redundant_imports = "warn"
+redundant_lifetimes = "warn"
+trivial_numeric_casts = "warn"
+unsafe_op_in_unsafe_fn = "warn"
+unused_lifetimes = "warn"
+
+[workspace.lints.clippy]
+cargo = { level = "warn", priority = -1 }
+complexity = { level = "warn", priority = -1 }
+correctness = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+perf = { level = "warn", priority = -1 }
+style = { level = "warn", priority = -1 }
+suspicious = { level = "warn", priority = -1 }
+# A guard held across an await blocks every task that wants the lock for
+# as long as the awaited work takes, and can deadlock the runtime.
+await_holding_lock = "deny"
+await_holding_refcell_ref = "deny"
+# restriction lints (selective)
+allow_attributes_without_reason = "warn"
+clone_on_ref_ptr = "warn"
+deref_by_slicing = "warn"
+empty_drop = "warn"
+empty_enum_variants_with_brackets = "warn"
+empty_structs_with_brackets = "warn"
+if_then_some_else_none = "warn"
+map_err_ignore = "warn"
+redundant_type_annotations = "warn"
+renamed_function_params = "warn"
+semicolon_outside_block = "warn"
+# `string_to_string` was removed from clippy; `implicit_clone` (pedantic) covers it.
+undocumented_unsafe_blocks = "warn"
+unnecessary_safety_comment = "warn"
+unnecessary_safety_doc = "warn"
+unneeded_field_pattern = "warn"
+unused_result_ok = "warn"
+# structured logging — permit format-like args in tracing macros
+literal_string_with_formatting_args = "allow"
+# opt-outs for this codebase
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+multiple_crate_versions = "allow"
+# numeric casts in DSP/stats hot paths are intentional and reviewed at the
+# call site; blanket lint churn there hurts more than it helps
+cast_possible_truncation = "allow"
+cast_possible_wrap = "allow"
+cast_precision_loss = "allow"
+cast_sign_loss = "allow"
+cast_lossless = "allow"
+# pedantic opt-outs (2026-08: zero-warning baseline for `-D warnings` CI).
+# Each is a deliberate style position, not an unreviewed suppression:
+# - by-value args at construction/factory boundaries are intentional
+# - local helper items next to their single use site read better
+# - DSP/metrics tests assert bit-exact deterministic float outputs
+# - &Option<T> parameters are established internal signatures
+# - paired short names (l/r, min/max, tx/rx) are idiomatic in audio code
+needless_pass_by_value = "allow"
+items_after_statements = "allow"
+float_cmp = "allow"
+ref_option = "allow"
+similar_names = "allow"
+# long linear pipeline setup/decode/select loops are deliberate — splitting
+# them scatters shared mutable state behind artificial helpers (see the
+# rationale on `run_session_inner`); same for their argument lists
+too_many_lines = "allow"
+too_many_arguments = "allow"
+
+[workspace.package]
+# One version for every crate but the SDK, which keeps its own: the SDK's
+# version is the promise plugin authors build on (its stability policy is
+# docs/extending/sdk-stability.md); the rest move together.
+version = "0.1.0"
+license = "Apache-2.0"
+repository = "https://github.com/myned-ai/voice-pipes"
+# MSRV — Duration::from_mins/from_hours need 1.91 (duration_constructors_lite).
+# Keep in sync with voice-pipes/Dockerfile and Dockerfile.cuda.
+rust-version = "1.91"
+keywords = ["voice", "speech", "tts", "stt", "realtime"]
+categories = ["multimedia::audio"]
+# Workspace-level readme (crates without their own inherit this one).
+readme = "README.md"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"

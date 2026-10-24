@@ -1,0 +1,21 @@
+# Worker config — registers with the orchestrator for fleet management.
+#
+# The worker runs the voice pipeline behind WebSocket (/ws on port 8800)
+# and exposes a local debug API on debug_port.
+# It sends heartbeats and pushes completed turn records to the orchestrator.
+#
+# Prerequisites:
+#   - Orchestrator running: voice-pipes orchestrate --orchestrator-config examples/orchestrate/orchestrator.toml
+#   - Pipeline config:      examples/minimal.toml (local models: voice-pipes models fetch)
+#
+# Usage:  voice-pipes --config examples/minimal.toml --captures-dir captures serve --worker-config examples/orchestrate/worker.toml
+
+id = "worker-1"
+max_concurrent = 10
+debug_port = 8085
+debug_bind = "127.0.0.1"
+
+[orchestrator]
+endpoint = "http://127.0.0.1:9090"
+heartbeat_interval_s = 5
+register_timeout_s = 10

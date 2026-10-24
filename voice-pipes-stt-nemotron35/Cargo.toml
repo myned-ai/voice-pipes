@@ -1,0 +1,36 @@
+[package]
+name = "voice-pipes-stt-nemotron35"
+version.workspace = true
+edition = "2024"
+description = "NVIDIA Nemotron 3.5 ASR (40 locales, cache-aware streaming) as a voice-pipes plugin — built on the SDK only, to prove a model can be added without touching the engine"
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+voice-pipes-sdk.workspace = true
+voice-pipes-onnx = { workspace = true, features = ["session", "mel"] }
+async-trait.workspace = true
+tokio = { workspace = true, features = ["sync", "rt", "macros"] }
+tokio-util = { workspace = true, features = ["rt"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+parking_lot.workspace = true
+tracing.workspace = true
+ort.workspace = true
+
+[features]
+ort-cuda = ["ort/cuda", "voice-pipes-onnx/cuda"]
+
+[dev-dependencies]
+voice-pipes-sdk = { workspace = true, features = ["testing"] }
+hound.workspace = true
+tokio = { workspace = true, features = ["sync", "rt-multi-thread", "macros"] }

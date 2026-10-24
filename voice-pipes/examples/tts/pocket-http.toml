@@ -1,0 +1,35 @@
+# TTS-only config for Kyutai Pocket-TTS via the HTTP sidecar.
+#
+# The sidecar is the upstream `pocket-tts serve` FastAPI server. It owns
+# the model files, voice catalog, and inference; voice-pipes just speaks
+# its HTTP API. This means there is **no model file to download manually**
+# for voice-pipes — `pocket-tts` lazily fetches from Hugging Face on first
+# run and caches under `%USERPROFILE%\.cache\huggingface\hub`.
+#
+# ── Setup (PowerShell) ───────────────────────────────────────
+#
+#   # 1. Install `uv` (one-time) — https://docs.astral.sh/uv/getting-started/installation/
+#   irm https://astral.sh/uv/install.ps1 | iex
+#
+#   # 2. Pre-warm the model cache (so the first request isn't slow):
+#   uvx pocket-tts generate --text "hello" --output-path $env:TEMP\warm.wav
+#
+#   # 3. Start the server in another terminal:
+#   uvx pocket-tts serve --host 127.0.0.1 --port 8000
+#
+#   # Optional: pre-cache a non-English language (smaller-faster default
+#   # is English; the *_24l variants are larger/slower preview models):
+#   uvx pocket-tts serve --language french_24l --port 8000
+#
+# ── Build & run ──────────────────────────────────────────────
+#
+#   cargo build --release -p voice-pipes-cli --features tts-pocket
+#   voice-pipes --config examples/tts/pocket-http.toml tts --text "Hello, world!" --output hello.wav
+
+[tts]
+provider  = "pocket-http"
+endpoint  = "http://127.0.0.1:8000"   # default — same machine as `pocket-tts serve`
+voice     = "alba"                    # any built-in name; or "hf://kyutai/tts-voices/<path>.wav"
+
+# Optional passthrough knobs:
+# request_timeout_ms = 60000          # whole-request hard cap (default 60s)

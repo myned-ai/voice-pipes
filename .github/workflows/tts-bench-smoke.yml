@@ -1,0 +1,84 @@
+name: tts-bench-smoke
+
+# Smoke job. Runs the cheap, deterministic
+# slice of the TTS benchmark stack on every push:
+#   - schema parses (corpus + new types)
+#   - benchmark + scoring lib tests pass
+#   - frontend TTS panel renders for empty / mixed / TTS-only fixtures
+#
+# Heavy variants (Pocket-TTS sidecar via `uvx pocket-tts serve`, Piper
+# voice models, end-to-end worker spawn) are intentionally out-of-scope
+# here — they belong on a nightly job with cached model weights.
+
+on:
+  push:
+    paths:
+      - 'voice-pipes-bench/**'
+      - 'voice-pipes/src/transport/**'
+      - 'voice-pipes-admin/frontend/src/components/benchmark/**'
+      - '.github/workflows/tts-bench-smoke.yml'
+  pull_request:
+    paths:
+      - 'voice-pipes-bench/**'
+      - 'voice-pipes/src/transport/**'
+      - 'voice-pipes-admin/frontend/src/components/benchmark/**'
+      - '.github/workflows/tts-bench-smoke.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tts-bench-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust-smoke:
+    name: cargo build + benchmark/scoring tests + corpus smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: ALSA headers (the CLI's default features include `audio-device`, which builds cpal)
+        # `alsa-sys` looks for `alsa.pc` via pkg-config; the ubuntu-latest
+        # image ships neither, so every job that compiles the engine needs
+        # this or the build dies in a build script with no mention of audio.
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - name: cargo fmt --check (benchmark crates)
+        run: cargo fmt --check -p voice-pipes-bench -p voice-pipes-cli
+      - name: engine builds with TTS features
+        run: cargo build -p voice-pipes-cli --no-default-features --features tts-pocket,tts-piper
+      - name: benchmark + scoring lib tests
+        run: cargo test -p voice-pipes-bench --lib
+      - name: corpus smoke test
+        run: cargo test -p voice-pipes-bench --test tts_benchmark_smoke
+      - name: transport codec (control frames)
+        run: cargo test -p voice-pipes --lib transport::ws::codec
+      - name: benchmark boundary gate (core stays benchmark-free)
+        shell: pwsh
+        run: pwsh scripts/benchmark-boundary-check.ps1
+
+  frontend-smoke:
+    name: vitest TtsPanel + VariantCard
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: voice-pipes-admin/frontend
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          # A version package.json's `engines` admits; .npmrc makes npm
+          # refuse any other.
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: voice-pipes-admin/frontend/package-lock.json
+      - run: npm ci
+      - name: vitest TtsPanel
+        run: npx vitest run --run src/components/benchmark/__tests__/TtsPanel.test.tsx
+      - name: eslint touched files
+        run: |
+          npx eslint \
+            src/components/benchmark/TtsPanel.tsx \
+            src/components/benchmark/VariantCard.tsx \
+            src/components/benchmark/__tests__/TtsPanel.test.tsx

@@ -1,0 +1,106 @@
+{
+  "id": "suite-gym-native",
+  "name": "Voice Pipes Gym Native Evaluation Suite",
+  "description": "Native in-memory RL task environments testing voice agent tool-calling, slot accuracy, and resilience to acoustic perturbations without external services.",
+  "created_at": "2026-10-23T00:00:00Z",
+  "scenarios": [
+    {
+      "id": "gym-banking-transfer",
+      "name": "Banking: Funds Transfer with Spoken Hesitation",
+      "input": {
+        "type": "gym_task",
+        "config": {
+          "domain": "banking",
+          "goal": {
+            "type": "transfer",
+            "from_account": "checking",
+            "to_account": "savings",
+            "expected_amount": 250.0
+          },
+          "initial_prompt": "Transfer 250 dollars from checking to savings",
+          "follow_up_prompts": [
+            "What is my remaining checking balance?"
+          ],
+          "adversary": {
+            "hesitation_rate": 0.3,
+            "self_correction_rate": 0.2,
+            "attempt_barge_in": false,
+            "barge_in_delay_ms": 450
+          },
+          "reward_weights": {
+            "task_success_weight": 1.0,
+            "slot_accuracy_weight": 0.5,
+            "turn_etiquette_weight": 0.2,
+            "latency_target_ms": 500.0,
+            "latency_penalty_factor": 0.002,
+            "barge_in_overrun_penalty": 0.005
+          }
+        }
+      }
+    },
+    {
+      "id": "gym-order-address-update",
+      "name": "Order Support: Address Change with Alphanumeric ID",
+      "input": {
+        "type": "gym_task",
+        "config": {
+          "domain": "order_support",
+          "goal": {
+            "type": "address_updated",
+            "order_id": "B482",
+            "expected_address": "789 Pine Road, Springfield"
+          },
+          "initial_prompt": "I need to update the delivery address on order B482 to 789 Pine Road, Springfield",
+          "follow_up_prompts": [],
+          "adversary": {
+            "hesitation_rate": 0.2,
+            "self_correction_rate": 0.1,
+            "attempt_barge_in": false,
+            "barge_in_delay_ms": 500
+          },
+          "reward_weights": {
+            "task_success_weight": 1.0,
+            "slot_accuracy_weight": 0.5,
+            "turn_etiquette_weight": 0.2,
+            "latency_target_ms": 500.0,
+            "latency_penalty_factor": 0.002,
+            "barge_in_overrun_penalty": 0.005
+          }
+        }
+      }
+    },
+    {
+      "id": "gym-clinic-booking",
+      "name": "Clinic: Doctor Appointment Booking",
+      "input": {
+        "type": "gym_task",
+        "config": {
+          "domain": "clinic_booking",
+          "goal": {
+            "type": "appointment_booked",
+            "patient_name": "Jordan Lee",
+            "doctor": "Dr. Smith",
+            "date": "2026-11-04",
+            "time": "10:00"
+          },
+          "initial_prompt": "Can you book an appointment with Dr. Smith on November 4th at 10 AM for Jordan Lee?",
+          "follow_up_prompts": [],
+          "adversary": {
+            "hesitation_rate": 0.1,
+            "self_correction_rate": 0.0,
+            "attempt_barge_in": false,
+            "barge_in_delay_ms": 500
+          },
+          "reward_weights": {
+            "task_success_weight": 1.0,
+            "slot_accuracy_weight": 0.5,
+            "turn_etiquette_weight": 0.2,
+            "latency_target_ms": 500.0,
+            "latency_penalty_factor": 0.002,
+            "barge_in_overrun_penalty": 0.005
+          }
+        }
+      }
+    }
+  ]
+}

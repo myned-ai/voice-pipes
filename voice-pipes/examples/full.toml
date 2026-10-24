@@ -1,0 +1,32 @@
+# Full pipeline config with all options
+[pipeline]
+name = "production"
+log_format = "compact"
+
+[pipeline.audit]
+enabled = true
+captures_dir = "audit_output/"
+buffer_size = 256
+
+[pipeline.audit_tap]
+enabled = false
+
+[stt]
+provider = "parakeet-tdt"
+model_dir = "models/parakeet-tdt"
+# pool_size = 2  # concurrent inference sessions (default: 1)
+
+[tts]
+provider = "piper"
+model = "models/en_US-lessac-medium.onnx"
+# pool_size = 2  # concurrent engine copies (default: 1)
+
+[vad]
+mode = "silero"
+model = "models/silero_vad.onnx"
+speech_prob = 0.5
+min_speech_ms = 100
+min_silence_ms = 50
+
+[output]
+sample_rate = 16000

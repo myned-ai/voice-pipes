@@ -1,0 +1,45 @@
+name: Bug report
+description: Something doesn't work as documented
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      description: Minimal steps — ideally starting from `./launch-stack.sh` or a single `voice-pipes` command.
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Config
+      description: The relevant TOML config (or wizard choices). **Redact API keys and agent IDs.**
+      render: toml
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant output (run with `RUST_LOG=debug` if possible). **Redact anything sensitive.**
+      render: shell
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      placeholder: "e.g. Windows 11 / WSL2 Docker, Ubuntu 24.04 native, macOS 15"
+    validations:
+      required: true
+  - type: input
+    id: providers
+    attributes:
+      label: Providers in use
+      placeholder: "e.g. STT parakeet, LLM openai-compat (llama.cpp), TTS kokoro — or S2S elevenlabs"

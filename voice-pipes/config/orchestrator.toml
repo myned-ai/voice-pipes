@@ -1,0 +1,12 @@
+bind = "0.0.0.0"
+port = 9090
+cors_origins = ["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:5173"]
+captures_dir = "captures"
+
+[sessions.store]
+provider = "sqlite"
+path = "sessions/sessions.db"
+
+[audit]
+# Relative paths are resolved against the working directory at startup.
+shared_dir = "audit/"

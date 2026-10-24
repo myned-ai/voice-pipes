@@ -1,0 +1,50 @@
+[pipeline]
+name = "docker-openai-host"
+
+[stt]
+provider = "parakeet-tdt"
+model_dir = "models/parakeet-tdt"
+pool_size = 2
+
+# `mode = "auto"` selects Silero when `model` points at its ONNX file. (This
+# file previously said `provider = "silero"`, which the config parser rejects;
+# the shipped-config test under voice-pipes/tests/deploy_config.rs now guards it.)
+[vad]
+mode = "auto"
+model = "models/silero_vad.onnx"
+threshold = 0.5
+
+[turn_detection]
+mode = "silence"
+silence_timeout_ms = 1200
+
+[[text_processor]]
+type = "openai-compat"
+base_url = "http://host.docker.internal:8081/v1"
+model = "llama-3.2-3b"
+system_prompt = "You are a helpful voice assistant. Be concise."
+max_tokens = 256
+temperature = 0.7
+
+[tts]
+provider = "piper"
+model = "models/en_US-lessac-medium.onnx"
+pool_size = 2
+
+# Off by default — captures hold raw audio and transcripts of both
+# sides. Set `enabled = true` to record sessions for the admin console's
+# Session History; `retention_days` (default 7) bounds how long they stay.
+[pipeline.audit]
+enabled = false
+captures_dir = "captures"
+
+[transport]
+enabled = true
+bind = "0.0.0.0"
+port = 8800
+
+# Refuse to start unless VP_CLIENT_TOKEN and VP_INTERNAL_TOKEN are set.
+# The launcher generates them into voice-pipes/.env; compose passes them
+# through by name. For a loopback-only dev box set `required = false`.
+[auth]
+required = true

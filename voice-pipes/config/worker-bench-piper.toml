@@ -1,0 +1,14 @@
+# Worker config for benchmark variant: Piper TTS
+# Transport:  8802 (set in examples/bench-piper.toml)
+# Debug API:  8087
+# Tags:       variant:piper, tts:piper
+#
+# The `tts:<provider>` tag is reserved for TTS-comparison experiments and
+# is what `run-benchmark-piper-vs-pocket.ps1` selects on. The `variant:*`
+# tag stays in line with the existing benchmark conventions.
+
+debug_port = 8087
+tags = ["variant:piper", "tts:piper"]
+
+[orchestrator]
+endpoint = "http://127.0.0.1:9090"

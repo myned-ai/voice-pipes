@@ -1,0 +1,21 @@
+# Kokoro TTS example configuration.
+#
+# Models required:
+#   - models/kokoro-v1.0.onnx      (ONNX export from kokoro-onnx)
+#   - models/voices-v1.0.bin       (NPZ voice embeddings)
+#
+# Build with:  cargo build -p voice-pipes-cli --features tts-kokoro
+
+[pipeline]
+name = "kokoro-example"
+
+[stt]
+provider = "parakeet-tdt"
+model_dir = "models/parakeet-tdt"
+
+[tts]
+provider = "kokoro"
+model = "models/kokoro-v1.0.onnx"
+voice = "af_heart"
+voices = "models/voices-v1.0.bin"
+# pool_size = 2  # concurrent engine copies (default: 1)

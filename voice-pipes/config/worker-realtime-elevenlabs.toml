@@ -1,0 +1,70 @@
+# Worker config: ElevenLabs Agents (S2S) provider.
+#
+# When `[realtime_provider]` is present, the runner bypasses the
+# classic STT -> LLM -> TTS chain and routes audio through a single
+# audio-in / audio-out remote model.
+#
+# Unlike OpenAI Realtime / Gemini Live, the conversational brain
+# (persona prompt, LLM choice, voice, VAD/turn-taking, tool
+# definitions) is configured on the ElevenLabs *agent* itself
+# (elevenlabs.io -> Agents), not in this file. The socket carries
+# audio, transcripts, tool calls, and interruptions.
+#
+# Client-side tools ([[client_tool]] entries / Configure.options
+# client_tools) still work: define matching tools of type "Client"
+# on the agent — names are case-sensitive and must match exactly.
+#
+# Build & run:
+#   cargo run -p voice-pipes-cli -- serve --config worker-realtime-elevenlabs.toml
+#
+# Required environment variable (private agents; for a public agent
+# set `public_agent = true` below instead):
+#   ELEVENLABS_API_KEY=xi-...
+
+[pipeline]
+name = "elevenlabs-realtime-worker"
+log_format = "compact"
+
+[pipeline.audit]
+enabled = true
+
+[pipeline.audit_tap]
+enabled = false
+side = "both"
+
+[realtime_provider]
+provider    = "elevenlabs"
+vad         = "server_vad"          # turn-taking runs on ElevenLabs' side
+api_key_env = "ELEVENLABS_API_KEY"
+# model     = "gpt-4o"              # optional agent.prompt.llm override —
+#                                   # enable "LLM" override in the agent's Security tab
+# voice     = "21m00Tcm4TlvDq8ikWAM" # optional tts.voice_id override —
+#                                   # enable "Voice" override in the agent's Security tab
+
+[realtime_provider.options]
+# The agent to converse with (elevenlabs.io -> Agents -> copy id).
+# If unset, the ELEVENLABS_AGENT_ID environment variable is used instead
+# (or name a different variable via agent_id_env = "MY_VAR").
+agent_id = "agent_XXXXXXXXXXXXXXXX"
+# public_agent = true               # connect without an API key (public agents only)
+# endpoint = "wss://api.eu.residency.elevenlabs.io"  # regional residency
+# language = "en"                   # agent.language override (enable in Security tab)
+# first_message = "Hi!"             # agent.first_message override (enable in Security tab)
+# override_prompt = true            # send `instructions` as the agent.prompt override
+#                                   # (enable "System prompt" override in the Security tab)
+# dynamic_variables = { customer_name = "Ada" }  # {{customer_name}} in the agent prompt
+# output_emit_rate = 16000          # downstream emit rate (default 16000)
+# completion_idle_ms = 1500         # audio/text idle after which a response counts
+#                                   # as completed (ElevenLabs sends no end-of-response
+#                                   # event; 200..=10000, raise if replies split in two)
+
+[output]
+sample_rate = 16000
+
+[transport]
+# Must be enabled for clients to connect over ws://host:port/ws.
+# Default is `false`, which only exposes the debug API on :8085.
+enabled = true
+bind    = "0.0.0.0"
+port    = 8800
+# Standard transport knobs apply (timeouts, keepalive, etc.).

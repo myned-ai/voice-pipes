@@ -1,0 +1,72 @@
+# Speculative Execution (Streaming Partial Prefill + Speculative TTS)
+#
+# Demonstrates `[speculative]` on a classic STT -> LLM -> TTS cascade pipeline.
+# While the user is still speaking (or as soon as streaming STT partials arrive
+# and stabilise past `min_partial_interval_ms`), the orchestrator launches a
+# speculative LLM generation against the partial transcript.
+#
+# - If the final committed transcript matches the speculative prefix, the
+#   already-streamed LLM tokens (and optionally TTS audio when
+#   `speculative_tts = true`) are promoted with near-zero TTFT.
+# - If the user keeps talking and changes the transcript, the stale speculative
+#   run is cancelled and rolled back cleanly (`rollback_last_turn`) so
+#   conversation memory is never polluted.
+#
+# Run (from `voice-pipes/` directory):
+#   cargo run --release -p voice-pipes-cli -- \
+#     --config examples/features/speculative-execution.toml serve
+
+[pipeline]
+name = "feature-speculative-execution"
+min_utterance_chars = 3
+
+[pipeline.audit]
+enabled = true
+captures_dir = "captures"
+
+[transport]
+enabled = true
+bind = "127.0.0.1"
+port = 8800
+
+[speculative]
+enabled = true
+# Set `speculative_tts = true` to also pre-synthesize the first sentence of the
+# speculative reply before the turn commits.
+speculative_tts = true
+min_partial_interval_ms = 150
+
+[vad]
+mode = "silero"
+model = "models/silero_vad.onnx"
+speech_prob = 0.5
+min_speech_ms = 200
+min_silence_ms = 500
+
+[stt]
+provider = "parakeet-tdt"
+model_dir = "models/parakeet-tdt"
+
+[stt.options]
+initial_buffer_ms = 500.0
+inference_step_ms = 500.0
+
+[turn_detection]
+mode = "silence"
+silence_timeout_ms = 800
+
+[barge_in]
+enabled = true
+min_chunks = 3
+speech_threshold = 200.0
+
+[[text_processor]]
+type = "openai-compat"
+model = "gpt-4o-mini"
+system_prompt = "You are a fast, helpful voice assistant. Keep answers brief and conversational."
+max_tokens = 128
+temperature = 0.6
+
+[tts]
+provider = "piper"
+model = "models/en_US-lessac-medium.onnx"

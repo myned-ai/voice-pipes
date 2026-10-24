@@ -1,0 +1,17 @@
+# Taplo (Even Better TOML) configuration.
+#
+# The bundled Cargo.toml JSON schema lags behind the rustc/clippy lint set
+# we declare under `[lints.rust]` and `[lints.clippy]`, producing false
+# "unknown property" diagnostics in the editor for valid lint names like
+# `ambiguous_negative_literals`, `redundant_imports`, restriction lints, etc.
+#
+# Cargo's own validation still runs at build time — this only silences the
+# editor-side schema noise for those two tables. Everything else in
+# Cargo.toml continues to be schema-checked normally.
+
+[[rule]]
+include = ["**/Cargo.toml"]
+keys = ["lints.rust", "lints.clippy"]
+
+[rule.schema]
+enabled = false

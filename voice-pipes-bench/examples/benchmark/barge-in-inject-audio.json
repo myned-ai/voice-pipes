@@ -1,0 +1,37 @@
+{
+  "id": "suite-barge-in-inject-audio",
+  "name": "Barge-in via injected user audio (server VAD)",
+  "description": "Send an initial prompt, then once TTS starts, inject a second WAV so server-side VAD fires the barge-in. Pipeline must have barge_in.enabled = true and a sane speech_threshold.",
+  "created_at": "2026-05-07T00:00:00Z",
+  "scenarios": [
+    {
+      "id": "barge-inject-audio-then-recover",
+      "name": "inject audio mid-response then recover",
+      "input": {
+        "type": "barge_in",
+        "initial": {
+          "id": "t1",
+          "input": { "type": "text", "text": "Tell me a long story about the mountains." }
+        },
+        "interrupt": {
+          "mode": {
+            "kind": "inject_audio",
+            "path": "examples/benchmark/audio/user-stop.wav"
+          },
+          "fire_on": { "kind": "playback_offset", "offset_ms": 800 }
+        },
+        "follow_up": {
+          "id": "t2",
+          "input": { "type": "text", "text": "Just say hi instead." }
+        }
+      },
+      "expected": {
+        "must_interrupt": true,
+        "interruption_trigger": "server_vad",
+        "max_barge_in_rtt_ms": 1500,
+        "max_recovery_ms": 2000,
+        "follow_up_must_complete": true
+      }
+    }
+  ]
+}

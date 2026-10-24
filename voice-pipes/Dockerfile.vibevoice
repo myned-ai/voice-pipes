@@ -1,0 +1,93 @@
+# GPU TTS sidecar: Microsoft VibeVoice-Realtime-0.5B served as an
+# OpenAI-compatible /v1/audio/speech endpoint (scripts/vibevoice/server.py) on
+# port 8091.
+#
+# This runs the SAME code as the host sidecar, but containerized so no host
+# Python / venv / CUDA toolkit is required. Model weights (models/vibevoice) and
+# the reference voice .pt prompts (VibeVoice/demo/voices) are VOLUME-MOUNTED from
+# the repo — NOT baked into the image. The entrypoint downloads them on first
+# boot into the mounted dirs, so they persist on the host across restarts and the
+# image stays lean.
+#
+# torch's cu128 wheels bundle their own CUDA + cuDNN userspace libs; the NVIDIA
+# container runtime injects the host driver at run time (the compose service
+# reserves an nvidia device). flash-attn is intentionally NOT installed (heavy to
+# build) — server.py falls back to sdpa automatically.
+#
+# CUDA 12.8 / cu128 wheels are required for Blackwell (RTX 50-series, sm_120);
+# the older cu124 wheels have no sm_120 kernels and fail at synthesis with "no
+# kernel image is available for execution on the device". cu128 also runs older
+# NVIDIA cards (Turing/Ampere/Ada), so it's the safe, portable default — nothing
+# here is pinned to a specific GPU.
+#
+# The only host requirement it raises: a driver new enough for CUDA 12.8
+# (Linux/WSL R570+). On an older driver, override BOTH build args to a matching
+# pair, e.g. --build-arg CUDA_VERSION=12.4.1 --build-arg
+# TORCH_INDEX_URL=https://download.pytorch.org/whl/cu124 (keep them in sync).
+ARG CUDA_VERSION=12.8.1
+FROM nvidia/cuda:${CUDA_VERSION}-cudnn-runtime-ubuntu22.04
+
+# Torch wheel channel — must match the CUDA_VERSION above (cu128 <-> 12.8).
+ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cu128
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+# System deps: python + pip, git (editable VibeVoice install), libsndfile
+# (soundfile's native backend).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        python3 python3-pip python3-dev git libsndfile1 \
+    && ln -sf /usr/bin/python3 /usr/bin/python \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# 1. CUDA-matched torch wheels first, in their own layer so they cache
+#    independently of the fast-moving app requirements below.
+RUN pip install --upgrade pip \
+    && pip install torch torchaudio --index-url ${TORCH_INDEX_URL}
+
+# 2. Sidecar runtime deps (incl. sentencepiece + protobuf for the Qwen2 tokenizer)
+#    + huggingface_hub (used by download_model.py). Copy just the requirements
+#    first to keep this layer cached across server.py edits.
+COPY voice-pipes/scripts/vibevoice/requirements.txt /app/scripts/vibevoice/requirements.txt
+RUN pip install -r /app/scripts/vibevoice/requirements.txt huggingface_hub
+
+# 3. The vendored VibeVoice package (editable), matching the host README's
+#    `pip install -e VibeVoice` step. torch is already satisfied, so this won't
+#    pull the CPU wheel over our CUDA build.
+COPY voice-pipes/VibeVoice /app/VibeVoice
+RUN pip install -e /app/VibeVoice
+
+# 3b. Pre-fetch the text tokenizer into the image's HF cache. The model weights
+#     carry NO tokenizer — the processor loads it from a SEPARATE HF repo
+#     (models/vibevoice/preprocessor_config.json → language_model_pretrained_name,
+#     "Qwen/Qwen2.5-0.5B"). Baking the tokenizer files in means the runtime can
+#     stay HF-offline (no per-boot download) and the load doesn't crash when that
+#     repo isn't already cached, as it is on a dev host. Tokenizer files only
+#     (small); the LLM weights are not downloaded. Keep in sync with that config.
+# The cache lives under /app (not /root) so the unprivileged
+#     runtime user below can read it.
+ARG TOKENIZER_REPO=Qwen/Qwen2.5-0.5B
+ENV HF_HOME=/app/.cache/huggingface
+RUN python -c "from huggingface_hub import snapshot_download; snapshot_download('${TOKENIZER_REPO}', allow_patterns=['tokenizer*','vocab.json','merges.txt','special_tokens_map.json','*.model','generation_config.json','config.json'])"
+
+# 4. Server + download scripts + the boot-time asset bootstrap entrypoint.
+COPY voice-pipes/scripts/vibevoice /app/scripts/vibevoice
+COPY voice-pipes/deploy/docker/scripts/vibevoice-entrypoint.sh /usr/local/bin/vibevoice-entrypoint.sh
+RUN chmod +x /usr/local/bin/vibevoice-entrypoint.sh
+
+# Unprivileged runtime user. The entrypoint downloads weights and
+# voice prompts into the bind-mounted models/ and VibeVoice/demo/voices dirs,
+# which must be writable by this uid; compose sets `user:` to the host user's
+# ids on Linux (launcher exports VP_UID/VP_GID), Docker Desktop needs nothing.
+RUN groupadd --system --gid 10001 vp \
+    && useradd --system --uid 10001 --gid vp --home-dir /app --shell /usr/sbin/nologin vp \
+    && chown -R vp:vp /app
+ENV HOME=/app
+USER vp
+
+EXPOSE 8091
+ENTRYPOINT ["/usr/local/bin/vibevoice-entrypoint.sh"]

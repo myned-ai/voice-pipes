@@ -1,0 +1,48 @@
+# S2S benchmark variant: Gemini Live.
+# Paired with pipeline-s2s-openai.toml for A/B experiments — keep the
+# instructions and transport identical so provider latency is the only
+# variable under test. See scripts/bench-s2s-compare.ps1.
+
+[pipeline]
+name = "bench-s2s-gemini"
+
+# Off by default — captures hold raw audio and transcripts of both
+# sides. Set `enabled = true` to record sessions for the admin console's
+# Session History; `retention_days` (default 7) bounds how long they stay.
+[pipeline.audit]
+enabled = false
+
+[realtime_provider]
+provider = "gemini-live"
+model = "gemini-2.5-flash-native-audio-latest"
+voice = "Puck"
+vad = "server_vad"
+api_key_env = "GEMINI_API_KEY"
+instructions = "You are a concise voice assistant. Speak English unless the user explicitly asks for another language."
+
+[realtime_provider.options]
+# Gemini decides when the caller has finished; at its defaults a clean request
+# once went unanswered for 21 s. These make it close the turn sooner.
+end_sensitivity = "high"
+vad_silence_ms = 700
+# Native-audio models default to dynamic thinking, which adds a
+# variable pre-speech delay; 0 disables it (-1 = dynamic, 1..32768 = cap).
+thinking_budget = 0
+
+[output]
+sample_rate = 16000
+
+[output.chunking]
+enabled = true
+frame_ms = 50
+
+[transport]
+enabled = true
+bind = "0.0.0.0"
+port = 8800
+
+# Refuse to start unless VP_CLIENT_TOKEN and VP_INTERNAL_TOKEN are set.
+# The launcher generates them into voice-pipes/.env; compose passes them
+# through by name. For a loopback-only dev box set `required = false`.
+[auth]
+required = true

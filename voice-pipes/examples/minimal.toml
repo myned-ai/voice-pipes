@@ -1,0 +1,58 @@
+# The fully local voice agent: no API keys, no servers, nothing leaves the
+# machine. Microphone → Silero VAD → Parakeet STT → SmolLM2 → Piper → speaker.
+#
+# Fetch its models once, from voice-pipes/:
+#   voice-pipes models fetch
+# Then talk to it (Ctrl+C stops):
+#   voice-pipes --config examples/minimal.toml live
+# or serve it to a browser or SDK client on ws://localhost:8800/ws:
+#   voice-pipes --config examples/minimal.toml serve --worker-config examples/orchestrate/worker-standalone.toml
+#
+# Piper needs eSpeak NG on PATH (winget install espeak-ng.espeak-ng,
+# apt install espeak-ng, brew install espeak-ng).
+
+[pipeline]
+name = "minimal"
+
+[vad]
+mode = "auto"
+model = "models/silero_vad.onnx"
+
+[stt]
+provider = "parakeet-tdt"
+model_dir = "models/parakeet-tdt"
+
+# SmolLM2-360M in this process, on the CPU. For better replies at about half
+# the speed: `voice-pipes models fetch smollm2-1.7b` and point `model` at
+# models/smollm2-1.7b/SmolLM2-1.7B-Instruct-Q4_K_M.gguf.
+[[text_processor]]
+type = "llm"
+model = "models/smollm2-360m/SmolLM2-360M-Instruct-Q4_K_M.gguf"
+system_prompt = "You are a helpful voice assistant. Answer in one or two short spoken sentences."
+max_tokens = 96
+temperature = 0.5
+
+[tts]
+provider = "piper"
+model = "models/en_US-lessac-medium.onnx"
+
+# Used by `serve` only; `live` talks to the local microphone and speaker.
+# Loopback only: open it wider only with `[auth]` tokens set.
+[transport]
+enabled = true
+bind = "127.0.0.1"
+port = 8800
+
+# Grading targets tuned for an all-local CPU pipeline on consumer hardware.
+# Local prompt ingestion, batch STT and silence timeouts run slower than cloud APIs;
+# relaxing these targets ensures a healthy offline session grades as healthy.
+[grading.targets]
+endpointing_ms = 1300.0
+ttft_ms = 3500.0
+tokens_per_sec_min = 12.0
+stt_processing_ms = 2500.0
+
+[grading.levels]
+good = 5000.0
+poor = 7500.0
+unusable = 10000.0

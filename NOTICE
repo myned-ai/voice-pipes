@@ -1,0 +1,31 @@
+Voice Pipes
+Copyright 2026 Myned AI
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+---
+
+This repository includes third-party software:
+
+* voice-pipes/VibeVoice/ — VibeVoice, Copyright (c) 2025 Microsoft.
+  Licensed under the MIT License (see voice-pipes/VibeVoice/LICENSE).
+  Vendored from https://github.com/microsoft/VibeVoice at commit
+  94da20d98b2fa7688e9cbfaf7692ddb4954f7600 (2026-07-24), with small
+  local modifications (idempotency guards around HuggingFace Auto-class
+  registration in six files under vibevoice/modular/) and with the
+  Figures/ directory and Microsoft's CONTRIBUTING.md / SECURITY.md
+  removed.
+  Contains voice-pipes/VibeVoice/vibevoice/schedule/dpm_solver.py,
+  Copyright 2024 TSAIL Team and The HuggingFace Team, licensed under
+  the Apache License, Version 2.0 (originally from the HuggingFace
+  diffusers project).

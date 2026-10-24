@@ -1,0 +1,48 @@
+# Avatar worker — REALTIME engine (Gemini Live) + generic gRPC post-processor.
+#
+# Gemini Live owns the full speech-to-speech round-trip. Every outbound audio
+# chunk (provider deltas AND the end-of-utterance sentinel) is streamed to a
+# generic AudioPostProcessor gRPC service, whose opaque JSON response is
+# attached verbatim to the client's `audio_meta.extras` frame. voice-pipes
+# never interprets the payload — blendshape / viseme meaning lives entirely in
+# the service (WS-1b).
+#
+# Prerequisites:
+#   - GEMINI_API_KEY env var set
+#   - an AudioPostProcessor gRPC service listening on the endpoint below
+#     (e.g. the avatar-sync service exposing the audio_post_processor.proto
+#     contract)
+#
+# Build:  cargo build --release -p voice-pipes-cli --features post-grpc
+# Usage:  voice-pipes --config examples/avatar/avatar-realtime.toml serve
+
+[pipeline]
+name = "avatar-realtime"
+
+[realtime_provider]
+provider = "gemini-live"
+voice = "Puck"
+vad = "server_vad"
+instructions = "You are a friendly avatar. Be concise and natural."
+# api_key_env = "GEMINI_API_KEY"   # default for gemini-live
+
+# Emit 24 kHz audio so chunk PCM matches the avatar-sync service's expected
+# input rate (it resamples to 16 kHz internally).
+[output]
+sample_rate = 24000
+
+# Generic gRPC audio post-processor. Domain-agnostic: the service receives
+# PCM + sample_rate + utterance_id + end_of_utterance and returns opaque JSON.
+[[audio_post_processor]]
+type = "grpc"
+endpoint = "http://avatar-sync:50051"
+timeout_ms = 1000
+
+# Static string→string knobs forwarded verbatim to every Process RPC.
+[audio_post_processor.options]
+kind = "blendshapes"
+
+[transport]
+enabled = true
+bind = "0.0.0.0"
+port = 8800

@@ -1,0 +1,88 @@
+# Anticipatory Two-Channel Turn Detection (VAP — Voice Activity Projection)
+#
+# Demonstrates `[turn_detection] mode = "vap"` (`voice-pipes-turn-vap`), which
+# feeds both the user's microphone channel (channel 0) and the agent's TTS
+# output channel (channel 1) into a stereo CPC + cross-attention transformer to
+# predict who holds the conversational floor now (`p_now`) and over the next
+# 0.6–1.2 s (`p_future`).
+#
+# When `1 - p_future >= vap_threshold` while the user is still speaking, the
+# detector emits `expected_end_in = 600ms`, allowing `[speculative]` execution
+# to warm the LLM before the user finishes their sentence.
+#
+# Step 1 — Export the fixed-window ONNX model (2 s window recommended):
+#   python scripts/export-vap-onnx.py \
+#     --vap-root VAP --window-seconds 2 --out voice-pipes/models/vap/vap-2s.onnx
+#
+# Step 2 — Build & run (from `voice-pipes/` directory):
+#   # WebSocket worker (Playground / client SDKs):
+#   cargo run --release -p voice-pipes-cli --features turn-vap -- \
+#     --config examples/features/turn-vap.toml serve
+#
+#   # Local microphone + speaker loop:
+#   cargo run --release -p voice-pipes-cli --features turn-vap -- \
+#     --config examples/features/turn-vap.toml live --save-input captures
+
+[pipeline]
+name = "feature-turn-vap"
+min_utterance_chars = 3
+
+[pipeline.audit]
+enabled = true
+captures_dir = "captures"
+# Record continuous aligned stereo WAV (Ch 0 = user, Ch 1 = agent) so sessions
+# can be replayed through the offline turn-detection benchmark scorer.
+record_session_audio = true
+session_audio_max_seconds = 900
+
+[transport]
+enabled = true
+bind = "127.0.0.1"
+port = 8800
+
+[vad]
+# Works with both `silero` (local VAD gating; agent audio advances the VAP
+# timeline with user silence between turns) and `passthrough` (continuous user
+# mic stream when using a streaming STT with headphones).
+mode = "silero"
+model = "models/silero_vad.onnx"
+speech_prob = 0.6
+min_speech_ms = 250
+min_silence_ms = 500
+
+[stt]
+provider = "parakeet-tdt"
+model_dir = "models/parakeet-tdt"
+
+[stt.options]
+initial_buffer_ms = 600.0
+inference_step_ms = 800.0
+
+[turn_detection]
+mode                = "vap"
+vap_model_path      = "models/vap/vap-2s.onnx"
+vap_threshold       = 0.5
+vap_min_interval_ms = 200
+silence_timeout_ms  = 1200
+
+[speculative]
+# Optional: pair VAP's `expected_end_in` signal with speculative LLM prefill.
+enabled = true
+speculative_tts = false
+min_partial_interval_ms = 150
+
+[barge_in]
+enabled = true
+min_chunks = 3
+speech_threshold = 200.0
+
+[[text_processor]]
+type = "openai-compat"
+model = "gpt-4o-mini"
+system_prompt = "You are a concise, natural voice assistant. Reply in one or two short sentences."
+max_tokens = 128
+temperature = 0.6
+
+[tts]
+provider = "piper"
+model = "models/en_US-lessac-medium.onnx"

@@ -1,0 +1,19 @@
+# Worker for the English turn-corpus cascade (pipeline-english-corpus.toml),
+# run by docker-compose.yml alongside the other workers.
+
+id = "worker-english-corpus"
+max_concurrent = 4
+debug_port = 8085
+# 0.0.0.0 inside the container: the orchestrator reaches the debug API over
+# the compose network via advertise_address.
+debug_bind = "0.0.0.0"
+advertise_address = "worker-english-corpus:8085"
+# Published on host port 8803; the Playground dispatch must hand browsers
+# this address, not the container's 8800.
+transport_advertise_address = "localhost:8803"
+tags = ["lang:en", "stt:local", "turn-corpus"]
+
+[orchestrator]
+endpoint = "http://orchestrator:9090"
+heartbeat_interval_s = 5
+register_timeout_s = 10

@@ -1,0 +1,10 @@
+target/
+.git/
+.gitignore
+captures/
+audit/
+audit_tap/
+models/
+*.wav
+*.log
+.env

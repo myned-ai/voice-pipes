@@ -1,0 +1,64 @@
+# Avatar worker — CASCADE engine (STT → LLM → TTS) + generic gRPC post-processor.
+#
+# Functionally identical client contract to avatar-realtime.toml: each TTS
+# audio chunk (plus the end-of-utterance sentinel) is streamed to the same
+# generic AudioPostProcessor gRPC service, and its opaque JSON response rides
+# the client's `audio_meta.extras` frame. Swapping engines needs no browser
+# change — only this config.
+#
+# Prerequisites:
+#   - ASSEMBLYAI_API_KEY env var set (STT)
+#   - an OpenAI-compatible LLM reachable at [text_processor].base_url
+#   - models/en_US-lessac-medium.onnx  (Piper voice model)
+#   - an AudioPostProcessor gRPC service on the endpoint below
+#
+# Build:  cargo build --release -p voice-pipes-cli --features "stt-assemblyai,tts-piper,llm-openai-compat,post-grpc"
+# Usage:  voice-pipes --config examples/avatar/avatar-cascade.toml serve
+
+[pipeline]
+name = "avatar-cascade"
+
+[stt]
+provider = "assemblyai"
+model_name = "u3-rt-pro"
+sample_rate = 16000
+
+[turn_detection]
+mode = "provider"
+
+[barge_in]
+enabled = true
+min_chunks = 3
+speech_threshold = 200.0
+
+[[text_processor]]
+type = "openai-compat"
+base_url = "http://localhost:8081/v1"
+model = "gpt-4o-mini"
+system_prompt = "You are a friendly avatar. Be concise and natural."
+max_tokens = 256
+temperature = 0.7
+
+[tts]
+provider = "piper"
+model = "models/en_US-lessac-medium.onnx"
+
+# Match the avatar-sync service's expected input rate (resampled to 16 kHz
+# internally). Piper's native rate is resampled to this by the output stage.
+[output]
+sample_rate = 24000
+
+# Same generic gRPC post-processor as the realtime config — one service,
+# both engines.
+[[audio_post_processor]]
+type = "grpc"
+endpoint = "http://avatar-sync:50051"
+timeout_ms = 1000
+
+[audio_post_processor.options]
+kind = "blendshapes"
+
+[transport]
+enabled = true
+bind = "0.0.0.0"
+port = 8800

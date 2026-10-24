@@ -1,0 +1,40 @@
+# Example: Gemini TTS configuration
+#
+# Uses Google Gemini 3.1 Flash TTS Preview model for speech synthesis.
+# Requires GOOGLE_API_KEY environment variable or `api_key` below.
+
+[pipeline]
+name = "live-gemini-tts"
+
+[pipeline.audit]
+enabled = true
+captures_dir = "captures"
+
+[transport]
+enabled = true
+port = 8800
+
+[vad]
+mode = "silero"
+model = "models/silero_vad.onnx"
+speech_prob = 0.5
+min_speech_ms = 100
+min_silence_ms = 50
+
+[stt]
+provider = "parakeet-tdt"
+model_dir = "models/parakeet-tdt"
+
+[[text_processor]]
+type = "openai-compat"
+base_url = "http://localhost:1234/v1"
+model = "gemma-4-12b"
+system_prompt = "You are a friendly voice assistant. Keep responses concise, under 2 sentences."
+max_tokens = 150
+
+[tts]
+provider      = "gemini"
+model_name    = "gemini-3.1-flash-tts-preview"
+voice         = "Kore"
+# api_key     = "your-key-here"   # or set GOOGLE_API_KEY env var
+# prompt      = "Speak in a friendly, conversational tone."

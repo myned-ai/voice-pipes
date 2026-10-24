@@ -1,0 +1,82 @@
+# Pipeline config — passed via `--config pipeline.toml`.
+# Based on examples/test-live-parakeet.toml. Requires OPENAI_API_KEY.
+#
+# Build features required:
+#   stt-parakeet, tts-piper, llm-gguf, vad-silero, turn-smart, synthetic-caller
+
+[pipeline]
+name = "live-parakeet"
+
+# Per-session capture: synthetic-caller audio-bridge runs land here as
+# <captures_dir>/<session_id>/{NNN_mic_raw.wav, NNN_tts_frag_*.wav}.
+[pipeline.audit]
+enabled = true
+captures_dir = "captures"
+
+[transport]
+enabled = true
+port = 8800
+
+[vad]
+mode = "silero"
+model = "models/silero_vad.onnx"
+speech_prob = 0.5
+min_speech_ms = 200
+min_silence_ms = 600
+
+[stt]
+provider = "parakeet-tdt"
+model_dir = "models/parakeet-tdt"
+
+[stt.options]
+initial_buffer_ms = 800.0
+inference_step_ms = 1000.0
+
+[turn_detection]
+mode = "layered"
+silence_timeout_ms = 1000
+
+[barge_in]
+enabled = true
+min_chunks = 3
+speech_threshold = 200.0
+
+[tts]
+provider = "piper"
+model = "models/en_US-lessac-medium.onnx"
+
+# Improves interruption responsiveness by chunking TTS output.
+[output.chunking]
+enabled = true
+frame_ms = 50
+
+[[text_processor]]
+type = "openai-compat"
+model = "gpt-4o-mini"
+system_prompt = "You are a friendly voice assistant named Pipes. Have a natural conversation. Keep responses to one or two short sentences."
+max_tokens = 128
+temperature = 0.6
+
+# Optional: an Audio Annotator — a gRPC service that derives per-audio
+# metadata (blendshapes, visemes, phonemes, levels) OFF the audio path.
+# Outbound audio is teed, batched to `batch_ms`, and sent asynchronously;
+# results reach the client as `audio_annotation` frames. A slow or dead
+# service only means missing annotations, never slower speech.
+# Requires build feature: post-grpc. See docs/guides/audio-annotators.md.
+#
+# [[audio_post_processor]]
+# type = "grpc"
+# endpoint = "http://avatar-sync:50051"
+# mode = "annotate"          # "inline" (default, per-chunk audio_meta.extras) | "annotate"
+# batch_ms = 160             # annotate only
+# first_batch_ms = 80        # annotate only
+# max_in_flight = 2          # annotate only
+# timeout_ms = 250           # per segment (annotate) / per chunk (inline; default 1000)
+# warmup = true              # annotate only
+#
+# [audio_post_processor.circuit_breaker]
+# failures = 3
+# cooldown_ms = 5000
+#
+# [audio_post_processor.options]
+# kind = "blendshapes"       # forwarded verbatim; default `kind` for unary Process services

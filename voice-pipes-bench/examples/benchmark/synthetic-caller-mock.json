@@ -1,0 +1,32 @@
+{
+  "id": "suite-synthetic-caller-mock",
+  "name": "Synthetic caller (mock script, text-bridged)",
+  "description": "Drives a multi-turn conversation against the pipeline using the in-tree MockCaller. No external API keys required; intended as a smoke test for the synthetic-caller runner.",
+  "created_at": "2026-05-08T00:00:00Z",
+  "scenarios": [
+    {
+      "id": "synthetic-caller-mock",
+      "name": "synthetic caller mock smoke",
+      "input": {
+        "type": "synthetic_caller",
+        "config": {
+          "caller": {
+            "kind": "mock",
+            "script": "examples/benchmark/synthetic-caller-mock-script.json"
+          },
+          "persona": "You are a curious user testing a voice assistant.",
+          "stop": {
+            "max_turns": 4,
+            "max_duration_s": 30,
+            "max_caller_silence_s": 10
+          }
+        }
+      },
+      "expected": {
+        "min_completed_turns": 2,
+        "pipeline_must_say": [],
+        "max_pipeline_turn_latency_ms": 5000
+      }
+    }
+  ]
+}

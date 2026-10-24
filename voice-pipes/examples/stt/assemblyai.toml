@@ -1,0 +1,17 @@
+# STT-only config for AssemblyAI (cloud, no local VAD needed).
+#
+# AssemblyAI handles VAD internally — no [vad] section required.
+#
+# Prerequisites:
+#   - Set ASSEMBLYAI_API_KEY env var
+#
+# Build:  cargo build --release -p voice-pipes-cli --features stt-assemblyai
+# Usage:  voice-pipes --config examples/stt/assemblyai.toml stt --input recording.wav
+
+[pipeline]
+name = "stt-assemblyai"
+
+[stt]
+provider = "assemblyai"
+model_name = "u3-rt-pro"
+sample_rate = 16000

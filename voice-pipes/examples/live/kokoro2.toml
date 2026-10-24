@@ -1,0 +1,47 @@
+# Voice-Pipes Configuration: Live (OpenAI + Kokoro)
+
+[stt]
+provider = "assemblyai"
+model_name = "u3-rt-pro"
+sample_rate = 16000
+
+[[text_processor]]
+type = "openai-compat"
+# Requires OPENAI_API_KEY environment variable
+base_url = "https://api.openai.com/v1"
+model = "gpt-4o-mini"
+system_prompt = "You are a helpful, very brief voice assistant. Keep answers to one or two short sentences."
+
+[tts]
+provider = "kokoro"
+model = "models/kokoro-v1.0.onnx"
+voices = "models/voices-v1.0.bin"
+voice = "af_heart"
+
+[tts.options]
+execution_provider = "cuda"
+
+
+[output.chunking]
+enabled = true
+frame_ms = 50
+
+[pipeline]
+name = "live-pocket-grpc"
+
+[turn_detection]
+mode = "provider"
+
+[barge_in]
+enabled = true
+min_chunks = 3
+speech_threshold = 2000.0
+
+[pipeline.audit]
+enabled = true
+captures_dir = "captures"
+
+[transport]
+enabled = true
+bind = "0.0.0.0"
+port = 8800

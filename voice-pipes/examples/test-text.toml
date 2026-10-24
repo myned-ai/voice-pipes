@@ -1,0 +1,9 @@
+[pipeline]
+name = "text-only-llm"
+
+[[text_processor]]
+type = "llm"
+model = "models/smollm2/SmolLM2-135M-Instruct-Q4_K_M.gguf"
+system_prompt = "You are a helpful assistant. Rephrase the following text concisely."
+max_tokens = 64
+temperature = 0.7

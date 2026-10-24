@@ -1,0 +1,362 @@
+# VPO — Voice Pipeline Open Standard
+# OpenTelemetry Semantic Conventions for voice-agent metrics (Layer 1, VPO-Metrics)
+#
+# Status: draft, tracks VPO-Metrics v0.1 (see docs/VPO-METRICS-v0.1.md).
+# Format: OpenTelemetry semantic-convention YAML (groups of attributes, spans, metrics).
+#
+# Purpose: the drop-in adoption artifact. A team on ANY voice stack (LiveKit, Pipecat,
+# Vapi, Retell, OpenAI Realtime, custom) can emit VPO-conformant telemetry by mapping
+# their existing signals onto these attributes — no VPO runtime required.
+#
+# Modelling summary:
+#   - A TURN is an OTel span (root of the turn trace). Span name: "vpo.turn".
+#   - Each COMPONENT (stt/llm/tts/realtime/...) is a CHILD span named "<kind>:<name>".
+#   - CLIENT timing events are span events on the turn span (vpo.client.<event>).
+#   - DERIVED KPIs (TTFA, TTFB, barge-in RTT, ...) are instruments (metrics).
+#   - Every metric carries vpo.provenance = client | server (truthful provenance, §4).
+#
+# Naming rules:
+#   - All attribute keys are prefixed `vpo.`.
+#   - Component metric keys mirror the canonical catalog (§5) under `vpo.<kind>.<key>`.
+#   - Vendor-specific metrics MUST use `vpo.x.<vendor>.<name>` (reserved escape hatch).
+
+groups:
+  # ───────────────────────────────────────────────────────────────────────
+  # Shared correlation + identity attributes
+  # ───────────────────────────────────────────────────────────────────────
+  - id: registry.vpo.core
+    type: attribute_group
+    brief: Core correlation and identity attributes shared by all VPO signals.
+    attributes:
+      - id: vpo.utterance_id
+        type: int
+        requirement_level: required
+        brief: The join key for one turn. Correlates client timing, server spans, and derived KPIs.
+        examples: [42]
+      - id: vpo.session_id
+        type: string
+        requirement_level: recommended
+        brief: Stable session identifier the turn belongs to.
+      - id: vpo.pipeline_name
+        type: string
+        requirement_level: recommended
+        brief: Logical pipeline/route name. Enables per-pipeline partitioning.
+      - id: vpo.provenance
+        type:
+          members:
+            - id: client
+              value: "client"
+              brief: Measured on the client (perceived truth — delivery + device buffering).
+            - id: server
+              value: "server"
+              brief: Measured on the server (per-stage inference cost).
+        requirement_level: required
+        brief: Where the signal was measured. Server estimates of client-perceived values are non-conformant.
+      - id: vpo.topology
+        type:
+          members:
+            - id: decomposed
+              value: "decomposed"
+              brief: Classic STT -> LLM -> TTS pipeline.
+            - id: realtime
+              value: "realtime"
+              brief: Single speech-to-speech model (STT+LLM+TTS collapsed).
+        requirement_level: recommended
+        brief: Pipeline topology. Cross-topology comparison MUST use derived KPIs, not stage-internal metrics.
+
+  # ───────────────────────────────────────────────────────────────────────
+  # Turn span (root)
+  # ───────────────────────────────────────────────────────────────────────
+  - id: span.vpo.turn
+    type: span
+    span_kind: server
+    brief: >
+      One turn of the voice pipeline: from accepting user input to completing (or being
+      interrupted on) the agent's response. Root of the turn trace.
+    note: Maps to TurnMetricsSnapshot. Emitted exactly once per turn.
+    attributes:
+      - ref: vpo.utterance_id
+      - ref: vpo.session_id
+      - ref: vpo.pipeline_name
+      - ref: vpo.topology
+      - id: vpo.turn.total_ms
+        type: int
+        requirement_level: required
+        brief: Server-measured wall-clock from turn start to snapshot (ms).
+      - id: vpo.turn.interrupted
+        type: boolean
+        requirement_level: required
+        brief: Whether the turn was cut short by barge-in.
+      - id: vpo.turn.llm_response_text
+        type: string
+        requirement_level: opt_in
+        brief: Response text accumulated this turn (may be PII — opt-in only).
+
+  # ───────────────────────────────────────────────────────────────────────
+  # Component span (child) — shared shape
+  # ───────────────────────────────────────────────────────────────────────
+  - id: span.vpo.component
+    type: span
+    span_kind: internal
+    brief: One component's timed slice within a turn. Child of the turn span. Named "<kind>:<name>".
+    note: >
+      Open-span rule (§3.2): a component interrupted mid-stage MUST be emitted with a start
+      time but NO end time / latency. Do NOT fabricate an end time. In OTel terms, record the
+      span with its start timestamp and mark status as appropriate; do not synthesize a duration.
+    attributes:
+      - ref: vpo.utterance_id
+      - id: vpo.component.id
+        type: string
+        requirement_level: required
+        brief: Stable "<kind>:<name>" identifier.
+        examples: ["stt:parakeet", "llm:openai", "tts:piper", "realtime:openai"]
+      - id: vpo.component.kind
+        type: string
+        requirement_level: required
+        brief: Coarse class (snake_case).
+        examples: ["stt", "llm", "tts", "vad", "audio_post", "text_post", "translator", "realtime"]
+      - id: vpo.component.started_at_ms
+        type: int
+        requirement_level: required
+        brief: Begin time relative to turn start (ms).
+      - id: vpo.component.finished_at_ms
+        type: int
+        requirement_level:
+          conditionally_required: only when the span completed (omit when interrupted mid-stage)
+        brief: End time relative to turn start (ms).
+      - id: vpo.component.latency_ms
+        type: int
+        requirement_level:
+          conditionally_required: only when finished_at_ms is present
+        brief: finished_at_ms - started_at_ms. MUST NOT be set independently of the timestamps.
+      - id: vpo.component.provider
+        type: string
+        requirement_level: recommended
+        brief: Provider/model name.
+      - id: vpo.component.cold_start
+        type: boolean
+        requirement_level: recommended
+        brief: True on first call against the provider handle (model-load overhead). Default false.
+      - id: vpo.component.error
+        type: string
+        requirement_level:
+          conditionally_required: when the span errored
+        brief: Failure reason.
+
+  # ───────────────────────────────────────────────────────────────────────
+  # Canonical component metric attributes (carried on the component span)
+  # ───────────────────────────────────────────────────────────────────────
+  - id: registry.vpo.stt
+    type: attribute_group
+    brief: "Canonical STT metrics (kind: stt). Units per VPO-Metrics §5.1."
+    attributes:
+      - id: vpo.stt.processing_ms
+        type: int
+        brief: "STT inference wall-time for the utterance. unit=ms"
+      - id: vpo.stt.endpointing_ms
+        type: int
+        brief: "Delay from end-of-speech to STT cutoff decision. unit=ms"
+      - id: vpo.stt.audio_duration_ms
+        type: int
+        brief: "Wall-clock duration of audio consumed. unit=ms"
+      - id: vpo.stt.rtfx
+        type: double
+        brief: "Realtime factor, audio / wall (>1 = faster than realtime). unit=ratio"
+      - id: vpo.stt.algorithmic_delay_ms
+        type: int
+        brief: "Codec/buffering latency inherent to the model/stream. unit=ms"
+      - id: vpo.stt.effective_latency_ms
+        type: int
+        brief: "User-facing STT latency (typically endpointing + processing). unit=ms"
+      - id: vpo.stt.inference_count
+        type: int
+        brief: "Encoder/inference passes for the utterance. unit=count"
+      - id: vpo.stt.streaming_window_ms
+        type: int
+        brief: "Buffered audio per streaming frame. unit=ms"
+
+  - id: registry.vpo.llm
+    type: attribute_group
+    brief: "Canonical LLM metrics (kind: llm). Units per VPO-Metrics §5.2."
+    attributes:
+      - id: vpo.llm.ttft_ms
+        type: int
+        brief: "Time to first token (model first-token latency). unit=ms"
+      - id: vpo.llm.perceived_ttft_ms
+        type: int
+        brief: "TTFT including scheduling/queueing as the pipeline experienced it. unit=ms"
+      - id: vpo.llm.generation_ms
+        type: int
+        brief: "Token generation duration (first to last token). unit=ms"
+      - id: vpo.llm.token_count
+        type: int
+        brief: "Output tokens generated (authoritative when provided). unit=count"
+      - id: vpo.llm.token_estimate
+        type: int
+        brief: "Estimated tokens when an exact count is unavailable. unit=count"
+      - id: vpo.llm.speculative_rollbacks
+        type: int
+        brief: "Speculative-decoding rollbacks. unit=count"
+      - id: vpo.llm.speculative_tokens_generated
+        type: int
+        brief: "Tokens produced speculatively. unit=count"
+      - id: vpo.llm.speculative_tokens_accepted
+        type: int
+        brief: "Speculative tokens committed. unit=count"
+      - id: vpo.llm.speculative_efficiency
+        type: double
+        brief: "Accepted / generated speculative tokens. unit=percent"
+
+  - id: registry.vpo.tts
+    type: attribute_group
+    brief: "Canonical TTS metrics (kind: tts). Units per VPO-Metrics §5.3."
+    attributes:
+      - id: vpo.tts.ttfb_ms
+        type: int
+        brief: "Time to first audio byte (synthesis request -> first audio). unit=ms"
+      - id: vpo.tts.synthesis_ms
+        type: int
+        brief: "Total synthesis wall-time. unit=ms"
+      - id: vpo.tts.audio_duration_ms
+        type: int
+        brief: "Duration of synthesized audio produced. unit=ms"
+      - id: vpo.tts.rtf
+        type: double
+        brief: "Realtime factor, wall / audio (<1.0 = faster than realtime; production target). unit=ratio"
+      - id: vpo.tts.rtfx
+        type: double
+        brief: "Inverse convention, audio / wall. Consumers MUST read by key, not assume. unit=ratio"
+      - id: vpo.tts.chars
+        type: int
+        brief: "Input character count synthesized. unit=count"
+      - id: vpo.tts.sample_rate
+        type: int
+        brief: "Output sample rate (Hz). unit=count"
+
+  - id: registry.vpo.realtime
+    type: attribute_group
+    brief: "Canonical Realtime S2S metrics (kind: realtime). Units per VPO-Metrics §5.4."
+    attributes:
+      - id: vpo.realtime.ttfb_ms
+        type: int
+        brief: "Time to first audio delta from the model. unit=ms"
+      - id: vpo.realtime.audio_output_ms
+        type: int
+        brief: "Duration of audio output produced. unit=ms"
+      - id: vpo.realtime.input_audio_ms
+        type: int
+        brief: "Accumulated input audio duration. unit=ms"
+      - id: vpo.realtime.sample_rate
+        type: int
+        brief: "Output sample rate (Hz). unit=count"
+
+  # ───────────────────────────────────────────────────────────────────────
+  # Client timing events (span events on the turn span) — provenance=client
+  # ───────────────────────────────────────────────────────────────────────
+  - id: event.vpo.client_timing
+    type: event
+    name: vpo.client.timing
+    brief: >
+      A client-reported timing event for one utterance. Recorded as a span event on the turn
+      span. These are the provenance=client signals; they MUST originate on the client (§4.1).
+    attributes:
+      - ref: vpo.utterance_id
+      - id: vpo.client.event
+        type:
+          members:
+            - { id: speech_start,      value: "speech_start",      brief: "Mic captured first speech frame." }
+            - { id: speech_end,        value: "speech_end",        brief: "Client VAD detected end of speech." }
+            - { id: audio_receive,     value: "audio_receive",     brief: "First response audio byte received from server." }
+            - { id: playback_start,    value: "playback_start",    brief: "Client began the playback pipeline." }
+            - { id: first_byte_played, value: "first_byte_played", brief: "First PCM sample rendered to device." }
+            - { id: playback_end,      value: "playback_end",      brief: "Client finished playing response audio." }
+            - { id: underrun,          value: "underrun",          brief: "Audio buffer underran (audible glitch)." }
+        requirement_level: required
+        brief: The timing event kind. Unknown values MUST be preserved, not rejected (forward-compat).
+      - id: vpo.client.timestamp_ms
+        type: int
+        requirement_level: required
+        brief: Client-epoch timestamp (ms). MUST NOT be subtracted from server-monotonic time except via correlated RTT.
+      - id: vpo.client.played_ms
+        type: int
+        requirement_level:
+          conditionally_required: on a playback report at interruption
+        brief: Audio actually played before interruption (PlaybackReport). Drives server-side history truncation.
+
+  # ───────────────────────────────────────────────────────────────────────
+  # Derived KPI instruments (metrics) — §6
+  # ───────────────────────────────────────────────────────────────────────
+  - id: metric.vpo.ttfa_ms
+    type: metric
+    metric_name: vpo.ttfa_ms
+    instrument: histogram
+    unit: "ms"
+    brief: "Time-to-First-Audio = audio_receive - speech_end. provenance=client only."
+    attributes: [vpo.session_id, vpo.pipeline_name]
+
+  - id: metric.vpo.perceived_first_sound_ms
+    type: metric
+    metric_name: vpo.perceived_first_sound_ms
+    instrument: histogram
+    unit: "ms"
+    brief: "first_byte_played - speech_end. provenance=client only."
+    attributes: [vpo.session_id, vpo.pipeline_name]
+
+  - id: metric.vpo.ttfb_ms
+    type: metric
+    metric_name: vpo.ttfb_ms
+    instrument: histogram
+    unit: "ms"
+    brief: "TTS time-to-first-byte. provenance=server. SLO: p95 <= 300ms (feels human), <= 600ms acceptable."
+    attributes: [vpo.pipeline_name]
+
+  - id: metric.vpo.ttft_ms
+    type: metric
+    metric_name: vpo.ttft_ms
+    instrument: histogram
+    unit: "ms"
+    brief: "LLM time-to-first-token. provenance=server."
+    attributes: [vpo.pipeline_name]
+
+  - id: metric.vpo.barge_in_rtt_ms
+    type: metric
+    metric_name: vpo.barge_in_rtt_ms
+    instrument: histogram
+    unit: "ms"
+    brief: >
+      Barge-in round-trip: new-utterance speech_start -> server interrupt detection. The one KPI that
+      crosses the client/server boundary; MUST use correlated ping/pong RTT, never raw cross-clock
+      subtraction. SLO target p95 <= 300ms.
+    attributes: [vpo.pipeline_name]
+
+  - id: metric.vpo.underrun_rate
+    type: metric
+    metric_name: vpo.underrun_rate
+    instrument: gauge
+    unit: "1"
+    brief: "count(underrun) / turns. provenance=client. Any sustained nonzero is an incident."
+    attributes: [vpo.pipeline_name]
+
+  - id: metric.vpo.interruption_rate
+    type: metric
+    metric_name: vpo.interruption_rate
+    instrument: gauge
+    unit: "1"
+    brief: "count(interrupted turns) / turns. provenance=server."
+    attributes: [vpo.pipeline_name]
+
+  - id: metric.vpo.tts_rtf
+    type: metric
+    metric_name: vpo.tts_rtf
+    instrument: gauge
+    unit: "1"
+    brief: "TTS realtime factor (wall/audio). provenance=server. Production SLO: < 1.0 sustained."
+    attributes: [vpo.pipeline_name, vpo.component.provider]
+
+  - id: metric.vpo.e2e_ms
+    type: metric
+    metric_name: vpo.e2e_ms
+    instrument: histogram
+    unit: "ms"
+    brief: "End-to-end turn duration. provenance=server (turn.total_ms). SLO ceiling: p95 <= 4000ms."
+    attributes: [vpo.pipeline_name]

@@ -1,0 +1,10 @@
+{
+  "extensions": [
+    { "url": "builtin:blendshape-meter" },
+    {
+      "url": "/ext/my-avatar/my-avatar-extension.js",
+      "options": { "assetUrl": "/ext/my-avatar/asset/avatar.zip" },
+      "disabled": true
+    }
+  ]
+}

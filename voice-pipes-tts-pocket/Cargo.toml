@@ -1,0 +1,32 @@
+[package]
+name = "voice-pipes-tts-pocket"
+version.workspace = true
+edition = "2024"
+description = "Kyutai Pocket-TTS over its HTTP sidecar as a voice-pipes plugin, on the SDK only"
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+voice-pipes-sdk.workspace = true
+voice-pipes-net.workspace = true
+anyhow.workspace = true
+arc-swap.workspace = true
+async-trait.workspace = true
+futures-util.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["sync", "time"] }
+tokio-util.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+voice-pipes-sdk = { workspace = true, features = ["testing"] }
+voice-pipes-net = { workspace = true, features = ["testing"] }
+axum.workspace = true
+tokio = { workspace = true, features = ["full"] }

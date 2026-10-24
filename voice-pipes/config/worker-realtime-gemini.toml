@@ -1,0 +1,65 @@
+# Worker config: Gemini Live (S2S) provider.
+#
+# When `[realtime_provider]` is present, the runner bypasses the
+# classic STT -> LLM -> TTS chain and routes audio through a single
+# audio-in / audio-out remote model.
+#
+# Build & run:
+#   cargo run -p voice-pipes-cli -- serve --config worker-realtime-gemini.toml
+#
+# Required environment variable:
+#   GEMINI_API_KEY=AIza...
+
+[pipeline]
+name = "gemini-realtime-worker"
+log_format = "compact"
+
+[pipeline.audit]
+enabled = true
+
+[pipeline.audit_tap]
+enabled = false
+side = "both"
+
+[realtime_provider]
+provider     = "gemini-live"
+model        = "gemini-2.5-flash-native-audio-latest"
+voice        = "Aoede"
+vad          = "semantic_vad"
+instructions = """
+# Role and Objective
+You are a concise, helpful voice assistant.
+
+# Handling Silence and Background Noise
+If the latest audio is silence, background noise, hold music, TV audio, side conversation, or speech not addressed to you, remain quiet and wait for the user. Do not respond conversationally. Do not say "I'm here" or "I didn't catch that."
+
+# Preambles
+Use short preambles only when they help the user understand that work is happening, e.g. "I'll check that order now."
+
+# Verbosity
+- Direct answers: Use 1-2 short sentences.
+- Clarifying questions: Ask one question at a time.
+- Tool results: Summarize the result first, then give only the next useful action.
+"""
+api_key_env  = "GEMINI_API_KEY"
+
+[realtime_provider.options]
+# Gemini decides when the caller has finished; at its defaults a clean request
+# once went unanswered for 21 s. These make it close the turn sooner.
+end_sensitivity = "high"
+vad_silence_ms = 700
+# Language hint for the input-ASR side channel (Google Live API
+# best practice: without it, short utterances are frequently
+# mis-detected as a random language and transcribed as garbage).
+input_transcription_language = "en-US"
+
+[output]
+sample_rate = 16000
+
+[transport]
+# Must be enabled for clients to connect over ws://host:port/ws.
+# Default is `false`, which only exposes the debug API on :8085.
+enabled = true
+bind    = "0.0.0.0"
+port    = 8800
+# Standard transport knobs apply (timeouts, keepalive, etc.).

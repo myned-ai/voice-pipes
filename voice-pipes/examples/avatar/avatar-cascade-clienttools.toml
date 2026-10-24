@@ -1,0 +1,79 @@
+# Avatar worker — CASCADE engine with CLIENT-SIDE TOOLS.
+#
+# The driving LLM (any OpenAI-compatible endpoint — hosted GPT/Gemini or a
+# local Gemma via llama.cpp) recognizes an intent, matches it against the
+# server-declared allowlist below, and voice-pipes routes the call to the
+# CLIENT as a `trigger_action` message — silently, with no spoken filler.
+# The client executes the command and reports the outcome back with a
+# `client_tool_result` control; the outcome is injected into conversation
+# context (and spoken only when `speak_on_result` is set, or the client's
+# result asks for it).
+#
+# Boundary rule: voice-pipes NEVER executes a tool itself. Server-side tools
+# go through the agent gateway ([agent] endpoint); client-side tools are the
+# ones declared here.
+#
+# Prerequisites:
+#   - ASSEMBLYAI_API_KEY env var set (STT)
+#   - an OpenAI-compatible LLM reachable at [text_processor].base_url
+#     (for a local llama-server, it MUST run with --jinja — otherwise the
+#     `tools` field is silently ignored and no tool call ever fires; the
+#     docker llama sidecar already does. Set model = "gemma-4-12b-it" or
+#     similar to drive tools with a local Gemma 4.)
+#   - models/en_US-lessac-medium.onnx  (Piper voice model)
+#
+# Build:  cargo build --release -p voice-pipes-cli --features "stt-assemblyai,tts-piper,llm-openai-compat"
+# Usage:  voice-pipes --config examples/avatar/avatar-cascade-clienttools.toml serve
+
+# ── Client-side tools ─────────────────────────────────────────
+# Three merge sources, later wins on name collision:
+#   1. inline [[client_tool]] tables (below)
+#   2. external catalog file(s) via client_tools_path (relative to this file)
+#   3. per-session Configure.options.client_tools (runtime injection)
+#
+# (Top-level key — must appear before the first [table] header.)
+client_tools_path = "commands/client-tools.json"
+
+[pipeline]
+name = "avatar-cascade-clienttools"
+
+[stt]
+provider = "assemblyai"
+model_name = "u3-rt-pro"
+sample_rate = 16000
+
+[turn_detection]
+mode = "provider"
+
+[barge_in]
+enabled = true
+min_chunks = 3
+speech_threshold = 200.0
+
+[[text_processor]]
+type = "openai-compat"
+base_url = "http://localhost:8081/v1"
+model = "gpt-4o-mini"
+system_prompt = """You are a friendly avatar. Be concise and natural. \
+Some tools run silently on the user's device (client-side tools): when you \
+call one, do not narrate or announce it — stay silent unless the user asks."""
+max_tokens = 256
+temperature = 0.7
+# tool_choice = "auto"        # optional: "auto" | "none" | "required"
+
+[tts]
+provider = "piper"
+model = "models/en_US-lessac-medium.onnx"
+
+[output]
+sample_rate = 24000
+
+# Inline tool, merged with the shared catalog (highlight, play_media).
+[[client_tool]]
+name = "navigate"
+description = "Navigate the avatar UI to a named screen."
+speak_on_result = false
+[client_tool.parameters]
+type = "object"
+properties = { screen = { type = "string" } }
+required = ["screen"]

@@ -1,0 +1,45 @@
+# Live mode: mic → VAD → STT → LLM → TTS → speaker (full real-time voice loop).
+#
+# Loads all providers: STT, text processor (LLM), TTS, and VAD.
+# Speak naturally — the pipeline responds when you pause. Press Ctrl+C to stop.
+#
+# Prerequisites:
+#   - ASSEMBLYAI_API_KEY env var set
+#   - llama-server running: llama-server -m models/gemma4-e2b/gemma-4-E2B-it-Q4_K_M.gguf --port 8081 -ngl 99 -c 4096 --jinja
+#   - models/en_US-lessac-medium.onnx     (Piper ONNX voice model)
+#
+# Build:  cargo build --release -p voice-pipes-cli --features stt-assemblyai
+# Usage:  voice-pipes --config examples/live/default.toml live
+#         voice-pipes --config examples/live/default.toml live --silence-ms 800
+
+[pipeline]
+name = "live-default"
+
+[stt]
+provider = "assemblyai"
+model_name = "u3-rt-pro"
+sample_rate = 16000
+
+[turn_detection]
+mode = "provider"
+
+[[text_processor]]
+type = "openai-compat"
+base_url = "http://localhost:8081/v1"
+model = "gemma4-7b-instruct.gguf"
+system_prompt = "You are a helpful voice assistant. Be concise."
+max_tokens = 256
+temperature = 0.7
+
+[tts]
+provider = "piper"
+model = "models/en_US-lessac-medium.onnx"
+
+[pipeline.audit]
+enabled = true
+captures_dir = "captures"
+
+[transport]
+enabled = true
+bind = "0.0.0.0"
+port = 8800

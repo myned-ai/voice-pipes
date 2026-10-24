@@ -1,0 +1,19 @@
+# Worker for the local-STT Croatian cascade (pipeline-croatian-parakeet.toml),
+# run next to the default worker by docker-compose.croatian.yml.
+
+id = "worker-croatian-parakeet"
+max_concurrent = 4
+debug_port = 8085
+# 0.0.0.0 inside the container: the orchestrator reaches the debug API over
+# the compose network via advertise_address.
+debug_bind = "0.0.0.0"
+advertise_address = "worker-croatian-parakeet:8085"
+# Published on host port 8802; the Playground dispatch must hand browsers
+# this address, not the container's 8800.
+transport_advertise_address = "localhost:8802"
+tags = ["lang:hr", "stt:local"]
+
+[orchestrator]
+endpoint = "http://orchestrator:9090"
+heartbeat_interval_s = 5
+register_timeout_s = 10

@@ -1,0 +1,34 @@
+[package]
+name = "voice-pipes-stt-moonshine"
+version.workspace = true
+edition = "2024"
+description = "Useful Sensors Moonshine (local ONNX) as a voice-pipes recogniser plugin, on the SDK only"
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+voice-pipes-sdk.workspace = true
+voice-pipes-onnx = { workspace = true, features = ["session"] }
+async-trait.workspace = true
+ort.workspace = true
+tokenizers = { workspace = true, features = ["onig"] }
+tokio = { workspace = true, features = ["sync", "rt", "macros"] }
+tokio-util = { workspace = true, features = ["rt"] }
+tracing.workspace = true
+
+[features]
+ort-cuda = ["ort/cuda", "voice-pipes-onnx/cuda"]
+
+[dev-dependencies]
+hound.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["sync", "rt-multi-thread", "macros", "time"] }
+# The streaming-contract checks the provider tests share.
+voice-pipes-sdk = { workspace = true, features = ["testing"] }

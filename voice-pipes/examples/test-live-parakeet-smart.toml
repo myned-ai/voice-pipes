@@ -1,0 +1,69 @@
+# Live pipeline with Parakeet-TDT STT + Silero VAD + Pipecat Smart Turn endpointing
+# + OpenAI LLM (gpt-4o-mini) + Piper TTS.
+#
+# Build:  cargo build --release -p voice-pipes-cli --features turn-smart
+# Run:    cargo run   --release -p voice-pipes-cli --features turn-smart -- \
+#                       --config examples/test-live-parakeet-smart.toml live
+#
+# Requires OPENAI_API_KEY environment variable to be set.
+# Requires Parakeet-TDT ONNX weights under `models/parakeet-tdt/`.
+# Requires Smart Turn model at `models/smart-turn-v3.2-cpu.onnx`
+# (run `scripts/download-smart-turn.ps1` to fetch).
+
+[pipeline]
+name = "live-parakeet-smart"
+# Drop committed transcripts shorter than this (raised from default 2 → 5)
+# to filter out brief VAD glitches that Parakeet transcribes as 1–4 chars
+# of garbage ("L", "Scat.", "S s.", etc.) when no real speech was present.
+min_utterance_chars = 5
+
+[pipeline.audit]
+enabled = true
+captures_dir = "captures"
+
+[transport]
+enabled = true
+port = 8800
+
+[vad]
+mode = "silero"
+model = "models/silero_vad.onnx"
+# Raised from 0.5 → 0.7 and min_speech 200 → 300 to ignore speaker→mic echo
+# bleed when running without headphones / hardware AEC.
+speech_prob = 0.7
+min_speech_ms = 300
+min_silence_ms = 600
+
+[stt]
+provider = "parakeet-tdt"
+model_dir = "models/parakeet-tdt"
+
+[stt.options]
+initial_buffer_ms = 800.0
+inference_step_ms = 1000.0
+
+[turn_detection]
+mode               = "smart"
+silence_timeout_ms = 1500  # was 1200; gives more time for trailing words
+smart_model_path   = "models/smart-turn-v3.2-cpu.onnx"
+smart_threshold    = 0.5
+smart_window_secs  = 8
+smart_min_audio_ms = 800   # was 500; require more real audio before inference
+
+[barge_in]
+# Disabled: with no AEC, speaker→mic echo would otherwise let the agent
+# interrupt its own TTS. Re-enable when running with headphones.
+enabled = false
+min_chunks = 3
+speech_threshold = 200.0
+
+[tts]
+provider = "piper"
+model = "models/en_US-lessac-medium.onnx"
+
+[[text_processor]]
+type = "openai-compat"
+model = "gpt-4o-mini"
+system_prompt = "You are a friendly voice assistant named Pipes. Have a natural conversation. Keep responses to one or two short sentences."
+max_tokens = 128
+temperature = 0.6

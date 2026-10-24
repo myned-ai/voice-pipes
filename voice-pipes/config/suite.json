@@ -1,0 +1,16 @@
+{
+  "name": "tts-only-smoke",
+  "scenarios": [
+    {
+      "id": "tts-corpus",
+      "name": "tts-corpus",
+      "input": {
+        "type": "tts_only_corpus",
+        "entries": [
+          { "id": "short-plain-01", "text": "Hello there, how can I help you today?", "bucket": "short", "class": "plain" },
+          { "id": "short-numerics-01", "text": "Your order number is 4 8 2 1 9 7.", "bucket": "short", "class": "numerics" }
+        ]
+      }
+    }
+  ]
+}

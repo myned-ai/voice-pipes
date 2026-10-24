@@ -1,0 +1,1048 @@
+[
+  {
+    "component_id": "stt",
+    "kind": "stt",
+    "label": "Speech-to-Text",
+    "fields": [
+      {
+        "key": "processing_ms",
+        "label": "Processing",
+        "unit": "ms",
+        "health": {
+          "role": "latency",
+          "direction": "lower_is_better",
+          "budget": 800.0
+        },
+        "start_anchor": "speech_commit / last_chunk_in",
+        "end_anchor": "final_transcript",
+        "includes": "Model inference wall time (batch: full utterance; streaming: last chunk inference)",
+        "owner": "provider"
+      },
+      {
+        "key": "endpointing_ms",
+        "label": "Endpointing",
+        "unit": "ms",
+        "health": {
+          "role": "latency",
+          "direction": "lower_is_better",
+          "budget": 500.0,
+          "on_critical_path": true
+        },
+        "start_anchor": "last_speech_frame",
+        "end_anchor": "turn_commit",
+        "includes": "VAD hangover silence and configured silence_timeout_ms",
+        "owner": "engine"
+      },
+      {
+        "key": "stt_audio_duration_ms",
+        "label": "Audio duration",
+        "unit": "ms",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "turn_start",
+        "end_anchor": "turn_commit",
+        "includes": "Total audio duration consumed by the STT stage",
+        "owner": "engine"
+      },
+      {
+        "key": "stt_rtfx",
+        "label": "RTFx (audio/wall)",
+        "unit": "ratio",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "turn_start",
+        "end_anchor": "final_transcript",
+        "includes": "Audio duration divided by inference wall time (higher is faster)",
+        "owner": "provider"
+      },
+      {
+        "key": "stt_algorithmic_delay_ms",
+        "label": "Algorithmic delay",
+        "unit": "ms",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "audio_chunk_timestamp",
+        "end_anchor": "encoder_window_end",
+        "includes": "Lookahead / chunking delay inherent to model architecture",
+        "owner": "provider"
+      },
+      {
+        "key": "stt_effective_latency_ms",
+        "label": "Effective latency",
+        "unit": "ms",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "last_speech_frame",
+        "end_anchor": "final_transcript",
+        "includes": "What the user waits for: endpointing silence plus processing time",
+        "owner": "engine"
+      },
+      {
+        "key": "stt_inference_count",
+        "label": "Inference count",
+        "unit": "count",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "turn_start",
+        "end_anchor": "turn_commit",
+        "includes": "Number of encoder passes or streaming inference steps",
+        "owner": "provider"
+      },
+      {
+        "key": "stt_streaming_window_ms",
+        "label": "Streaming window",
+        "unit": "ms",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "window_start",
+        "end_anchor": "window_end",
+        "includes": "Buffered audio chunk length fed to streaming inference",
+        "owner": "provider"
+      }
+    ]
+  },
+  {
+    "component_id": "llm",
+    "kind": "llm",
+    "label": "Language Model",
+    "fields": [
+      {
+        "key": "ttft_ms",
+        "label": "Time to first token",
+        "unit": "ms",
+        "health": {
+          "role": "latency",
+          "direction": "lower_is_better",
+          "budget": 300.0,
+          "on_critical_path": true
+        },
+        "start_anchor": "prompt_submitted",
+        "end_anchor": "first_token",
+        "includes": "Provider request dispatch to first non-empty generated token",
+        "owner": "provider",
+        "contained_in": "llm_wait_ms"
+      },
+      {
+        "key": "generation_ms",
+        "label": "Generation",
+        "unit": "ms",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "first_token",
+        "end_anchor": "last_token",
+        "includes": "Time from first generated token to stream completion",
+        "owner": "provider"
+      },
+      {
+        "key": "token_count",
+        "label": "Tokens",
+        "unit": "count",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "first_token",
+        "end_anchor": "last_token",
+        "includes": "Total output tokens generated",
+        "owner": "provider"
+      },
+      {
+        "key": "token_estimate",
+        "label": "Token estimate",
+        "unit": "count",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "first_token",
+        "end_anchor": "last_token",
+        "includes": "Estimated output token count when exact count unavailable",
+        "owner": "provider"
+      },
+      {
+        "key": "llm_perceived_ttft_ms",
+        "label": "Perceived TTFT (incl. scheduling)",
+        "unit": "ms",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "turn_commit",
+        "end_anchor": "first_token",
+        "includes": "Turn commit to first LLM token, including scheduling and task queue wait",
+        "owner": "engine",
+        "contained_in": "llm_wait_ms"
+      },
+      {
+        "key": "llm_wait_ms",
+        "label": "LLM stage wait (commit -> frag)",
+        "unit": "ms",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "turn_commit",
+        "end_anchor": "first_text_fragment",
+        "includes": "Engine-measured contiguous wait from turn commit to first text fragment handed to TTS",
+        "owner": "engine"
+      },
+      {
+        "key": "stage_skipped_reason",
+        "label": "Stage skipped reason",
+        "unit": "raw",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "turn_commit",
+        "end_anchor": "turn_commit",
+        "includes": "Why the LLM stage did not run (e.g. agent_say or speculative_accept)",
+        "owner": "engine"
+      },
+      {
+        "key": "speculative_rollbacks",
+        "label": "Speculative Rollbacks",
+        "unit": "count",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "turn_commit",
+        "end_anchor": "turn_end",
+        "includes": "Count of speculative prediction rollbacks during turn",
+        "owner": "engine"
+      },
+      {
+        "key": "speculative_tokens_generated",
+        "label": "Speculative Tokens Generated",
+        "unit": "count",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "turn_commit",
+        "end_anchor": "turn_end",
+        "includes": "Total tokens speculatively generated ahead of time",
+        "owner": "engine"
+      },
+      {
+        "key": "speculative_tokens_accepted",
+        "label": "Speculative Tokens Accepted",
+        "unit": "count",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "turn_commit",
+        "end_anchor": "turn_end",
+        "includes": "Count of speculative tokens accepted by the verifier",
+        "owner": "engine"
+      },
+      {
+        "key": "speculative_efficiency",
+        "label": "Speculative Efficiency",
+        "unit": "percent",
+        "format": "0.0",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "turn_commit",
+        "end_anchor": "turn_end",
+        "includes": "Accepted speculative tokens divided by generated speculative tokens",
+        "owner": "engine"
+      }
+    ]
+  },
+  {
+    "component_id": "tts",
+    "kind": "tts",
+    "label": "Text-to-Speech",
+    "fields": [
+      {
+        "key": "ttfb_ms",
+        "label": "Time to first byte",
+        "unit": "ms",
+        "health": {
+          "role": "latency",
+          "direction": "lower_is_better",
+          "budget": 400.0,
+          "on_critical_path": true
+        },
+        "start_anchor": "first_text_fragment",
+        "end_anchor": "first_audio_chunk",
+        "includes": "First text fragment received by TTS to first raw audio chunk produced",
+        "owner": "provider",
+        "contained_in": "tts_wait_ms"
+      },
+      {
+        "key": "tts_wait_ms",
+        "label": "TTS stage wait (frag -> audio)",
+        "unit": "ms",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "first_text_fragment",
+        "end_anchor": "first_audio_chunk",
+        "includes": "Engine-measured contiguous TTS stage wait to first raw audio chunk",
+        "owner": "engine"
+      },
+      {
+        "key": "output_wait_ms",
+        "label": "Output stage wait",
+        "unit": "ms",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "first_audio_chunk",
+        "end_anchor": "first_sent_audio",
+        "includes": "Engine-measured contiguous output stage wait from first audio chunk to first emitted audio frame",
+        "owner": "engine"
+      },
+      {
+        "key": "commit_to_first_audio_ms",
+        "label": "Commit to first audio",
+        "unit": "ms",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "turn_commit",
+        "end_anchor": "first_sent_audio",
+        "includes": "Engine-measured total post-commit wait (llm_wait_ms + tts_wait_ms + output_wait_ms)",
+        "owner": "engine"
+      },
+      {
+        "key": "stage_skipped_reason",
+        "label": "Stage skipped reason",
+        "unit": "raw",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "turn_commit",
+        "end_anchor": "turn_commit",
+        "includes": "Why TTS stage did not run (e.g. speculative_accept)",
+        "owner": "engine"
+      },
+      {
+        "key": "tts_internal_ttfb_ms",
+        "label": "TTS startup (pre-pacer)",
+        "unit": "ms",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "synthesis_start",
+        "end_anchor": "first_audio_chunk",
+        "includes": "TTS startup and first audio chunk generation before engine queueing",
+        "owner": "provider",
+        "contained_in": "tts_wait_ms"
+      },
+      {
+        "key": "synthesis_ms",
+        "label": "Synthesis",
+        "unit": "ms",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "synthesis_start",
+        "end_anchor": "synthesis_end",
+        "includes": "Active provider synthesis compute time excluding consumer backpressure",
+        "owner": "provider"
+      },
+      {
+        "key": "audio_duration_ms",
+        "label": "Audio duration",
+        "unit": "ms",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "synthesis_start",
+        "end_anchor": "synthesis_end",
+        "includes": "Total duration of synthesized audio output",
+        "owner": "provider"
+      },
+      {
+        "key": "rtf",
+        "label": "Realtime factor",
+        "unit": "ratio",
+        "format": "0.00",
+        "health": {
+          "role": "quality",
+          "direction": "lower_is_better",
+          "budget": 0.6,
+          "on_critical_path": false
+        },
+        "start_anchor": "synthesis_start",
+        "end_anchor": "synthesis_end",
+        "includes": "Active synthesis compute time divided by generated audio duration (lower is faster)",
+        "owner": "provider"
+      },
+      {
+        "key": "rtfx",
+        "label": "RTFx (audio/wall)",
+        "unit": "ratio",
+        "format": "0.00",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "synthesis_start",
+        "end_anchor": "synthesis_end",
+        "includes": "Generated audio duration divided by synthesis compute time (higher is faster)",
+        "owner": "provider"
+      },
+      {
+        "key": "chars",
+        "label": "Characters",
+        "unit": "count",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "synthesis_start",
+        "end_anchor": "synthesis_end",
+        "includes": "Characters of the agent reply fed to TTS (Unicode scalar values)",
+        "owner": "engine"
+      },
+      {
+        "key": "sample_rate",
+        "label": "Sample rate",
+        "unit": "count",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "synthesis_start",
+        "end_anchor": "synthesis_end",
+        "includes": "Output sampling rate in Hz",
+        "owner": "provider"
+      }
+    ]
+  },
+  {
+    "component_id": "realtime",
+    "kind": "realtime",
+    "label": "Realtime S2S",
+    "fields": [
+      {
+        "key": "ttfb_ms",
+        "label": "Time to first audio",
+        "unit": "ms",
+        "health": {
+          "role": "latency",
+          "direction": "lower_is_better",
+          "budget": 600.0,
+          "on_critical_path": true
+        },
+        "start_anchor": "speech_end_anchor",
+        "end_anchor": "first_audio_delta",
+        "includes": "End of user speech anchor to first audio chunk from S2S provider",
+        "owner": "provider"
+      },
+      {
+        "key": "provider_endpointing_ms",
+        "label": "Provider endpointing",
+        "unit": "ms",
+        "health": {
+          "role": "latency",
+          "direction": "lower_is_better",
+          "budget": 500.0,
+          "on_critical_path": true
+        },
+        "start_anchor": "last_speech_frame",
+        "end_anchor": "provider_speech_stopped",
+        "includes": "Lag between local VAD speech end and provider speech stopped notification",
+        "owner": "engine"
+      },
+      {
+        "key": "first_text_ms",
+        "label": "Time to first transcript",
+        "unit": "ms",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "speech_end_anchor",
+        "end_anchor": "first_transcript_delta",
+        "includes": "End of speech anchor to first transcript received from provider",
+        "owner": "provider"
+      },
+      {
+        "key": "ttfb_anchor_source",
+        "label": "TTFB anchor",
+        "unit": "raw",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "speech_end_anchor",
+        "end_anchor": "speech_end_anchor",
+        "includes": "Anchor name used for TTFB (e.g. provider_speech_stopped, vp_vad, client_speech_end)",
+        "owner": "engine"
+      },
+      {
+        "key": "audio_output_ms",
+        "label": "Audio output",
+        "unit": "ms",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "first_audio_delta",
+        "end_anchor": "audio_turn_end",
+        "includes": "Total audio duration produced in this turn",
+        "owner": "provider"
+      },
+      {
+        "key": "input_audio_ms",
+        "label": "Input audio",
+        "unit": "ms",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "turn_start",
+        "end_anchor": "speech_end_anchor",
+        "includes": "Total input audio duration processed for this turn",
+        "owner": "provider"
+      },
+      {
+        "key": "sample_rate",
+        "label": "Sample rate",
+        "unit": "count",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "turn_start",
+        "end_anchor": "audio_turn_end",
+        "includes": "Output sampling rate in Hz",
+        "owner": "provider"
+      },
+      {
+        "key": "input_speech_dbfs",
+        "label": "Input speech level",
+        "unit": "db",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "speech_start",
+        "end_anchor": "speech_end",
+        "includes": "RMS level of detected user speech in dBFS",
+        "owner": "engine"
+      },
+      {
+        "key": "input_noise_dbfs",
+        "label": "Input noise floor",
+        "unit": "db",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "speech_start",
+        "end_anchor": "speech_end",
+        "includes": "Estimated background noise floor in dBFS",
+        "owner": "engine"
+      },
+      {
+        "key": "input_snr_db",
+        "label": "Input SNR",
+        "unit": "db",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "speech_start",
+        "end_anchor": "speech_end",
+        "includes": "Estimated signal-to-noise ratio in dB",
+        "owner": "engine"
+      },
+      {
+        "key": "input_peak_dbfs",
+        "label": "Input peak",
+        "unit": "db",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "speech_start",
+        "end_anchor": "speech_end",
+        "includes": "Maximum sample amplitude in dBFS",
+        "owner": "engine"
+      },
+      {
+        "key": "input_clipped_ratio",
+        "label": "Input clipped",
+        "unit": "percent",
+        "format": "0.00",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "speech_start",
+        "end_anchor": "speech_end",
+        "includes": "Fraction of input samples at clipping threshold",
+        "owner": "engine"
+      },
+      {
+        "key": "input_speech_ratio",
+        "label": "Input speech ratio",
+        "unit": "ratio",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "turn_start",
+        "end_anchor": "speech_end",
+        "includes": "Proportion of audio classified as active speech",
+        "owner": "engine"
+      },
+      {
+        "key": "input_speech_ms",
+        "label": "Input speech",
+        "unit": "ms",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "speech_start",
+        "end_anchor": "speech_end",
+        "includes": "Cumulative active speech duration metered on input",
+        "owner": "engine"
+      },
+      {
+        "key": "input_level_source",
+        "label": "Input level source",
+        "unit": "raw",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "speech_start",
+        "end_anchor": "speech_end",
+        "includes": "Metering observer source identifier",
+        "owner": "engine"
+      }
+    ]
+  },
+  {
+    "component_id": "output",
+    "kind": "output",
+    "label": "Output (streaming phase)",
+    "fields": [
+      {
+        "key": "emit_rtf",
+        "label": "Emit realtime factor",
+        "unit": "ratio",
+        "format": "0.00",
+        "health": {
+          "role": "throughput",
+          "direction": "lower_is_better",
+          "budget": 0.9,
+          "on_critical_path": true,
+          "severity_bands": {
+            "warn": 1.0,
+            "moderate": 1.1111111111111112,
+            "severe": 1.3333333333333333
+          }
+        },
+        "start_anchor": "first_sent_audio",
+        "end_anchor": "last_sent_audio",
+        "includes": "Wall time to emit audio divided by audio duration",
+        "owner": "engine"
+      },
+      {
+        "key": "source_rtf",
+        "label": "Source realtime factor",
+        "unit": "ratio",
+        "format": "0.00",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "synthesis_start",
+        "end_anchor": "synthesis_end",
+        "includes": "Whole-utterance source production RTF (including inter-sentence gaps)",
+        "owner": "engine"
+      },
+      {
+        "key": "chain_overhead_ms",
+        "label": "Post-chain overhead",
+        "unit": "ms",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "first_audio_chunk",
+        "end_anchor": "last_sent_audio",
+        "includes": "Wall time to emit audio minus source production time",
+        "owner": "engine"
+      },
+      {
+        "key": "audio_output_ms",
+        "label": "Audio output",
+        "unit": "ms",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "first_sent_audio",
+        "end_anchor": "last_sent_audio",
+        "includes": "Total audio duration emitted to transport",
+        "owner": "engine"
+      },
+      {
+        "key": "output_wait_ms",
+        "label": "Output stage wait",
+        "unit": "ms",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "first_audio_chunk",
+        "end_anchor": "first_sent_audio",
+        "includes": "Time from first raw audio chunk to first packet sent to transport",
+        "owner": "engine"
+      },
+      {
+        "key": "commit_to_first_audio_ms",
+        "label": "Commit to first audio",
+        "unit": "ms",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "turn_commit",
+        "end_anchor": "first_sent_audio",
+        "includes": "Total post-commit wait (llm_wait_ms + tts_wait_ms + output_wait_ms)",
+        "owner": "engine"
+      }
+    ]
+  },
+  {
+    "component_id": "audio_post:post_processor",
+    "kind": "audio_post",
+    "label": "Post-processor (post_processor)",
+    "fields": [
+      {
+        "key": "budget_ratio",
+        "label": "Budget ratio",
+        "unit": "ratio",
+        "format": "0.00",
+        "health": {
+          "role": "throughput",
+          "direction": "lower_is_better",
+          "budget": 0.8,
+          "on_critical_path": true,
+          "severity_bands": {
+            "warn": 1.0,
+            "moderate": 1.125,
+            "severe": 1.25
+          }
+        },
+        "start_anchor": "chunk_in",
+        "end_anchor": "chunk_out",
+        "includes": "Mean chunk processing latency divided by chunk duration",
+        "owner": "engine"
+      },
+      {
+        "key": "latency_p50_ms",
+        "label": "Call latency (p50)",
+        "unit": "ms",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "chunk_in",
+        "end_anchor": "chunk_out",
+        "includes": "Median post-processor call latency",
+        "owner": "engine"
+      },
+      {
+        "key": "latency_max_ms",
+        "label": "Call latency (max)",
+        "unit": "ms",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "chunk_in",
+        "end_anchor": "chunk_out",
+        "includes": "Maximum post-processor call latency",
+        "owner": "engine"
+      },
+      {
+        "key": "calls",
+        "label": "Calls",
+        "unit": "count",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "turn_start",
+        "end_anchor": "turn_end",
+        "includes": "Number of invocations of the post-processor",
+        "owner": "engine"
+      },
+      {
+        "key": "timeouts",
+        "label": "Timeouts",
+        "unit": "count",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "turn_start",
+        "end_anchor": "turn_end",
+        "includes": "Count of calls that exceeded execution budget",
+        "owner": "engine"
+      },
+      {
+        "key": "failures",
+        "label": "Failures",
+        "unit": "count",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "turn_start",
+        "end_anchor": "turn_end",
+        "includes": "Count of calls returning an error",
+        "owner": "engine"
+      }
+    ]
+  },
+  {
+    "component_id": "annotator:annotator",
+    "kind": "annotator",
+    "label": "Annotator (annotator)",
+    "fields": [
+      {
+        "key": "latency_p50_ms",
+        "label": "Annotation latency (p50)",
+        "unit": "ms",
+        "health": {
+          "role": "latency",
+          "direction": "lower_is_better",
+          "budget": 100.0,
+          "on_critical_path": false
+        },
+        "start_anchor": "batch_start",
+        "end_anchor": "batch_end",
+        "includes": "Median batch processing latency of annotator",
+        "owner": "engine"
+      },
+      {
+        "key": "lag_max_ms",
+        "label": "Lag behind audio (max)",
+        "unit": "ms",
+        "health": {
+          "role": "latency",
+          "direction": "lower_is_better",
+          "budget": 200.0,
+          "on_critical_path": false
+        },
+        "start_anchor": "chunk_timestamp",
+        "end_anchor": "annotation_emitted",
+        "includes": "Maximum lag between audio chunk timestamp and annotation delivery",
+        "owner": "engine"
+      },
+      {
+        "key": "latency_max_ms",
+        "label": "Annotation latency (max)",
+        "unit": "ms",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "batch_start",
+        "end_anchor": "batch_end",
+        "includes": "Maximum batch processing latency of annotator",
+        "owner": "engine"
+      },
+      {
+        "key": "segments",
+        "label": "Segments",
+        "unit": "count",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "turn_start",
+        "end_anchor": "turn_end",
+        "includes": "Count of audio segments processed",
+        "owner": "engine"
+      },
+      {
+        "key": "annotations",
+        "label": "Annotations",
+        "unit": "count",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "turn_start",
+        "end_anchor": "turn_end",
+        "includes": "Count of annotations emitted",
+        "owner": "engine"
+      },
+      {
+        "key": "dropped_chunks",
+        "label": "Dropped chunks",
+        "unit": "count",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "turn_start",
+        "end_anchor": "turn_end",
+        "includes": "Count of audio chunks dropped by annotator queue",
+        "owner": "engine"
+      },
+      {
+        "key": "timeouts",
+        "label": "Timeouts",
+        "unit": "count",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "turn_start",
+        "end_anchor": "turn_end",
+        "includes": "Count of batches that exceeded timeout",
+        "owner": "engine"
+      },
+      {
+        "key": "skipped_segments",
+        "label": "Skipped (breaker)",
+        "unit": "count",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "turn_start",
+        "end_anchor": "turn_end",
+        "includes": "Count of segments skipped due to breaker trip",
+        "owner": "engine"
+      },
+      {
+        "key": "annotation_kbps",
+        "label": "Annotation bitrate",
+        "unit": "ratio",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "turn_start",
+        "end_anchor": "turn_end",
+        "includes": "Bitrate of annotation stream in kbps",
+        "owner": "engine"
+      },
+      {
+        "key": "annotation_bytes",
+        "label": "Annotation bytes",
+        "unit": "bytes",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "turn_start",
+        "end_anchor": "turn_end",
+        "includes": "Total bytes of annotation metadata produced",
+        "owner": "engine"
+      },
+      {
+        "key": "breaker_open",
+        "label": "Breaker open",
+        "unit": "raw",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "turn_start",
+        "end_anchor": "turn_end",
+        "includes": "Whether circuit breaker opened during turn",
+        "owner": "engine"
+      }
+    ]
+  }
+]

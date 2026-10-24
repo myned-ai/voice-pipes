@@ -1,0 +1,75 @@
+{
+  "parakeet": {
+    "default": true,
+    "default_path": "models/parakeet-tdt",
+    "layout": "dir",
+    "files": [
+      { "name": "nemo128.onnx", "url": "https://huggingface.co/istupakov/parakeet-tdt-0.6b-v2-onnx/resolve/main/nemo128.onnx" },
+      { "name": "encoder-model.int8.onnx", "url": "https://huggingface.co/istupakov/parakeet-tdt-0.6b-v2-onnx/resolve/main/encoder-model.int8.onnx" },
+      { "name": "decoder_joint-model.int8.onnx", "url": "https://huggingface.co/istupakov/parakeet-tdt-0.6b-v2-onnx/resolve/main/decoder_joint-model.int8.onnx" },
+      { "name": "vocab.txt", "url": "https://huggingface.co/istupakov/parakeet-tdt-0.6b-v2-onnx/resolve/main/vocab.txt" }
+    ]
+  },
+  "parakeet-greek": {
+    "default_path": "models/parakeet-tdt-v3-greek",
+    "layout": "dir",
+    "files": [
+      { "name": "nemo128.onnx", "url": "https://huggingface.co/myned-ai/parakeet-tdt-0.6b-v3-greek/resolve/main/nemo128.onnx" },
+      { "name": "encoder-model.onnx", "url": "https://huggingface.co/myned-ai/parakeet-tdt-0.6b-v3-greek/resolve/main/encoder-model.onnx" },
+      { "name": "encoder-model.onnx.data", "url": "https://huggingface.co/myned-ai/parakeet-tdt-0.6b-v3-greek/resolve/main/encoder-model.onnx.data" },
+      { "name": "decoder_joint-model.onnx", "url": "https://huggingface.co/myned-ai/parakeet-tdt-0.6b-v3-greek/resolve/main/decoder_joint-model.onnx" },
+      { "name": "vocab.txt", "url": "https://huggingface.co/myned-ai/parakeet-tdt-0.6b-v3-greek/resolve/main/vocab.txt" }
+    ]
+  },
+  "moonshine": {
+    "default_path": "models/moonshine",
+    "layout": "dir",
+    "files": [
+      { "name": "encoder_model.onnx", "url": "https://huggingface.co/onnx-community/moonshine-base-ONNX/resolve/main/onnx/encoder_model.onnx", "alt_names": ["encoder_model_quantized.onnx"] },
+      { "name": "decoder_model_merged.onnx", "url": "https://huggingface.co/onnx-community/moonshine-base-ONNX/resolve/main/onnx/decoder_model_merged.onnx", "alt_names": ["decoder_model.onnx", "decoder_model_quantized.onnx"] },
+      { "name": "tokenizer.json", "url": "https://huggingface.co/onnx-community/moonshine-base-ONNX/resolve/main/tokenizer.json" }
+    ]
+  },
+  "piper": {
+    "default": true,
+    "default_path": "models/en_US-lessac-medium.onnx",
+    "layout": "file",
+    "files": [
+      { "name": "en_US-lessac-medium.onnx", "url": "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/lessac/medium/en_US-lessac-medium.onnx" },
+      { "name": "en_US-lessac-medium.onnx.json", "url": "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/lessac/medium/en_US-lessac-medium.onnx.json" }
+    ]
+  },
+  "smollm2-360m": {
+    "default": true,
+    "default_path": "models/smollm2-360m/SmolLM2-360M-Instruct-Q4_K_M.gguf",
+    "layout": "file",
+    "files": [
+      { "name": "SmolLM2-360M-Instruct-Q4_K_M.gguf", "url": "https://huggingface.co/bartowski/SmolLM2-360M-Instruct-GGUF/resolve/main/SmolLM2-360M-Instruct-Q4_K_M.gguf" },
+      { "name": "tokenizer.json", "url": "https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct/resolve/main/tokenizer.json" }
+    ]
+  },
+  "smollm2-1.7b": {
+    "default_path": "models/smollm2-1.7b/SmolLM2-1.7B-Instruct-Q4_K_M.gguf",
+    "layout": "file",
+    "files": [
+      { "name": "SmolLM2-1.7B-Instruct-Q4_K_M.gguf", "url": "https://huggingface.co/bartowski/SmolLM2-1.7B-Instruct-GGUF/resolve/main/SmolLM2-1.7B-Instruct-Q4_K_M.gguf" },
+      { "name": "tokenizer.json", "url": "https://huggingface.co/HuggingFaceTB/SmolLM2-1.7B-Instruct/resolve/main/tokenizer.json" }
+    ]
+  },
+  "smollm2-135m": {
+    "default_path": "models/smollm2/SmolLM2-135M-Instruct-Q4_K_M.gguf",
+    "layout": "file",
+    "files": [
+      { "name": "SmolLM2-135M-Instruct-Q4_K_M.gguf", "url": "https://huggingface.co/bartowski/SmolLM2-135M-Instruct-GGUF/resolve/main/SmolLM2-135M-Instruct-Q4_K_M.gguf" },
+      { "name": "tokenizer.json", "url": "https://huggingface.co/HuggingFaceTB/SmolLM2-135M-Instruct/resolve/main/tokenizer.json" }
+    ]
+  },
+  "silero": {
+    "default": true,
+    "default_path": "models/silero_vad.onnx",
+    "layout": "file",
+    "files": [
+      { "name": "silero_vad.onnx", "url": "https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/silero_vad.onnx" }
+    ]
+  }
+}

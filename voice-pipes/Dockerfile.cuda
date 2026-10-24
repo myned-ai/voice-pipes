@@ -1,0 +1,129 @@
+# syntax=docker/dockerfile:1
+# (`COPY --parents`, below, needs the 1.x frontend rather than the one built into the engine.)
+# CUDA build of the voice-pipes worker.
+#
+# Used ONLY by the GPU compose services (worker-gpu / worker-custom-gpu); the CPU
+# path stays on the slim ./Dockerfile, so the CUDA toolkit is pulled in only when
+# actually building for the GPU.
+#
+# CUDA_VERSION must be <= the "CUDA Version" reported by `nvidia-smi` on the host
+# (the host driver sets the ceiling). CUDA 12 minor-version compatibility means a
+# 12.6 build runs on any R525+ driver, so the default is usually fine; override
+# with --build-arg CUDA_VERSION=12.x.y if you hit a driver-version error.
+ARG CUDA_VERSION=12.6.2
+
+# ── Builder: full CUDA toolkit (nvcc) + Rust ────────────────────────────
+FROM nvidia/cuda:${CUDA_VERSION}-cudnn-devel-ubuntu24.04 AS builder
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        curl ca-certificates build-essential pkg-config \
+        libssl-dev libasound2-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Rust toolchain (match the CPU image's 1.88).
+ENV RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:/usr/local/cuda/bin:${PATH}
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+        | sh -s -- -y --default-toolchain 1.91.0 --profile minimal
+
+# Let cudarc / candle find the toolkit, and target the L4 (Ada, sm_89). There is
+# no GPU during the build, so candle's bindgen_cuda can't auto-detect the arch —
+# set it explicitly. Change to your GPU's compute capability if not an L4.
+ENV CUDA_PATH=/usr/local/cuda \
+    CUDA_ROOT=/usr/local/cuda \
+    CUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda \
+    CUDA_COMPUTE_CAP=89
+
+WORKDIR /app
+# Build context is the repo root so the `voice-pipes` crate can see its
+# `../voice-pipes-sdk` path dependency.
+COPY Cargo.toml Cargo.lock ./
+# Every workspace crate, by pattern rather than by name, so a new crate needs
+# no edit here: its manifest, sources, build script and protos. `--parents`
+# keeps each file's directory, and a pattern a crate does not use (most have
+# no build.rs) matches nothing. Only compile inputs are copied, so editing
+# docs, configs or tests does not invalidate the build layer.
+COPY --parents voice-pipes*/Cargo.toml voice-pipes*/build.rs voice-pipes*/src voice-pipes*/proto ./
+# Compile-time embedded assets outside a crate's src (include_str!): the
+# wizard's model registry. Copied file by file so editing runtime configs
+# (worker TOMLs) does not invalidate the build layer.
+COPY voice-pipes/config/wizard_models.json ./voice-pipes/config/wizard_models.json
+
+# Ride out slow crates.io moments instead of failing the whole build: more
+# retries, and give a stalled transfer 120s (default 30s) before timing out.
+ENV CARGO_NET_RETRY=10 \
+    CARGO_HTTP_TIMEOUT=120
+
+# The workers' list in deploy/docker/docker-compose.yml (a workspace rule
+# holds the two equal), built with the GPU switches on top: `ort-cuda` puts
+# every linked ONNX provider on CUDA, `cuda` the GGUF model.
+ARG FEATURES="realtime,text-grpc,tts-kokoro,tts-pocket,stt-moonshine,tts-openai,tts-elevenlabs,stt-assemblyai,stt-google,tts-gemini,stt-nemotron,stt-nemotron35,turn-smart"
+ARG GPU_FEATURES="cuda,ort-cuda"
+# Cache mounts survive across builds, so crate downloads and the ort-sys
+# prebuilt-onnxruntime download (cdn.pyke.io, prone to stalling when builds
+# run in parallel) only ever have to succeed once.
+# `sharing=locked`: compose builds several images at once, and two cargo
+# runs unpacking the same crate into a shared registry fail with
+# "failed to unpack package ... File exists". Locked, the second build
+# waits for the first.
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
+    --mount=type=cache,target=/root/.cache/ort.pyke.io,sharing=locked \
+    cargo build --release -p voice-pipes-cli --features "${GPU_FEATURES},${FEATURES}"
+
+# ONNX Runtime loads its CUDA execution provider at run time from two shared
+# libraries beside the process's working directory; the static link above
+# carries neither. The prebuilt runtime the build fetched holds them (ort
+# copies them next to the binary when it can); gather them here, and fail
+# the build if they are missing rather than ship an image whose every ONNX
+# session on CUDA fails to open.
+RUN --mount=type=cache,target=/root/.cache/ort.pyke.io,sharing=locked \
+    mkdir -p /app/ort-libs \
+    && find /app/target/release /root/.cache/ort.pyke.io -name 'libonnxruntime_providers_*.so' \
+        -exec cp -n {} /app/ort-libs/ \; \
+    && ls -l /app/ort-libs/libonnxruntime_providers_shared.so /app/ort-libs/libonnxruntime_providers_cuda.so
+
+# ── Runtime: CUDA + cuDNN runtime libs (cublas/cudart/cudnn for ort & candle) ──
+FROM nvidia/cuda:${CUDA_VERSION}-cudnn-runtime-ubuntu24.04 AS runtime
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        libasound2t64 ca-certificates espeak-ng \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY --from=builder /app/target/release/voice-pipes /usr/local/bin/voice-pipes
+# The CUDA execution provider, looked up relative to the working directory.
+COPY --from=builder /app/ort-libs/ /app/
+
+# Probe fixtures, baked in rather than mounted, as in the CPU image: the
+# component probes are most wanted on a worker that is already deployed.
+COPY voice-pipes/fixtures /app/fixtures
+
+# Unprivileged runtime user (see ./Dockerfile for the volume-ownership
+# note). The NVIDIA runtime injects /dev/nvidia* with world rw access, so no
+# group membership is needed for CUDA.
+RUN groupadd --system --gid 10001 vp \
+    && useradd --system --uid 10001 --gid vp --home-dir /app --shell /usr/sbin/nologin vp \
+    && chown -R vp:vp /app
+ENV HOME=/app
+USER vp
+
+# Each workspace crate logs under its own target (`voice_pipes` does not cover
+# `voice_pipes_stt_google`), so every one that logs is named here -- the binary's
+# own (where a fatal start-up error goes), the pool, the bench extension and
+# every plugin. A test holds this list to the workspace.
+ENV RUST_LOG=voice_pipes=info,voice_pipes_cli=info,voice_pipes_onnx=info,voice_pipes_bench=info,voice_pipes_stt_parakeet=info,voice_pipes_stt_moonshine=info,voice_pipes_tts_piper=info,voice_pipes_vad_silero=info,voice_pipes_stt_nemotron=info,voice_pipes_stt_nemotron35=info,voice_pipes_stt_google=info,voice_pipes_tts_kokoro=info,voice_pipes_tts_pocket=info,voice_pipes_tts_openai=info,voice_pipes_stt_assemblyai=info,voice_pipes_tts_elevenlabs=info,voice_pipes_tts_gemini=info,voice_pipes_llm_openai_compat=info,voice_pipes_llm_gguf=info,voice_pipes_s2s_openai=info,voice_pipes_s2s_gemini=info,voice_pipes_s2s_elevenlabs=info,voice_pipes_turn_smart=info,voice_pipes_turn_vap=info,ort=warn,h2=warn,hyper=warn,rustls=warn
+# Default the ONNX Runtime execution provider to CUDA (override with VP_ORT_EP=cpu).
+ENV VP_ORT_EP=cuda
+
+# Liveness from the binary itself (the image has no HTTP client): a
+# worker's transport `/healthz`. The orchestrator, same image on 9090,
+# overrides the URL in its compose `healthcheck`. A worker may load models
+# for a while before it listens, hence the start period.
+HEALTHCHECK --interval=15s --timeout=5s --start-period=120s --retries=3 \
+    CMD ["voice-pipes", "healthz"]
+
+ENTRYPOINT ["voice-pipes"]

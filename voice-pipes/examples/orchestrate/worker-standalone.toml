@@ -1,0 +1,25 @@
+# Optional: enable fixed-size output chunking for TTS audio (improves interruption responsiveness)
+# [output.chunking]
+# enabled = true
+# frame_ms = 50  # chunk size in milliseconds (10–250 recommended)
+# Standalone worker config — no orchestrator, no fleet management.
+#
+# Runs the full voice pipeline behind WebSocket (/ws on port 8800)
+# plus a local debug API. No admin UI support — use this for
+# single-instance deployments (personal assistant, dev, single-container).
+#
+# Debug API endpoints (http://localhost:8085/debug/):
+#   /debug/health      — worker health and uptime
+#   /debug/config      — full pipeline config as JSON
+#   /debug/providers   — STT, TTS, VAD provider details
+#   /debug/sessions    — local turn history with latency metrics
+#   /debug/audit/files — list audit files on disk
+#
+# Usage:  voice-pipes serve --worker-config examples/orchestrate/worker-standalone.toml --config examples/minimal.toml
+
+id = "worker-standalone"
+max_concurrent = 10
+debug_port = 8085
+debug_bind = "127.0.0.1"
+
+# No [orchestrator] section — runs standalone

@@ -1,0 +1,45 @@
+# STT-only config for Google Cloud Speech-to-Text v2, Chirp 3 (cloud).
+#
+# Chirp 3 covers 100+ languages in streaming — including the ones no other
+# provider here handles (Croatian was the motivating case). Google does its
+# own VAD/endpointing, so no [vad] section is required.
+#
+# Prerequisites:
+#   - A GCP project with the Speech-to-Text API enabled
+#     (`gcloud services enable speech.googleapis.com`).
+#   - Credentials, one of:
+#       * Application Default Credentials — `gcloud auth application-default login`,
+#         or GOOGLE_APPLICATION_CREDENTIALS pointing at a service-account key,
+#         or the GCE/Cloud Run metadata server, or a logged-in `gcloud` on PATH;
+#       * `credentials_path` below (service-account JSON key);
+#       * GOOGLE_OAUTH_ACCESS_TOKEN (a pre-minted token; dev probes only).
+#   - The project id: `project_id` below, GOOGLE_CLOUD_PROJECT, or the one
+#     carried by the credential (`gcloud config get-value project`).
+#
+# Cost note: Chirp bills per 15 s of audio; a live session streams continuously.
+#
+# Build:  cargo build --release -p voice-pipes-cli --features stt-google
+# Usage:  voice-pipes --config examples/stt/google.toml stt --input recording.wav
+
+[pipeline]
+name = "stt-google"
+
+[stt]
+provider    = "google"
+model_name  = "chirp_3"          # chirp_3 | chirp_2 | long | short | telephony
+sample_rate = 16000
+
+[stt.options]
+# project_id   = "my-gcp-project"  # else GOOGLE_CLOUD_PROJECT, else the credential's
+location       = "eu"              # chirp_3 is served from the `us` and `eu` multi-regions only
+language_codes = ["hr-HR"]         # BCP-47; Chirp 3 accepts several
+
+interim_results              = true
+enable_voice_activity_events = true    # SPEECH_ACTIVITY_BEGIN/END → speech_started / end-of-turn
+enable_automatic_punctuation = true
+enable_word_time_offsets     = false   # true → per-word timestamps (WordTimestamps capability)
+# endpointing_sensitivity    = "standard"   # standard | short | supershort
+# speech_end_timeout_ms      = 700
+
+# credentials_path = "models/gcp/service-account.json"  # else Application Default Credentials
+# stream_rotate_ms = 240000   # reopen the stream before Google's 5-minute cap

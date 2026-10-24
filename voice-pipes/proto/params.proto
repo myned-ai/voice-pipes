@@ -1,0 +1,57 @@
+syntax = "proto3";
+package voice_pipes.params;
+
+// Generic runtime parameter editor — mirrors the in-process
+// `MutableParamStore` trait. A single `ParamService` exposes all of the
+// component-server's registered components (STT, TTS, text processors, …)
+// behind one RPC, so the orchestrator does not need a separate stub per
+// component type.
+service ParamService {
+  // Apply a validated parameter update. Returns the value that ended up
+  // being stored (may differ from the input if the remote normalised it).
+  rpc UpdateParams(UpdateParamsRequest) returns (UpdateParamsResponse);
+}
+
+message UpdateParamsRequest {
+  // Component id as registered with the local `ParamRegistry`
+  // (e.g. "tts", "vad", "llm_0").
+  string component_id = 1;
+  // Mutable parameter key declared in the component's `param_schema`.
+  string key = 2;
+  ParamValue value = 3;
+}
+
+message UpdateParamsResponse {
+  ParamValue applied = 1;
+}
+
+// Strongly-typed value — mirrors `api::param_schema::ParamValue`.
+message ParamValue {
+  oneof kind {
+    double float_val = 1;
+    int64 int_val = 2;
+    bool bool_val = 3;
+    string str_val = 4;
+  }
+}
+
+message OnlyWhen {
+  string field = 1;
+  repeated string values = 2;
+}
+
+message ParamConstraints {
+  optional double min = 1;
+  optional double max = 2;
+  repeated string options = 3;
+}
+
+message ParamDescriptor {
+  string key = 1;
+  string label = 2;
+  string description = 3;
+  bool mutable = 4;
+  string value_type = 5; // e.g. "float", "int", "bool", "str", "enum", "path"
+  optional ParamConstraints constraints = 6;
+  optional OnlyWhen only_when = 7;
+}

@@ -1,0 +1,76 @@
+# External gRPC Agent Service + Idle Re-engagement
+#
+# Demonstrates pairing a classic STT -> TTS cascade pipeline with an external
+# `AgentService` gRPC server (`voice-pipes/proto/agent.proto`) via
+# `[[text_processor]] type = "agent-grpc"`, plus `[agent]` idle re-engagement.
+#
+# Capabilities brokered over the gRPC stream:
+#   - Streamed turn replies (`TurnFragment`)
+#   - Smart-filler + out-of-turn `Say` (agent returns a quick filler, finishes
+#     the turn, runs a slow background task, and injects a `Say` later)
+#   - Cancel-by-words while a background task is pending
+#   - Spoken-prefix truncation feedback (`Interrupted` frame with exact words
+#     heard before user barge-in)
+#   - Idle re-engagement (`UserIdle` event after `idle_timeout_ms` of silence,
+#     up to `idle_max_prompts` times per silence stretch)
+#
+# Step 1 — Start the reference Python gRPC agent (from repo root):
+#   cd examples/reference-agent
+#   python -m grpc_tools.protoc -I ../../voice-pipes/proto \
+#       --python_out=. --grpc_python_out=. agent.proto
+#   python reference_agent.py --port 50061
+#
+# Step 2 — Start the worker (from `voice-pipes/` directory):
+#   cargo run --release -p voice-pipes-cli -- \
+#     --config examples/features/agent-grpc-idle.toml serve
+
+[pipeline]
+name = "feature-agent-grpc-idle"
+min_utterance_chars = 2
+
+[pipeline.audit]
+enabled = true
+captures_dir = "captures"
+
+[transport]
+enabled = true
+bind = "127.0.0.1"
+port = 8800
+
+[agent]
+# Endpoint used for out-of-turn `Say` push stream and `UserIdle` notifications.
+endpoint = "http://127.0.0.1:50061"
+# Fire an idle prompt after 8 seconds of user silence while Listening.
+idle_timeout_ms = 8000
+# Cap idle prompts at 2 per silence stretch (resets as soon as the user speaks).
+idle_max_prompts = 2
+# Fallback prompt spoken if no external agent overrides the wording.
+idle_message = "Are you still there?"
+
+[vad]
+mode = "silero"
+model = "models/silero_vad.onnx"
+speech_prob = 0.5
+min_speech_ms = 200
+min_silence_ms = 500
+
+[stt]
+provider = "parakeet-tdt"
+model_dir = "models/parakeet-tdt"
+
+[turn_detection]
+mode = "silence"
+silence_timeout_ms = 700
+
+[barge_in]
+enabled = true
+min_chunks = 3
+speech_threshold = 200.0
+
+[[text_processor]]
+type = "agent-grpc"
+endpoint = "http://127.0.0.1:50061"
+
+[tts]
+provider = "piper"
+model = "models/en_US-lessac-medium.onnx"

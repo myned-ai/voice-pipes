@@ -1,0 +1,44 @@
+[package]
+name = "voice-pipes-sdk"
+version = "1.0.0"
+edition = "2024"
+description = "Stable plugin SDK for voice-pipes — implement STT, TTS, text, VAD, turn-detection and speech-to-speech providers in a separate crate"
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+# Its own: what a plugin author needs, not the project's overview.
+readme = "README.md"
+
+# Semver: 1.x follows docs/extending/sdk-stability.md (minor releases only
+# add; anything else waits for 2.0), and CI's semver check holds it.
+
+[lints]
+workspace = true
+
+[features]
+# Shared test helpers for provider crates (the streaming conformance check).
+# Enable from `[dev-dependencies]` only.
+testing = ["tokio/time", "tokio/rt"]
+
+[dependencies]
+# Minimal surface — no ort, candle, tonic, axum.
+# Plugin crates add their own inference-runtime deps.
+async-trait.workspace = true
+tokio = { workspace = true, features = ["sync", "macros"] }
+tokio-util = { workspace = true, features = ["rt"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+parking_lot.workspace = true
+# Lock-free string cells for live parameters.
+arc-swap.workspace = true
+# Wipes a `Secret` from memory when it is dropped.
+zeroize.workspace = true
+# Speech-to-speech audio travels as base64 PCM16 inside JSON frames.
+base64.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros"] }

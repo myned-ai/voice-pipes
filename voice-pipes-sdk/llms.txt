@@ -1,0 +1,40 @@
+# voice-pipes-sdk
+
+> The stable plugin boundary for the Voice Pipes real-time streaming framework.
+
+This repository provides the SDK for building STT, TTS, and TextProcessor (LLM) plugins. 
+The core framework is built for low-latency, high-performance streaming pipelines and relies heavily on Rust, `tokio` for async execution, and `async-trait`.
+
+## Documentation Index
+
+- [Plugin Development Guide](../docs/extending/plugin-sdk.md): Detailed walkthrough of the plugin architecture, including provider and factory setup.
+- [Core Types & Traits](src/lib.rs): Primary source of truth for `SttProvider`, `TtsProvider`, `TextProcessor`, and their respective factories.
+
+## System Instructions for AI Agents
+
+When writing code for this repository, you MUST adhere to the following constraints:
+
+1. **Architecture Pattern:** Every new model integration requires three components:
+   - A `Provider` implementation (handles inference).
+   - A `Factory` implementation (handles configuration, validation, and instantiation).
+   - A registration function (e.g., `register_stt_factory`).
+2. **Dependencies:** Stick to the core stack (`tokio`, `async-trait`, `tokio-util`). Do not introduce heavy async runtimes (e.g., `axum`, `tonic`) unless explicitly building a remote API provider. Bring your own inference runtime (e.g., `ort`, `candle`).
+3. **Streaming & Concurrency:** Ensure all shared state (like model weights) in providers is wrapped in `Arc` for cheap cross-thread cloning. Use `tokio::sync::mpsc` channels for audio/text streaming. Always prioritize the `CancellationToken` in `tokio::select!` loops to abort processing promptly mid-stream (e.g., on VAD silence or hangup).
+4. **Telemetry & Health:** Always wrap inference operations with `std::time::Instant::now()` and report latency and errors via `self.core.record_ok(t0.elapsed())` or `self.core.record_error(&err)`. Implement `as_component()` to expose the provider to the health dashboard and auto-degrade loop.
+5. **Forward Compatibility:** Always use `..Default::default()` when returning structs like `TranscriptionResult` to accommodate future SDK fields.
+
+## Required API Signatures
+
+If exact trait signatures are not loaded in your active context, use these core structural templates:
+
+### Speech-to-Text (STT)
+- `SttProvider`: Must implement `transcribe(&self, audio: &AudioFrame)` and `transcribe_stream(...)`.
+- `SttFactory`: Must implement `validate(&self, cfg: &SttConfig)` and `build(...)`.
+
+### Text-to-Speech (TTS)
+- `TtsProvider`: Must implement `synthesize(&self, text: &str)` and `synthesize_stream(...)`.
+- `TtsFactory`: Must implement `validate(&self, cfg: &TtsConfig)` and `build(...)`.
+
+### TextProcessor (LLM)
+- `TextProcessor`: Must implement `process(&self, prompt: &str)` and `process_stream(...)`.
+- `TextProcessorFactory`: Must implement `validate(&self, cfg: &TextProcessorConfig)` and `build(...)`.

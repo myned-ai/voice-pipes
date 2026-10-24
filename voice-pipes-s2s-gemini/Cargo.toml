@@ -1,0 +1,26 @@
+[package]
+name = "voice-pipes-s2s-gemini"
+version.workspace = true
+edition = "2024"
+description = "Google Gemini Live speech-to-speech as a voice-pipes plugin, on the SDK only"
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+voice-pipes-sdk.workspace = true
+anyhow.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+voice-pipes-sdk = { workspace = true, features = ["testing"] }
+base64.workspace = true
+# Parses the wizard entry's output in its test.
+toml.workspace = true

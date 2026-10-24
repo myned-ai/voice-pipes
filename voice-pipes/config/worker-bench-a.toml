@@ -1,0 +1,14 @@
+# Optional: enable fixed-size output chunking for TTS audio (improves interruption responsiveness)
+# [output.chunking]
+# enabled = true
+# frame_ms = 50  # chunk size in milliseconds (10–250 recommended)
+# Worker config for benchmark variant A (default Gemma 4)
+# Transport: 8800 (from pipeline config)
+# Debug API: 8085
+# Tags: variant:default -- used by benchmark runner for dispatch
+
+debug_port = 8085
+tags = ["variant:default"]
+
+[orchestrator]
+endpoint = "http://127.0.0.1:9090"

@@ -1,0 +1,23 @@
+# Network clients are built in one place, `voice-pipes-net`, so every provider
+# gets the same TLS stack, timeouts and redirect policy, and none can loosen
+# them. A caller with a real reason to differ (a public model download that
+# follows CDN redirects, a test against a local server) says so in an
+# `#[allow(clippy::disallowed_methods, reason = "...")]`.
+# reqwest's blocking client is not listed: no manifest may enable its
+# `blocking` feature (a workspace rule), so there is nothing to call.
+# The TLS connects exist only when tokio-tungstenite's TLS features are on,
+# hence `allow-invalid` on those.
+disallowed-methods = [
+    { path = "reqwest::Client::new", reason = "build HTTP clients with voice_pipes_net::http_client" },
+    { path = "reqwest::Client::builder", reason = "build HTTP clients with voice_pipes_net::http_client" },
+    { path = "reqwest::ClientBuilder::new", reason = "build HTTP clients with voice_pipes_net::http_client" },
+    { path = "reqwest::get", reason = "a default client with no timeout; build one with voice_pipes_net::http_client" },
+    { path = "tokio_tungstenite::connect_async", reason = "open websockets with voice_pipes_net::connect_websocket, which bounds the handshake and the message size" },
+    { path = "tokio_tungstenite::connect_async_with_config", reason = "open websockets with voice_pipes_net::connect_websocket, which bounds the handshake and the message size" },
+    { allow-invalid = true, path = "tokio_tungstenite::connect_async_tls_with_config", reason = "open websockets with voice_pipes_net::connect_websocket, which bounds the handshake and the message size" },
+    { path = "tokio_tungstenite::client_async", reason = "open websockets with voice_pipes_net::connect_websocket, which bounds the handshake and the message size" },
+    { path = "tokio_tungstenite::client_async_with_config", reason = "open websockets with voice_pipes_net::connect_websocket, which bounds the handshake and the message size" },
+    { allow-invalid = true, path = "tokio_tungstenite::client_async_tls", reason = "open websockets with voice_pipes_net::connect_websocket, which bounds the handshake and the message size" },
+    { allow-invalid = true, path = "tokio_tungstenite::client_async_tls_with_config", reason = "open websockets with voice_pipes_net::connect_websocket, which bounds the handshake and the message size" },
+    { path = "tokio_tungstenite::tungstenite::connect", reason = "a blocking websocket with no bounds; open one with voice_pipes_net::connect_websocket" },
+]

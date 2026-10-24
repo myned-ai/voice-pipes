@@ -1,0 +1,174 @@
+syntax = "proto3";
+package voice_pipes.agent;
+
+// ── Agent-session link ──
+//
+// One bidirectional stream per voice session. The pipeline is the
+// voice broker (turn-taking, barge-in, playback truth); the agent
+// behind this service is the conversational brain. The .proto is the
+// single protocol definition: a future WebSocket adapter carries these
+// same messages via the canonical proto3 JSON mapping.
+service AgentService {
+  // Per-session brain link. First pipeline frame is SessionStart; the
+  // agent MUST reply SessionAck before anything else.
+  rpc AgentSession(stream PipelineToAgent) returns (stream AgentToPipeline);
+  // Tools this agent exposes to a Speech-to-Speech provider model
+  // (S2S sessions only; the provider stays the brain and this agent
+  // acts as the tool backend).
+  rpc ListTools(ListToolsRequest) returns (ListToolsResponse);
+}
+
+// ── Pipeline → agent ────────────────────────────────────────
+
+message PipelineToAgent {
+  oneof event {
+    SessionStart session_start = 1;
+    UserTurn user_turn = 2;
+    Interrupted interrupted = 3;
+    ContextNote context_note = 4;
+    UserIdle user_idle = 5;
+    ToolCall tool_call = 6;
+    SessionEnd session_end = 7;
+  }
+}
+
+message SessionStart {
+  // Version/capabilities handshake — bump on breaking changes.
+  uint32 protocol_version = 1;
+  string session_id = 2;
+  string pipeline_name = 3;
+  // True when the pipeline re-opens the stream for a live session
+  // after a link drop (reconnect-and-resume).
+  bool resumed = 4;
+  map<string, string> metadata = 5;
+}
+
+// A committed user turn: generate the reply as TurnFragments carrying
+// the same turn_id. `is_context` marks agent `Generate` input
+// (injected background information, not something the user said).
+message UserTurn {
+  uint32 turn_id = 1;
+  string text = 2;
+  bool is_context = 3;
+}
+
+// Barge-in ground truth: the user actually heard only `played_text`
+// of the turn's reply — truncate agent-side history accordingly.
+message Interrupted {
+  uint32 turn_id = 1;
+  string played_text = 2;
+}
+
+// Non-turn history fact (a rich message shown to the user, an
+// assistant utterance spoken outside this agent, silent context).
+message ContextNote {
+  string text = 1;
+  // "context" | "assistant_message" — how to record it.
+  string kind = 2;
+}
+
+// The user has been silent; decide whether/how to re-engage (reply
+// with Say). prompt_count is 1-based within the silence stretch.
+message UserIdle {
+  uint64 idle_ms = 1;
+  uint32 prompt_count = 2;
+}
+
+// S2S only: the provider model called one of the agent's tools.
+message ToolCall {
+  string call_id = 1;
+  string name = 2;
+  string arguments_json = 3;
+}
+
+message SessionEnd {
+  string reason = 1;
+}
+
+// ── Agent → pipeline ────────────────────────────────────────
+
+message AgentToPipeline {
+  oneof event {
+    SessionAck session_ack = 1;
+    TurnFragment turn_fragment = 2;
+    Say say = 3;
+    Message message = 4;
+    Cancel cancel = 5;
+    ToolResult tool_result = 6;
+    CompleteTool complete_tool = 7;
+  }
+}
+
+message SessionAck {
+  uint32 protocol_version = 1;
+  string agent_name = 2;
+}
+
+// Streamed reply to a UserTurn; is_end_of_response closes the turn.
+message TurnFragment {
+  uint32 turn_id = 1;
+  string text = 2;
+  bool is_end_of_response = 3;
+  optional double first_token_ms = 4;
+  optional uint32 token_count = 5;
+}
+
+// When agent-initiated output is delivered relative to an active turn.
+enum Scheduling {
+  SCHEDULING_WHEN_IDLE = 0;
+  SCHEDULING_INTERRUPT = 1;
+  SCHEDULING_SILENT = 2;
+}
+
+// Out-of-turn speech: the pipeline speaks `text` via TTS as a full
+// agent-initiated turn.
+message Say {
+  string text = 1;
+  Scheduling scheduling = 2;
+}
+
+// Out-of-turn client message (rich content, commands, tool
+// transparency): forwarded to the client with no turn, no TTS, no
+// state change. kind follows PipelineMessage conventions
+// ("card", "image", "trigger_action", "tool_call", "tool_result", …).
+message Message {
+  string kind = 1;
+  string text = 2;
+  string payload_json = 3;
+  bool record_in_history = 4;
+}
+
+// Cancel the in-flight turn/response, if any.
+message Cancel {}
+
+// S2S only: reply to a ToolCall. pending=true means `output` is an
+// immediate ack (the model speaks a filler) and the real result
+// follows later as CompleteTool — providers accept exactly one output
+// per call_id.
+message ToolResult {
+  string call_id = 1;
+  bool pending = 2;
+  string output = 3;
+}
+
+// S2S only: the late result of a pending ToolCall, delivered as a
+// context message per `scheduling`.
+message CompleteTool {
+  string call_id = 1;
+  string result = 2;
+  Scheduling scheduling = 3;
+}
+
+// ── Tools ───────────────────────────────────────────────────
+
+message ListToolsRequest {}
+
+message ToolSpec {
+  string name = 1;
+  string description = 2;
+  string parameters_json_schema = 3;
+}
+
+message ListToolsResponse {
+  repeated ToolSpec tools = 1;
+}

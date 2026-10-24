@@ -1,0 +1,58 @@
+# Benchmark variant: Gemma 4 E2B — concise mode
+#
+# Same pipeline as test-live-gemma4.toml but with:
+#   - Lower temperature (0.3) for more deterministic output
+#   - Shorter max_tokens (64) for faster responses
+#   - Tighter system prompt encouraging brevity
+#
+# Runs against the same llama-server on port 8081.
+# Transport on port 8801 (vs 8800 for the default variant).
+
+[pipeline]
+name = "bench-gemma4-concise"
+
+[pipeline.audit]
+enabled = true
+captures_dir = "captures"
+
+[transport]
+enabled = true
+port = 8801
+
+[vad]
+mode = "silero"
+model = "models/silero_vad.onnx"
+speech_prob = 0.5
+min_speech_ms = 100
+min_silence_ms = 50
+
+[stt]
+provider = "parakeet-tdt"
+model_dir = "models/parakeet-tdt"
+
+[stt.options]
+initial_buffer_ms = 800.0
+inference_step_ms = 1000.0
+
+[turn_detection]
+mode = "layered"
+silence_timeout_ms = 1000
+
+[barge_in]
+enabled = true
+min_chunks = 3
+speech_threshold = 200.0
+
+[tts]
+provider = "piper"
+model = "models/en_US-lessac-medium.onnx"
+
+[[text_processor]]
+type = "openai-compat"
+base_url = "http://localhost:8081/v1"
+model = "gemma-4-E2B-it"
+api_key = ""
+system_prompt = "You are Pipes, a concise voice assistant. Answer in one short sentence only. Never elaborate."
+max_tokens = 64
+temperature = 0.3
+top_p = 0.9

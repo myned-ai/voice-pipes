@@ -1,0 +1,60 @@
+{
+  "id": "suite-synthetic-caller-gemini",
+  "name": "Synthetic caller (Gemini Live, text-bridged)",
+  "description": "Drives a multi-turn conversation against the pipeline using the Gemini Live Bidi API as the synthetic user. Requires the `synthetic-caller` cargo feature and the GEMINI_API_KEY environment variable. Cost guardrails: 3 turn cap + 30s wall-clock cap per repetition. Default `bridge=text` forwards the caller's transcript to the pipeline as text input (bypassing pipeline STT); flip `bridge` to `audio` to exercise the full VAD/STT/LLM/TTS chain end-to-end and have the worker's per-session audit capture both caller and pipeline audio into `<captures_dir>/<session_id>/` (served by the admin UI as /audio/in and /audio/out).",
+  "created_at": "2026-05-19T00:00:00Z",
+  "scenarios": [
+    {
+      "id": "synthetic-caller-gemini-time",
+      "name": "polite caller asks the time (text bridge)",
+      "input": {
+        "type": "synthetic_caller",
+        "config": {
+          "caller": {
+            "kind": "gemini_live",
+            "model": "gemini-2.0-flash-exp"
+          },
+          "persona_template": "polite_time",
+          "persona": "",
+          "bridge": "text",
+          "stop": {
+            "max_turns": 3,
+            "max_duration_s": 30,
+            "max_caller_silence_s": 8
+          }
+        }
+      },
+      "expected": {
+        "min_completed_turns": 1,
+        "pipeline_must_say": [],
+        "max_pipeline_turn_latency_ms": 8000
+      }
+    },
+    {
+      "id": "synthetic-caller-gemini-refund-audio",
+      "name": "impatient caller demands a refund (audio bridge)",
+      "input": {
+        "type": "synthetic_caller",
+        "config": {
+          "caller": {
+            "kind": "gemini_live",
+            "model": "gemini-2.0-flash-exp"
+          },
+          "persona_template": "impatient_refund",
+          "persona": "",
+          "bridge": "audio",
+          "stop": {
+            "max_turns": 4,
+            "max_duration_s": 45,
+            "max_caller_silence_s": 10
+          }
+        }
+      },
+      "expected": {
+        "min_completed_turns": 1,
+        "pipeline_must_say": [],
+        "max_pipeline_turn_latency_ms": 10000
+      }
+    }
+  ]
+}

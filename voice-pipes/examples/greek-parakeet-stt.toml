@@ -1,0 +1,39 @@
+# Greek speech recognition only: the Parakeet TDT 0.6B v3 Greek fine-tune
+# (myned-ai/parakeet-tdt-0.6b-v3-greek) at full precision on the CPU.
+#
+# Build:  cargo build --release -p voice-pipes-cli
+# Run, from the voice-pipes directory, on a file and then on the microphone:
+#   cargo run --release -p voice-pipes-cli -- --config examples/greek-parakeet-stt.toml stt --input clip.wav
+#   cargo run --release -p voice-pipes-cli -- --config examples/greek-parakeet-stt.toml listen
+#
+# Requires the five Greek files under `models/parakeet-tdt-v3-greek/`:
+# `voice-pipes models fetch parakeet-greek` downloads them, or
+#   hf download myned-ai/parakeet-tdt-0.6b-v3-greek --include nemo128.onnx encoder-model.onnx encoder-model.onnx.data decoder_joint-model.onnx vocab.txt --local-dir models/parakeet-tdt-v3-greek
+#
+# The full Greek cascade (LLM and TTS) is deploy/docker/config/pipeline-greek-parakeet.toml.
+
+[pipeline]
+name = "greek-parakeet-stt"
+
+[vad]
+mode = "silero"
+model = "models/silero_vad.onnx"
+speech_prob = 0.5
+min_speech_ms = 200
+min_silence_ms = 600
+
+[stt]
+provider  = "parakeet-tdt"
+model_dir = "models/parakeet-tdt-v3-greek"
+
+[stt.options]
+# The fp32 export: the int8 one is 4 to 8 WER points worse on Greek and no
+# faster on CPU. `language` is the tag results carry and turns on the Greek
+# question mark.
+precision = "fp32"
+language  = "el"
+pool_size = 1
+
+[turn_detection]
+mode = "silence"
+silence_timeout_ms = 700

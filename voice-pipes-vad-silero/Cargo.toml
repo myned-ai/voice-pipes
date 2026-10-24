@@ -1,0 +1,24 @@
+[package]
+name = "voice-pipes-vad-silero"
+version.workspace = true
+edition = "2024"
+description = "Silero voice activity detection (local ONNX) as a voice-pipes VAD plugin, on the SDK only"
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+voice-pipes-sdk.workspace = true
+voice-pipes-onnx = { workspace = true, features = ["session"] }
+ort.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+voice-pipes-sdk = { workspace = true, features = ["testing"] }
+hound.workspace = true

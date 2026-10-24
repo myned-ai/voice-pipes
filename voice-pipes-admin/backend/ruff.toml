@@ -1,0 +1,36 @@
+# Lint rules for the admin backend. CI runs `ruff check` from this
+# directory (.github/workflows/core-tests.yml, job admin-backend).
+#
+# The rule set is explicit so a newer ruff with a different default set does
+# not change what CI enforces. What it is for:
+#   E4/E7/E9, F  syntax errors, undefined names, unused imports and variables
+#   I            import order
+#   B            likely bugs (loop-variable closures, raise without from, ...)
+#   BLE          a broad `except Exception` must be deliberate: it is either
+#                narrowed or carries `# noqa: BLE001` with the reason
+#   S110, S112   an `except: pass` / `continue` that swallows an error silently
+#                must log it or say why it may be dropped
+#   UP           syntax the target Python has a simpler form for
+#   SIM, C4, PIE simpler equivalent code
+#   RUF          ruff's own checks (unused noqa, mutable class defaults, ...)
+target-version = "py311"
+line-length = 120
+
+[lint]
+select = ["E4", "E7", "E9", "F", "I", "B", "BLE", "S110", "S112", "UP", "SIM", "C4", "PIE", "RUF"]
+ignore = [
+    # Typographic characters (em dash, arrows, multiplication sign) are used
+    # on purpose in comments, docstrings and report text.
+    "RUF001", "RUF002", "RUF003",
+    # Style preferences, not defects: contextlib.suppress over
+    # try/except/pass, a ternary over a four-line if/else, one `with` over
+    # nested ones (nesting often reads better, e.g. around assertRaises).
+    "SIM105", "SIM108", "SIM117",
+]
+
+[lint.per-file-ignores]
+# Test fixtures keep constant tables as class attributes; nothing mutates them.
+"app/test_*.py" = ["RUF012"]
+
+[lint.isort]
+known-first-party = ["app"]

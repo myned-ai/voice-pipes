@@ -1,0 +1,62 @@
+{
+  "id": "suite-synthetic-caller-openai",
+  "name": "Synthetic caller (OpenAI Realtime)",
+  "description": "Drives multi-turn conversations against the pipeline using the OpenAI Realtime API as the synthetic user. Requires the `synthetic-caller` cargo feature and OPENAI_API_KEY. Two scenarios: a cheap text-bridged probe (bypasses pipeline STT) and a full audio-bridged probe (exercises VAD/STT/LLM/TTS; per-utterance WAVs auto-captured under <captures_dir>/<session_id>/ when [pipeline.audit] enabled=true, served by the admin UI at /api/v1/sessions/<id>/audio/{in,out}). Cost guardrails enforced per-scenario.",
+  "created_at": "2026-05-19T00:00:00Z",
+  "scenarios": [
+    {
+      "id": "synthetic-caller-openai-time-text",
+      "name": "polite caller asks the time (text bridge)",
+      "input": {
+        "type": "synthetic_caller",
+        "config": {
+          "caller": {
+            "kind": "openai_realtime",
+            "model": "gpt-realtime",
+            "voice": "marin"
+          },
+          "persona_template": "polite_time",
+          "persona": "",
+          "bridge": "text",
+          "stop": {
+            "max_turns": 3,
+            "max_duration_s": 30,
+            "max_caller_silence_s": 8
+          }
+        }
+      },
+      "expected": {
+        "min_completed_turns": 1,
+        "pipeline_must_say": [],
+        "max_pipeline_turn_latency_ms": 8000
+      }
+    },
+    {
+      "id": "synthetic-caller-openai-refund-audio",
+      "name": "impatient refund caller (audio bridge)",
+      "input": {
+        "type": "synthetic_caller",
+        "config": {
+          "caller": {
+            "kind": "openai_realtime",
+            "model": "gpt-realtime",
+            "voice": "marin"
+          },
+          "persona_template": "impatient_refund",
+          "persona": "",
+          "bridge": "audio",
+          "stop": {
+            "max_turns": 4,
+            "max_duration_s": 45,
+            "max_caller_silence_s": 10
+          }
+        }
+      },
+      "expected": {
+        "min_completed_turns": 1,
+        "pipeline_must_say": [],
+        "max_pipeline_turn_latency_ms": 10000
+      }
+    }
+  ]
+}

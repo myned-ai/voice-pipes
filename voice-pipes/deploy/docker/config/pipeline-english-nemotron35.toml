@@ -1,0 +1,103 @@
+# The English cascade with Nemotron 3.5 as the recogniser, for comparing
+# against Parakeet (pipeline-english-corpus.toml) and Moonshine
+# (pipeline-english-moonshine.toml):
+#   mic → Silero VAD → Nemotron 3.5 ASR (en-US, streaming, CPU) → Gemma 3 1B
+#   (llama-server) → Piper
+#
+# Everything except [stt] is the Parakeet pipeline's, on purpose: the VAD, the
+# turn detector and its timeout, the model and the voice are the same, so a
+# difference between two sessions is the recogniser's.
+#
+# Nemotron 3.5 runs through the `voice-pipes-stt-nemotron35` plugin crate. It
+# streams natively, chunk by chunk with a 320 ms lookahead, so interims arrive
+# while the user speaks; on CPU the fp16 encoders decode at about real time
+# with four threads. The export (1.3 GB) comes from
+# scripts/download_nemotron35.py into models/nemotron-3.5.
+#
+# Run by the `worker-english-nemotron35` service in docker-compose.yml.
+
+[pipeline]
+name = "english-nemotron35"
+
+[pipeline.audit]
+enabled = true
+
+[stt]
+provider  = "nemotron-3.5"
+model_dir = "models/nemotron-3.5"
+
+[stt.options]
+# A fixed locale: `auto` costs accuracy on short utterances.
+language  = "en-US"
+# One session set is enough for a single playground user; each set is a
+# full copy of the model (about 1.3 GB), so raise for concurrency only.
+pool_size = 1
+threads   = 4
+
+# Nemotron emits no end-of-turn signal, so the same VAD drives the turn.
+[vad]
+mode = "auto"
+model = "models/silero_vad.onnx"
+threshold = 0.5
+
+# The same detector and timeout as the Parakeet pipeline.
+[turn_detection]
+mode = "silence"
+silence_timeout_ms = 700
+
+[barge_in]
+enabled = true
+min_chunks = 3
+speech_threshold = 2000.0
+
+# The same Gemma 3 1B on the llama-server sidecar as the Parakeet pipeline.
+[[text_processor]]
+type = "openai-compat"
+base_url = "http://llama-server:8081/v1"
+model = "gemma-4-E2B-it"
+system_prompt = "You are a voice assistant in a spoken conversation. Reply in one or two short sentences. Ask a follow-up question every other turn or so, to keep the conversation going."
+max_tokens = 128
+temperature = 0.7
+# Gemma 4 thinks before it answers and spends the whole token budget on
+# reasoning the pipeline never speaks; the template is told not to.
+[text_processor.extra_body]
+chat_template_kwargs = { enable_thinking = false }
+
+[tts]
+provider = "piper"
+model = "models/en_US-lessac-medium.onnx"
+
+# Small frames keep barge-in responsive.
+[output.chunking]
+enabled = true
+frame_ms = 50
+
+[transport]
+enabled = true
+bind = "0.0.0.0"
+port = 8800
+
+[auth]
+required = true
+
+# Client-side tools: executed by the connected client (Playground / SDK),
+# which reports back via `client_tool_result`. The model must be one that
+# calls tools; llama-server runs with --jinja so the GGUF's tool-aware chat
+# template is used.
+[[client_tool]]
+name = "navigate"
+description = "Navigate the client UI to a named screen."
+speak_on_result = false
+[client_tool.parameters]
+type = "object"
+properties = { screen = { type = "string", description = "Target screen name." } }
+required = ["screen"]
+
+[[client_tool]]
+name = "play_media"
+description = "Start playback of a named media item on the client device."
+speak_on_result = true
+[client_tool.parameters]
+type = "object"
+properties = { title = { type = "string", description = "Media item title or id." } }
+required = ["title"]

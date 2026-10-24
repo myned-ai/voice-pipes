@@ -1,0 +1,68 @@
+# Pricing book for hosted voice-pipeline providers.
+#
+# Units:
+#   - LLM:  USD per 1M input/output tokens (`input_per_mtok`, `output_per_mtok`)
+#   - STT:  USD per audio minute       (`per_audio_minute`)
+#   - TTS:  USD per 1M output characters (`per_million_chars`)
+#
+# Local providers (pocket-sphinx, piper, whisper-self-hosted, nemotron, llama.cpp,
+# gemma-self-hosted, …) are not listed here — they are treated as cost = 0 and
+# tagged "local" in the dashboard.
+#
+# Optional `monthly_cap_usd` per provider drives quota alerts; omit for no cap.
+
+llm:
+  "openai/gpt-4o-mini":      { input_per_mtok: 0.15,  output_per_mtok: 0.60 }
+  "openai/gpt-4o":           { input_per_mtok: 2.50,  output_per_mtok: 10.00 }
+  "openai/gpt-4.1-mini":     { input_per_mtok: 0.40,  output_per_mtok: 1.60 }
+  "openai/gpt-4.1":          { input_per_mtok: 2.00,  output_per_mtok: 8.00 }
+  "anthropic/claude-3-haiku": { input_per_mtok: 0.25, output_per_mtok: 1.25 }
+  "anthropic/claude-3-5-haiku": { input_per_mtok: 0.80, output_per_mtok: 4.00 }
+  "anthropic/claude-3-5-sonnet": { input_per_mtok: 3.00, output_per_mtok: 15.00 }
+  "google/gemini-1.5-flash": { input_per_mtok: 0.075, output_per_mtok: 0.30 }
+  "google/gemini-1.5-pro":   { input_per_mtok: 1.25,  output_per_mtok: 5.00 }
+  "groq/llama-3.1-8b":       { input_per_mtok: 0.05,  output_per_mtok: 0.08 }
+  "groq/llama-3.3-70b":      { input_per_mtok: 0.59,  output_per_mtok: 0.79 }
+
+stt:
+  "openai_realtime":         { per_audio_minute: 0.06 }
+  "openai_whisper_api":      { per_audio_minute: 0.006 }
+  "assemblyai":              { per_audio_minute: 0.0042 }
+  "deepgram_streaming":      { per_audio_minute: 0.0058 }
+  "deepgram_nova":           { per_audio_minute: 0.0043 }
+
+tts:
+  "openai":                  { per_million_chars: 15.00 }
+  "openai_tts_hd":           { per_million_chars: 30.00 }
+  "elevenlabs":              { per_million_chars: 165.00 }
+  "elevenlabs_turbo":        { per_million_chars: 50.00 }
+  "cartesia":                { per_million_chars: 65.00 }
+  "deepgram_aura":           { per_million_chars: 15.00 }
+
+# Per-provider monthly hard caps in USD.  When spend (current month-to-date)
+# crosses 80% an amber chip shows; at 100% a red alert is published in the
+# alerts strip.  Match the provider key on the LEFT side of the slash above
+# (e.g. "openai" caps both gpt-4o-mini and gpt-4o; "anthropic" caps all
+# anthropic models combined).
+monthly_caps_usd:
+  openai: 500
+  anthropic: 250
+  google: 250
+  groq: 100
+  elevenlabs: 100
+  cartesia: 100
+  deepgram_streaming: 100
+  assemblyai: 100
+
+# List of provider tokens that should be treated as zero-cost local infra.
+local_providers:
+  - pocket-sphinx
+  - pocketsphinx
+  - piper
+  - whisper
+  - whisper_local
+  - nemotron
+  - llama
+  - llama_cpp
+  - gemma
+  - gemma_local

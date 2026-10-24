@@ -1,0 +1,35 @@
+/target
+/audit_tap
+/captures
+/logs
+/debug-dumps
+*.wav
+*.log
+*.melbin
+check*.txt
+check*.log
+output.txt
+test_*_results.txt
+test_results.txt
+onnx_mel*.txt
+
+# Auto-downloaded build tools (e.g. protoc) cached by scripts/build-cuda.ps1
+.tools/
+
+# Virtual Environments
+# .venv-vibevoice is only used for the OPTIONAL host-standalone VibeVoice sidecar
+# (the default path is now the `vibevoice` Docker service);
+/.venv/
+/.venv-vibevoice/
+
+# Runtime data stores (BenchmarkStore root + session store). Canonical
+# suite seeds live in examples/benchmark/; these dirs are generated output.
+/benchmarks/
+/sessions/
+
+# Probe fixtures are the exception to the `*.wav` rule above: committed
+# reference INPUTS, not recorded output. They are what
+# `POST /debug/probe/*` and the component checks run against, so they have
+# to be the same bytes on every machine. ~680 KB in total.
+!/fixtures/
+!/fixtures/*.wav

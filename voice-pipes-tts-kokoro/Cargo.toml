@@ -1,0 +1,38 @@
+[package]
+name = "voice-pipes-tts-kokoro"
+version.workspace = true
+edition = "2024"
+description = "Kokoro-82M text-to-speech (local ONNX, espeak-ng phonemes, many voices) as a voice-pipes plugin, on the SDK only"
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+voice-pipes-sdk.workspace = true
+voice-pipes-onnx = { workspace = true, features = ["session"] }
+anyhow.workspace = true
+async-trait.workspace = true
+npyz.workspace = true
+ort.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["sync", "rt"] }
+tokio-util.workspace = true
+tracing.workspace = true
+zip = { workspace = true, features = ["deflate"] }
+
+[features]
+# Run the model on CUDA when `VP_ORT_EP=cuda` (or the provider's own
+# `execution_provider = "cuda"`). The CLI's own
+# `ort-cuda` switches this on whenever it links the plugin.
+ort-cuda = ["ort/cuda", "voice-pipes-onnx/cuda"]
+
+[dev-dependencies]
+voice-pipes-sdk = { workspace = true, features = ["testing"] }
+tokio = { workspace = true, features = ["sync", "rt-multi-thread", "macros"] }
+toml.workspace = true

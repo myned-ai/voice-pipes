@@ -1,0 +1,133 @@
+// Trimmed Google Cloud Speech-to-Text v2 surface: only the streaming path.
+//
+// Transcribed from googleapis `master`
+// (google/cloud/speech/v2/cloud_speech.proto) on 2026-09-03. Field numbers
+// and the package/service names are the wire contract and must match
+// upstream exactly; everything else (field_behavior / resource_reference
+// annotations, the batch and recognizer-management RPCs, adaptation,
+// diarization, translation, the long-running-operation subtree) is dropped
+// because it is either descriptive-only or unused by this client.
+//
+// Fields we do not send are simply omitted. Fields we do not read (e.g.
+// `RecognitionResponseMetadata metadata = 5` on the response) are omitted
+// too: protobuf skips unknown fields on decode, so this stays wire-compatible.
+
+syntax = "proto3";
+
+package google.cloud.speech.v2;
+
+import "google/protobuf/duration.proto";
+
+service Speech {
+  // Bidirectional streaming recognition. Each stream is capped at 5 minutes
+  // and each `audio` message at 25 KB by the service.
+  rpc StreamingRecognize(stream StreamingRecognizeRequest)
+      returns (stream StreamingRecognizeResponse);
+}
+
+message StreamingRecognizeRequest {
+  // `projects/{project}/locations/{location}/recognizers/{recognizer}`;
+  // `_` selects the default recognizer with an inline config.
+  string recognizer = 3;
+
+  oneof streaming_request {
+    // Must be the first message on the stream.
+    StreamingRecognitionConfig streaming_config = 6;
+    // Raw audio bytes in the configured encoding.
+    bytes audio = 5;
+  }
+}
+
+message StreamingRecognitionConfig {
+  RecognitionConfig config = 1;
+  // `config_mask = 3` omitted: only meaningful with a named recognizer.
+  StreamingRecognitionFeatures streaming_features = 2;
+}
+
+message StreamingRecognitionFeatures {
+  message VoiceActivityTimeout {
+    google.protobuf.Duration speech_start_timeout = 1;
+    google.protobuf.Duration speech_end_timeout = 2;
+  }
+
+  enum EndpointingSensitivity {
+    ENDPOINTING_SENSITIVITY_UNSPECIFIED = 0;
+    ENDPOINTING_SENSITIVITY_STANDARD = 1;
+    ENDPOINTING_SENSITIVITY_SUPERSHORT = 2;
+    ENDPOINTING_SENSITIVITY_SHORT = 3;
+  }
+
+  bool enable_voice_activity_events = 1;
+  bool interim_results = 2;
+  VoiceActivityTimeout voice_activity_timeout = 3;
+  EndpointingSensitivity endpointing_sensitivity = 8;
+}
+
+message RecognitionConfig {
+  oneof decoding_config {
+    AutoDetectDecodingConfig auto_decoding_config = 7;
+    ExplicitDecodingConfig explicit_decoding_config = 8;
+  }
+  string model = 9;
+  repeated string language_codes = 10;
+  RecognitionFeatures features = 2;
+}
+
+message AutoDetectDecodingConfig {}
+
+message ExplicitDecodingConfig {
+  enum AudioEncoding {
+    AUDIO_ENCODING_UNSPECIFIED = 0;
+    LINEAR16 = 1;
+    MULAW = 2;
+    ALAW = 3;
+  }
+  AudioEncoding encoding = 1;
+  int32 sample_rate_hertz = 2;
+  int32 audio_channel_count = 3;
+}
+
+message RecognitionFeatures {
+  bool profanity_filter = 1;
+  bool enable_word_time_offsets = 2;
+  bool enable_word_confidence = 3;
+  bool enable_automatic_punctuation = 4;
+  int32 max_alternatives = 16;
+}
+
+message StreamingRecognizeResponse {
+  enum SpeechEventType {
+    SPEECH_EVENT_TYPE_UNSPECIFIED = 0;
+    // v1 `single_utterance` semantics; a no-op for this client.
+    END_OF_SINGLE_UTTERANCE = 1;
+    SPEECH_ACTIVITY_BEGIN = 2;
+    SPEECH_ACTIVITY_END = 3;
+  }
+
+  repeated StreamingRecognitionResult results = 6;
+  SpeechEventType speech_event_type = 3;
+  google.protobuf.Duration speech_event_offset = 7;
+}
+
+message StreamingRecognitionResult {
+  repeated SpeechRecognitionAlternative alternatives = 1;
+  bool is_final = 2;
+  float stability = 3;
+  google.protobuf.Duration result_end_offset = 4;
+  int32 channel_tag = 5;
+  string language_code = 6;
+}
+
+message SpeechRecognitionAlternative {
+  string transcript = 1;
+  float confidence = 2;
+  repeated WordInfo words = 3;
+}
+
+message WordInfo {
+  google.protobuf.Duration start_offset = 1;
+  google.protobuf.Duration end_offset = 2;
+  string word = 3;
+  float confidence = 4;
+  string speaker_label = 6;
+}

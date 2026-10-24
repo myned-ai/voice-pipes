@@ -1,0 +1,70 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    ports:
+      # Loopback only by default. The backend has a token gate
+      # (ADMIN_UI_TOKEN) but no TLS; publish on all interfaces only behind a
+      # reverse proxy that terminates HTTPS.
+      - "127.0.0.1:8000:8000"
+    environment:
+      - ORCHESTRATOR_URL=http://host.docker.internal:9090
+      # Credential the browser must present to this backend.  Put it
+      # in a .env file next to this compose file (see .env.example); the
+      # backend refuses to start when it is unset.
+      - ADMIN_UI_TOKEN=${ADMIN_UI_TOKEN:?set ADMIN_UI_TOKEN in .env (see .env.example)}
+      # Credential this backend presents to the orchestrator.
+      - VP_ADMIN_TOKEN=${VP_ADMIN_TOKEN:-}
+      # Worker WebSocket credential. Presented to the worker by the
+      # /api/v1/playground/ws proxy; never sent to the browser.
+      - VP_CLIENT_TOKEN=${VP_CLIENT_TOKEN:-}
+      # A worker that registered a loopback or 0.0.0.0 transport address is
+      # on the host as seen from this container; the proxy connects to it
+      # under this name.
+      - PLAYGROUND_LOOPBACK_HOST=host.docker.internal
+      # Optional, advanced: this console's house rules for grading sessions,
+      # applied to any pipeline that sets none of its own (a pipeline's
+      # `[grading]` section wins). Empty = the built-in defaults. A session
+      # graded by either says so in its verdict, naming each changed value.
+      #   ADMIN_GRADING_TARGETS=endpointing_ms:800,ttft_ms:500
+      #   ADMIN_GRADING_LEVELS=good:2000,poor:4000,unusable:6000
+      - ADMIN_GRADING_TARGETS=${ADMIN_GRADING_TARGETS:-}
+      - ADMIN_GRADING_LEVELS=${ADMIN_GRADING_LEVELS:-}
+    # `host.docker.internal` resolves automatically on Docker Desktop
+    # (Mac/Windows) but not on Linux — map it to the host gateway so the
+    # backend can reach the orchestrator on the host's port 9090.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # Run as the host user's ids on Linux (launcher exports them) so
+    # the bind mounts stay readable; falls back to the image's unprivileged uid.
+    user: "${VP_UID:-10001}:${VP_GID:-10001}"
+    volumes:
+      - ./backend/app:/app/app
+      - ../voice-pipes/captures:/app/captures
+      # The backend's own state (issues feed, analytics rollup cache). A named
+      # volume takes the image's world-writable /app/state, so it works for
+      # whatever uid `user:` above resolves to.
+      - admin-state:/app/state
+    
+  # Serves the production build (nginx). For frontend development use the
+  # native Vite dev server instead (`npm run dev` in frontend/, port 5173) —
+  # or switch this service to the Dockerfile's `dev` target (target: dev)
+  # and volume-mount ./frontend/src:/app/src for containerized HMR.
+  frontend:
+    build:
+      context: ./frontend
+      # VITE_API_URL / VITE_WS_URL are BUILD args for the static bundle;
+      # the source defaults already point at localhost:8000 / :8800.
+    ports:
+      - "127.0.0.1:3000:3000"
+    # Playground Extensions (see docs/clients/playground-extensions.md) — mount
+    # at runtime, no rebuild needed. Uncomment and point at your bundles + manifest:
+    # volumes:
+    #   - ./ext:/usr/share/nginx/html/ext:ro
+    #   - ./playground-extensions.json:/usr/share/nginx/html/playground-extensions.json:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  admin-state:

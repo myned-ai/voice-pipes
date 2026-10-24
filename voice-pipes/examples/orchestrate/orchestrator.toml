@@ -1,0 +1,25 @@
+# Orchestrator config — fleet management, admin API, session tracking.
+#
+# Starts the orchestrator on port 9090. Workers register via heartbeat.
+# The admin UI (voice-pipes-admin) connects here at /api/v1/*.
+#
+# Usage:  voice-pipes orchestrate --orchestrator-config examples/orchestrate/orchestrator.toml
+
+# Loopback only: without VP_ADMIN_TOKEN / VP_INTERNAL_TOKEN set, the admin
+# and internal APIs have no authentication. Bind wider only with them set.
+bind = "127.0.0.1"
+port = 9090
+cors_origins = ["http://localhost:3000"]
+
+[workers]
+heartbeat_timeout_s = 30
+reap_interval_s = 10
+
+[sessions]
+max_entries = 50000
+
+[dispatch]
+policy = "least-connections"
+
+[audit]
+shared_dir = "audit/"

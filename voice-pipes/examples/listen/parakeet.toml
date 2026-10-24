@@ -1,0 +1,24 @@
+# Listen mode: mic → VAD → STT → stdout (real-time transcription).
+#
+# Only loads the STT provider and VAD — no LLM or TTS.
+# Prints each transcription to stdout as you speak.
+#
+# Models required:
+#   - models/parakeet-tdt/     (Parakeet-TDT ONNX model directory)
+#   - models/silero_vad.onnx   (Silero VAD model)
+#
+# Build:  cargo build --release
+# Usage:  voice-pipes --config examples/listen/parakeet.toml listen
+#         voice-pipes --config examples/listen/parakeet.toml listen --silence-ms 800
+#         voice-pipes --config examples/listen/parakeet.toml listen --save-input captures/listen
+
+[pipeline]
+name = "listen-parakeet"
+
+[stt]
+provider = "parakeet-tdt"
+model_dir = "models/parakeet-tdt"
+
+[vad]
+mode = "silero"
+model = "models/silero_vad.onnx"

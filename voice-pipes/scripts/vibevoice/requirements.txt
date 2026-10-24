@@ -1,0 +1,11 @@
+torch>=2.0
+transformers>=4.40
+fastapi>=0.110
+uvicorn[standard]>=0.27
+soundfile>=0.12
+numpy>=1.24
+# Required by the model's Qwen2 tokenizer — without them transformers fails with
+# "requires the protobuf library" / a None vocab_file. Pulled in transitively in
+# some host setups, but not guaranteed, so pin them here.
+sentencepiece>=0.1.99
+protobuf>=3.20

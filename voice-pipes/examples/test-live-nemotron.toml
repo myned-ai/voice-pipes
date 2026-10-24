@@ -1,0 +1,71 @@
+# Live pipeline with Nemotron-Streaming STT + Silero VAD + OpenAI LLM (gpt-4o-mini)
+#
+# Build:  cargo build --release -p voice-pipes-cli --features stt-nemotron
+# Run:    cargo run   --release -p voice-pipes-cli --features stt-nemotron -- \
+#                       --config examples/test-live-nemotron.toml live
+#
+# Requires OPENAI_API_KEY environment variable to be set.
+# Requires the split Nemotron export under `models/nemotron-streaming/7-10-7/`
+# (encoder.onnx + decoder.onnx + joint.onnx + tokenizer.vocab + metadata.json).
+
+[pipeline]
+name = "live-nemotron"
+
+[pipeline.audit]
+enabled = true
+captures_dir = "captures"
+
+[transport]
+enabled = true
+port = 8800
+
+
+[vad]
+mode = "silero"
+model = "models/silero_vad.onnx"
+speech_prob = 0.5
+# Keep a moderate onset gate to avoid noise-triggered starts while still
+# not being as strict as the previous 800ms setting.
+min_speech_ms = 500
+# Use a safer endpoint window for Nemotron in listen/live debugging so
+# brief pauses inside a sentence don't finalize too early.
+min_silence_ms = 900
+
+[stt]
+provider = "nemotron-streaming"
+model_dir = "models/nemotron-streaming/7-10-7"
+
+[stt.options]
+threads = 4
+blank_id = 1024
+# Allow denser token emission per acoustic frame for faster/connected speech.
+max_tokens_per_step = 16
+# Pacing knobs (currently parsed but not yet enforced inside transcribe_stream).
+# Safe to leave commented out for first runs.
+# min_initial_buffer_ms = 200
+# min_inference_step_ms = 80
+
+[turn_detection]
+mode               = "smart"
+silence_timeout_ms = 2000
+smart_model_path   = "models/smart-turn-v3.2-cpu.onnx"
+smart_threshold    = 0.5
+smart_window_secs  = 8
+smart_min_audio_ms = 500
+
+[barge_in]
+enabled = true
+min_chunks = 3
+speech_threshold = 200.0
+
+
+[tts]
+provider = "piper"
+model = "models/en_US-lessac-medium.onnx"
+
+[[text_processor]]
+type = "openai-compat"
+model = "gpt-4o-mini"
+system_prompt = "You are a friendly voice assistant named Pipes. Have a natural conversation. Keep responses to one or two short sentences."
+max_tokens = 128
+temperature = 0.6

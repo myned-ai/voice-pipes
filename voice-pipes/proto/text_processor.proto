@@ -1,0 +1,37 @@
+syntax = "proto3";
+package voice_pipes.text;
+
+import "params.proto";
+
+// Text processing service — mirrors the TextProcessor trait.
+service TextProcessorService {
+  // Batch: process input text and return the result.
+  rpc Process(ProcessRequest) returns (ProcessResponse);
+  // Streaming: process input text and stream text fragments.
+  rpc ProcessStream(ProcessRequest) returns (stream TextFragment);
+  // Query provider metadata.
+  rpc GetInfo(Empty) returns (TextProcessorInfo);
+}
+
+message Empty {}
+
+message ProcessRequest {
+  string text = 1;
+}
+
+message ProcessResponse {
+  string text = 1;
+}
+
+message TextFragment {
+  string text = 1;
+  bool is_end_of_response = 2;
+  optional double first_token_ms = 3;
+  optional uint32 token_count = 4;
+}
+
+message TextProcessorInfo {
+  string name = 1;
+  map<string, string> metadata = 2;
+  repeated voice_pipes.params.ParamDescriptor param_schema = 3;
+}

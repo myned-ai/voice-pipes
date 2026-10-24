@@ -1,0 +1,9 @@
+[pipeline]
+name = "openai-test"
+
+[[text_processor]]
+type = "openai-compat"
+model = "gpt-4o-mini"
+system_prompt = "You are a helpful assistant. Be concise."
+max_tokens = 256
+temperature = 0.7

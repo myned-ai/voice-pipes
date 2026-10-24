@@ -1,0 +1,11 @@
+# Export-time environment for make_export.py. CPU torch is enough.
+torch>=2.6
+transformers>=5.13.0        # first release with Nemotron3_5Asr (AutoModelForRNNT)
+librosa>=0.10               # the HF feature extractor at export/validation time
+onnx>=1.17
+onnxruntime>=1.20
+numpy>=1.26
+scipy>=1.11
+soundfile>=0.12
+sentencepiece>=0.2          # the HF tokenizer for the checkpoint
+huggingface_hub>=0.30       # checkpoint revision for the NOTICE

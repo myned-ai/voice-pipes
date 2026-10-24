@@ -1,0 +1,71 @@
+voice-pipes/models/
+/models/
+voice-pipes/target/
+
+# Cargo build output (workspace root)
+/target/
+/target-ci/
+
+*.ptx
+*.obj
+.env
+node_modules/
+scratch/
+__pycache__/
+
+# Model weights & audio — downloaded at runtime, never committed.
+# (Deliberate test fixtures can be force-added with `git add -f`.)
+*.onnx
+*.gguf
+*.safetensors
+*.pt
+*.bin
+# Reference feature matrices a plugin's tests are held to: ~100 KB each, committed on purpose.
+!/voice-pipes-stt-nemotron35/tests/data/*.bin
+*.wav
+
+# Runtime output dirs (session captures, audit taps). Anchored to the two
+# working directories the stack runs from — do NOT un-anchor: source dirs
+# named `captures/`, `sessions/`, and `audit/` exist under voice-pipes/src
+# and voice-pipes-admin.
+/captures/
+/captures-*/
+/sessions/
+/audit/
+/audit_tap/
+voice-pipes/captures/
+voice-pipes/captures-*/
+voice-pipes/sessions/
+voice-pipes/audit/
+voice-pipes/audit_tap/
+
+# Build outputs & editor/OS noise
+dist/
+build/
+*.log
+*.swp
+.DS_Store
+Thumbs.db
+.idea/
+
+# Virtual Environments
+.venv/
+.venv*/
+voice-pipes/.venv-vibevoice/
+
+# Editor / AI-agent local state (machine-specific — never track)
+.claude/
+.vscode/
+
+# Generated protobuf gencode — regenerate from voice-pipes/proto/ instead
+# (serve_pocket_grpc.py compiles at import time; examples/reference-agent
+# documents its grpc_tools.protoc command in the module docstring).
+*_pb2.py
+*_pb2_grpc.py
+
+# mdBook output (scripts: mdbook build)
+/book/
+
+# Configuration archives from config wizard
+voice-pipes/deploy/docker/config/archive/
+deploy/docker/config/archive/

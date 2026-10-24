@@ -1,0 +1,62 @@
+# S2S benchmark variant: ElevenLabs Agents.
+# Third variant next to pipeline-s2s-openai.toml / pipeline-s2s-gemini.toml.
+# See scripts/bench-s2s-compare.ps1.
+#
+# REQUIRED before the worker can start: paste a real agent id below
+# (elevenlabs.io -> Agents). The conversational brain (persona, LLM, voice,
+# VAD, tools) lives on that agent, NOT in this file — for a fair comparison
+# either enable prompt overrides (agent Security tab + `override_prompt`
+# below) or configure the agent's prompt to match the other variants'
+# `instructions`.
+#
+# Comparability caveats vs the other two variants:
+# - Turn completion is idle-inferred (the wire never sends is_final), so
+#   per-turn e2e carries the `completion_idle_ms` window (default 1500 ms).
+#   TTFB (first audio) is the fair cross-provider latency metric.
+# - No client-driven cancel (like gemini-live): a `client_cancel` barge-in
+#   only stops client playback; the agent's response streams out server-side.
+
+[pipeline]
+name = "bench-s2s-elevenlabs"
+
+# Off by default — captures hold raw audio and transcripts of both
+# sides. Set `enabled = true` to record sessions for the admin console's
+# Session History; `retention_days` (default 7) bounds how long they stay.
+[pipeline.audit]
+enabled = false
+
+[realtime_provider]
+provider = "elevenlabs"
+vad = "server_vad"
+api_key_env = "ELEVENLABS_API_KEY"
+instructions = "You are a concise voice assistant. Speak English unless the user explicitly asks for another language."
+
+[realtime_provider.options]
+# The agent id is read from the ELEVENLABS_AGENT_ID environment variable
+# (passed through by docker-compose). Alternatively set it literally:
+# agent_id = "agent_..."
+agent_id_env = "ELEVENLABS_AGENT_ID"
+# Send `instructions` above as the agent.prompt override so all three
+# variants share the same persona. Requires the override to be enabled in
+# the agent's Security tab; without it the agent's dashboard prompt is used.
+override_prompt = true
+# public_agent = true            # skip API-key auth for public agents
+# completion_idle_ms = 1500      # idle window that demarcates a turn (200-10000)
+
+[output]
+sample_rate = 16000
+
+[output.chunking]
+enabled = true
+frame_ms = 50
+
+[transport]
+enabled = true
+bind = "0.0.0.0"
+port = 8800
+
+# Refuse to start unless VP_CLIENT_TOKEN and VP_INTERNAL_TOKEN are set.
+# The launcher generates them into voice-pipes/.env; compose passes them
+# through by name. For a loopback-only dev box set `required = false`.
+[auth]
+required = true

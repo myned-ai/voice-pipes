@@ -1,0 +1,108 @@
+# Live pipeline with Gemma 4 via llama-server (OpenAI-compatible API)
+#
+# Gemma 4 runs through llama.cpp's llama-server, which exposes an
+# OpenAI-compatible /v1/chat/completions endpoint.  This works with
+# ANY Gemma 4 size — swap the GGUF file for a bigger model as your
+# GPU allows.
+#
+# ── Quick start (smallest model, ~3 GB RAM) ─────────────────
+#
+#   1. Install llama.cpp (pre-built binaries or build from source):
+#      https://github.com/ggerganov/llama.cpp/releases
+#
+#   2. Download Gemma 4 E2B (2.3B effective, Q4_K_M ≈ 3 GB):
+#      huggingface-cli download unsloth/gemma-4-E2B-it-GGUF \
+#          gemma-4-E2B-it-Q4_K_M.gguf --local-dir models/gemma4-e2b
+#
+#   3. Start llama-server:
+#      llama-server -m models/gemma4-e2b/gemma-4-E2B-it-Q4_K_M.gguf \
+#          --port 8081 -ngl 99 -c 4096 --jinja
+#
+#   4. Run voice-pipes:
+#      cargo run --release --features=llm-openai-compat -- -c examples/test-live-gemma4.toml
+#
+# ── Bigger models (better quality, more VRAM) ───────────────
+#
+#   Gemma 4 E4B  (4.5B effective, Q4_K_M ≈ 5 GB):
+#     huggingface-cli download unsloth/gemma-4-E4B-it-GGUF \
+#         gemma-4-E4B-it-Q4_K_M.gguf --local-dir models/gemma4-e4b
+#     llama-server -m models/gemma4-e4b/gemma-4-E4B-it-Q4_K_M.gguf \
+#         --port 8081 -ngl 99 -c 4096 --jinja
+#
+#   Gemma 4 12B Unified (dense, 256k ctx, Q4_K_M ≈ 7.1 GB):
+#     huggingface-cli download unsloth/gemma-4-12b-it-GGUF \
+#         gemma-4-12b-it-Q4_K_M.gguf --local-dir models/gemma4-12b
+#     llama-server -m models/gemma4-12b/gemma-4-12b-it-Q4_K_M.gguf \
+#         --port 8081 -ngl 99 -c 4096 --jinja
+#
+#   Gemma 4 26B-A4B MoE (3.8B active / 25B total, Q4_K_M ≈ 15 GB):
+#     huggingface-cli download unsloth/gemma-4-26B-A4B-it-GGUF \
+#         gemma-4-26B-A4B-it-Q4_K_M.gguf --local-dir models/gemma4-26b
+#     llama-server -m models/gemma4-26b/gemma-4-26B-A4B-it-Q4_K_M.gguf \
+#         --port 8081 -ngl 99 -c 4096 --jinja
+#
+#   Gemma 4 31B  (dense, Q4_K_M ≈ 18 GB):
+#     huggingface-cli download unsloth/gemma-4-31B-it-GGUF \
+#         gemma-4-31B-it-Q4_K_M.gguf --local-dir models/gemma4-31b
+#     llama-server -m models/gemma4-31b/gemma-4-31B-it-Q4_K_M.gguf \
+#         --port 8081 -ngl 99 -c 4096 --jinja
+#
+# ── GPU layer offloading ────────────────────────────────────
+#
+#   -ngl 99   = offload all layers to GPU (fastest, needs enough VRAM)
+#   -ngl 0    = CPU only (slowest, any machine)
+#   -ngl 20   = partial offload (tune to your available VRAM)
+#
+# ── Lower quantizations for tight memory ────────────────────
+#
+#   Replace Q4_K_M with: Q3_K_M (~2.5 GB), IQ3_XXS (~2.4 GB),
+#   or Q2_K (~2.3 GB) for even smaller footprints at some quality cost.
+
+[pipeline]
+name = "live-gemma4"
+
+[pipeline.audit]
+enabled = true
+captures_dir = "captures"
+
+[transport]
+enabled = true
+port = 8800
+
+[vad]
+mode = "silero"
+model = "models/silero_vad.onnx"
+speech_prob = 0.5
+min_speech_ms = 100
+min_silence_ms = 50
+
+[stt]
+provider = "parakeet-tdt"
+model_dir = "models/parakeet-tdt"
+
+[stt.options]
+initial_buffer_ms = 800.0
+inference_step_ms = 1000.0
+
+[turn_detection]
+mode = "layered"
+silence_timeout_ms = 1000
+
+[barge_in]
+enabled = true
+min_chunks = 3
+speech_threshold = 200.0
+
+[tts]
+provider = "piper"
+model = "models/en_US-lessac-medium.onnx"
+
+[[text_processor]]
+type = "openai-compat"
+base_url = "http://localhost:8081/v1"
+model = "gemma-4-E2B-it"
+api_key = ""
+system_prompt = "You are a friendly voice assistant named Pipes. Have a natural conversation. Keep responses to one or two short sentences."
+max_tokens = 1024
+temperature = 1.0
+top_p = 0.95

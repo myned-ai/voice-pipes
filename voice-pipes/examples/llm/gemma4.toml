@@ -1,0 +1,24 @@
+# LLM-only config for OpenAI-compatible endpoints.
+#
+# Works with:
+#   - OpenAI API (default base_url)
+#   - Local llama-server / ollama / vLLM / LM Studio
+#   - Any service exposing /v1/chat/completions
+#
+# For OpenAI API:     set OPENAI_API_KEY env var (or fill api_key below)
+# For local servers:  set base_url to your endpoint, api_key can be empty
+#
+# Build:  cargo build --release
+# Usage:  voice-pipes --config examples/llm/openai-compat.toml text --input "Explain quantum computing in one sentence"
+
+[pipeline]
+name = "llm-openai-compat"
+
+[[text_processor]]
+type = "openai-compat"
+base_url = "http://localhost:8081/v1"   # uncomment for local llama-server / ollama
+model = "gemma-4-E2B-it"               # or gemma-4-E4B-it / gemma-4-12b-it
+# api_key = ""                            # uses OPENAI_API_KEY env var by default
+system_prompt = "You are a helpful assistant. Be concise."
+max_tokens = 256
+temperature = 0.7

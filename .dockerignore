@@ -1,0 +1,22 @@
+# Build artifacts
+target/
+**/target/
+
+# VCS
+.git/
+.gitignore
+
+# Runtime output dirs (anchored to the crate root — NOT **/ which would
+# also match source modules like voice-pipes/src/audit/).
+voice-pipes/captures/
+voice-pipes/audit/
+voice-pipes/audit_tap/
+voice-pipes/models/
+
+# Frontend deps
+**/node_modules/
+
+# Misc
+*.wav
+*.log
+.env

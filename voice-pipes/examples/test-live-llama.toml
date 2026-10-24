@@ -1,0 +1,57 @@
+[pipeline]
+name = "live-llama-gpu"
+
+# Live pipeline with Llama 3.2 3B on GPU (NVIDIA RTX 3080 / CUDA)
+#
+# Model setup:
+#   1. Download a Llama 3.2 3B GGUF model and its tokenizer:
+#      huggingface-cli download bartowski/Llama-3.2-3B-Instruct-GGUF \
+#          Llama-3.2-3B-Instruct-Q4_K_M.gguf --local-dir models/llama3.2-3b
+#      huggingface-cli download meta-llama/Llama-3.2-3B-Instruct \
+#          tokenizer.json --local-dir models/llama3.2-3b
+#
+#   2. Build with CUDA:
+#      cargo build --release -p voice-pipes-cli --features=cuda
+#
+# For CPU-only (no CUDA), remove the `cuda` feature and set device = "cpu".
+# Smaller alternatives that fit any laptop:
+#   - Llama-3.2-1B-Instruct-Q4_K_M.gguf  (~0.8 GB, very fast on CPU)
+#   - Llama-3.2-3B-Instruct-Q4_K_M.gguf  (~2 GB, fast on 3080)
+#   - Llama-3.1-8B-Instruct-Q4_K_M.gguf  (~4.7 GB, fits 3080 with room)
+
+[vad]
+mode = "silero"
+model = "models/silero_vad.onnx"
+speech_prob = 0.5
+min_speech_ms = 100
+min_silence_ms = 50
+
+[stt]
+provider = "parakeet-tdt"
+model_dir = "models/parakeet-tdt"
+
+[stt.options]
+initial_buffer_ms = 800.0
+inference_step_ms = 1000.0
+
+[turn_detection]
+mode = "layered"
+silence_timeout_ms = 1000
+
+[barge_in]
+enabled = true
+min_chunks = 3
+speech_threshold = 200.0
+
+[tts]
+provider = "piper"
+model = "models/en_US-lessac-medium.onnx"
+
+[[text_processor]]
+type = "llm"
+model = "models/llama3.2-3b/Llama-3.2-3B-Instruct-Q4_K_M.gguf"
+chat_template = "llama3"
+device = "cuda"
+system_prompt = "You are a friendly voice assistant named Pipes. Have a natural conversation. Keep responses to one or two short sentences."
+max_tokens = 128
+temperature = 0.6

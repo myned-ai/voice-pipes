@@ -1,0 +1,38 @@
+# TTS-only config for the custom Croatian Pocket-TTS checkpoint
+# (`myned-ai/pocket-tts-croatian`) via the HTTP sidecar.
+#
+# Same transport as `pocket-http.toml`; the only difference is which model the
+# sidecar loads and which reference voice we condition on. The checkpoint is a
+# 24-layer FlowLM fine-tune on CLASSLA ParlaSpeech-HR, so it is noticeably
+# slower than the 6-layer English default -- expect ~1.0x real-time on CPU.
+#
+# ── Setup (PowerShell) ───────────────────────────────────────
+#
+#   # 1. The HF repo is private -- authenticate once:
+#   uvx --from huggingface_hub huggingface-cli login
+#
+#   # 2. Start the sidecar on the Croatian config (keep this terminal open).
+#   #    `--config` accepts hf:// paths; weights, tokenizer and voice are
+#   #    fetched to %USERPROFILE%\.cache\huggingface\hub on first run.
+#   uvx pocket-tts serve --config hf://myned-ai/pocket-tts-croatian/croatian.yaml `
+#       --host 127.0.0.1 --port 8000
+#
+# ── Build & run ──────────────────────────────────────────────
+#
+#   cargo build --release -p voice-pipes-cli --features tts-pocket
+#   voice-pipes --config examples/tts/pocket-http-croatian.toml `
+#       tts --text "Dobar dan! Ovo je test hrvatskog Pocket TTS modela." --output hr.wav
+
+[tts]
+provider = "pocket-http"
+endpoint = "http://127.0.0.1:8000"
+model    = "myned-ai/pocket-tts-croatian"
+
+# Reference voice for cloning. The checkpoint ships one Croatian male sample;
+# the built-in English voices ("alba", ...) are not appropriate here -- they
+# condition on English prosody and degrade Croatian output.
+voice = "hf://myned-ai/pocket-tts-croatian/voices/croatian_male_sample.wav"
+
+# The 24-layer model is slow to first byte on CPU; give it more headroom than
+# the 60s default so long inputs do not trip the whole-request cap.
+request_timeout_ms = 120000

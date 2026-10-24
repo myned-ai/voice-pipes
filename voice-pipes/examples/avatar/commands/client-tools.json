@@ -1,0 +1,25 @@
+[
+  {
+    "name": "highlight",
+    "description": "Highlight a UI element on the client screen. Use when the user asks to point out or emphasise something visible.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "selector": { "type": "string", "description": "CSS-style selector or element id to highlight." }
+      },
+      "required": ["selector"]
+    }
+  },
+  {
+    "name": "play_media",
+    "description": "Start playback of a named media item on the client device.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "Media item title or id." }
+      },
+      "required": ["title"]
+    },
+    "speak_on_result": true
+  }
+]

@@ -1,0 +1,19 @@
+# Main pipeline: local STT + remote TTS via gRPC.
+#
+# Prerequisites:
+#   Start the TTS component server first (see worker-tts.toml).
+#
+# Usage:
+#   cargo run --features stt-grpc,tts-grpc,text-grpc -- \
+#     --config examples/grpc/pipeline-remote-tts.toml
+
+[vad]
+mode = "silero"
+model = "models/silero_vad.onnx"
+
+[stt]
+provider = "parakeet-tdt"
+
+[tts]
+provider = "grpc"
+endpoint = "http://localhost:50051"

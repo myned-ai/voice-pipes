@@ -1,0 +1,112 @@
+# Greek cascade with local speech recognition, in and out:
+#   mic → Silero VAD → Parakeet TDT 0.6B v3 Greek fine-tune (fp32, CPU)
+#   → local Gemma 4 E4B → Greek Pocket-TTS → speaker.
+#
+# The Croatian Parakeet cascade (pipeline-croatian-parakeet.toml) with the
+# Greek models swapped in. The recogniser is `myned-ai/parakeet-tdt-0.6b-v3-greek`,
+# v3 fine-tuned on 2,087 hours of Greek and Cypriot Greek; its model card
+# measures the int8 export at 4 to 8 WER points worse than fp32 with no speed
+# gain on CPU, so this loads the full-precision files (2.5 GB).
+# `voice-pipes models fetch parakeet-greek` downloads them into
+# models/parakeet-tdt-v3-greek, or fetch the five files by hand.
+#
+# Run by the `worker-greek-parakeet` service in docker-compose.greek.yml. It
+# needs the llama-server sidecar (see pipeline-croatian.toml) and a Greek
+# Pocket-TTS server on host :8011, run on the host from the upstream package
+# with the Greek weights, next to the Croatian fork on :8010:
+#   uvx pocket-tts serve --config hf://myned-ai/pocket-tts-greek/greek.yaml --host 0.0.0.0 --port 8011
+
+[pipeline]
+name = "greek-cascade-parakeet"
+# The fp32 weights are 2.4 GB of ordinary memory. On a host short of
+# memory they are paged out within minutes of idling, and the first
+# utterance after the quiet spell then waited 13 s for them to come back.
+# A decode of silence every minute keeps them in use; the default is 300.
+keep_warm_interval_s = 60
+
+[pipeline.audit]
+enabled = true
+
+[stt]
+provider  = "parakeet-tdt"
+model_dir = "models/parakeet-tdt-v3-greek"
+
+[stt.options]
+# The fp32 export; see the header. `language` is the tag results carry and
+# switches on the Greek question mark (the vocabulary only has the Latin `?`).
+precision = "fp32"
+language  = "el"
+# One session is enough for a single playground user; each set holds the
+# 2.5 GB of weights, so raise this only with the memory to match.
+pool_size = 1
+
+# Parakeet emits no end-of-turn signal, so a real VAD drives the turn.
+# `mode = "auto"` selects Silero when `model` points at its ONNX file.
+[vad]
+mode = "auto"
+model = "models/silero_vad.onnx"
+threshold = 0.5
+
+# 500 ms meets the endpointing target; a speaker who pauses longer
+# mid-sentence gets cut off, so raise it if that happens often.
+[turn_detection]
+mode = "silence"
+silence_timeout_ms = 500
+
+[barge_in]
+enabled = true
+min_chunks = 3
+speech_threshold = 2000.0
+
+[[text_processor]]
+type = "openai-compat"
+# Local Gemma 4 E4B served by the llama-server sidecar on the GPU.
+base_url = "http://llama-server:8081/v1"
+model = "gemma-4-E4B-it"
+# Short spoken replies; lists, digits and abbreviations read badly aloud.
+system_prompt = """
+Είσαι η Ελένη, η φωνητική βοηθός της Myned. Απάντα πάντα στα ελληνικά, \
+σε μία ή δύο σύντομες προτάσεις. Αν σε ρωτήσουν ποια είσαι ή από πού \
+είσαι, πες ότι είσαι η Ελένη, η φωνητική βοηθός της Myned. Μη \
+χρησιμοποιείς ποτέ λίστες, αριθμούς με ψηφία ή συντομογραφίες.
+"""
+max_tokens = 96
+temperature = 0.7
+
+[tts]
+provider = "pocket-http"
+endpoint = "http://host.docker.internal:8011"
+model    = "myned-ai/pocket-tts-greek"
+# One of the eight voices the model ships (voices/voices.md lists them):
+# Eleni, Athina, Katerina, Sophia (Cypriot); Spyros, Kostas, Nikos, Giorgos
+# (Cypriot). The server resolves the hf:// URL itself.
+voice    = "hf://myned-ai/pocket-tts-greek/voices/eleni.wav"
+request_timeout_ms = 30000
+# Re-request a fragment whose first 2 s carry no sound (a generation that runs
+# to its cap in near-silence).
+silent_start_ms      = 2000
+silent_start_retries = 2
+
+# Send the first clause to the TTS as soon as a comma lands past these
+# minimums, instead of waiting for the full stop: Gemma's first sentences
+# run 130 to 240 characters, which at 30 tokens a second is most of the
+# wait between first token and first audio. More, shorter TTS requests.
+[pipeline.text_chunking]
+min_soft_split_chars = 36
+min_soft_split_words = 6
+
+[output]
+sample_rate = 24000
+
+# Small frames keep barge-in responsive.
+[output.chunking]
+enabled = true
+frame_ms = 50
+
+[transport]
+enabled = true
+bind = "0.0.0.0"
+port = 8800
+
+[auth]
+required = true

@@ -1,0 +1,75 @@
+{
+  "sample_rate": 16000,
+  "fixtures": [
+    {
+      "name": "hello-how-are-you",
+      "file": "hello-how-are-you.wav",
+      "text": "Hello, how are you?",
+      "note": "The regression that prompted the probes: the leading word must survive segmentation. A transcript starting at 'o,' means the pre-roll is too short.",
+      "duration_ms": 1914,
+      "peak": 0.6239,
+      "rms": 0.09764,
+      "synthetic": true
+    },
+    {
+      "name": "short-yes",
+      "file": "short-yes.wav",
+      "text": "Yes.",
+      "note": "An utterance shorter than most silence timeouts; must still commit as a turn.",
+      "duration_ms": 1485,
+      "peak": 0.6156,
+      "rms": 0.07554,
+      "synthetic": true
+    },
+    {
+      "name": "short-about-three",
+      "file": "short-about-three.wav",
+      "text": "About three.",
+      "note": "A short answer with a number, the shape most likely to be clipped to nothing.",
+      "duration_ms": 1671,
+      "peak": 0.6188,
+      "rms": 0.06501,
+      "synthetic": true
+    },
+    {
+      "name": "mid-sentence-pause",
+      "file": "mid-sentence-pause.wav",
+      "text": "I was thinking that we could, maybe, try the other one.",
+      "note": "Contains pauses a speaker makes while thinking. A fixed silence timeout ends the turn early here; that is the failure this fixture exists to show.",
+      "duration_ms": 3540,
+      "peak": 0.6361,
+      "rms": 0.09199,
+      "synthetic": true
+    },
+    {
+      "name": "quiet-speech",
+      "file": "quiet-speech.wav",
+      "text": "Can you hear me now?",
+      "note": "Near the detection floor. Over-aggressive gating drops this one first, which is what a caller sitting back from the microphone sounds like.",
+      "duration_ms": 1880,
+      "peak": 0.0703,
+      "rms": 0.01179,
+      "synthetic": true
+    },
+    {
+      "name": "room-tone-only",
+      "file": "room-tone-only.wav",
+      "text": "",
+      "note": "Real room noise and no speech. Must yield NO utterance and an empty transcript: Parakeet returned 'a little bit of the three years ago' from two seconds of near-silence during the investigation that prompted this.",
+      "synthetic": false,
+      "duration_ms": 2500,
+      "peak": 0.0536,
+      "rms": 0.00386
+    },
+    {
+      "name": "hello-gated",
+      "file": "hello-gated.wav",
+      "text": "Hello, how are you?",
+      "note": "A real capture of the phrase after the browser's automatic gain gated it to a 0.55 s burst. Shows what capture damage looks like downstream; no synthesiser reproduces it.",
+      "synthetic": false,
+      "duration_ms": 2200,
+      "peak": 1.0,
+      "rms": 0.09829
+    }
+  ]
+}

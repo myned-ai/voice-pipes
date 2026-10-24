@@ -1,0 +1,41 @@
+# Dependabot — keeps the four package ecosystems and the pinned GitHub
+# Actions current. Minor and patch bumps are grouped into one PR per
+# ecosystem per week so the queue stays reviewable; majors arrive alone.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      cargo-minor-and-patch:
+        update-types: [minor, patch]
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: npm
+    directory: /voice-pipes-admin/frontend
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      npm-minor-and-patch:
+        update-types: [minor, patch]
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: pip
+    directory: /voice-pipes-admin/backend
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      pip-minor-and-patch:
+        update-types: [minor, patch]
+    open-pull-requests-limit: 3
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3

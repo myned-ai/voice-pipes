@@ -1,0 +1,51 @@
+# Live mode: mic → VAD → STT → LLM → TTS → speaker (full real-time voice loop).
+#
+# Uses hosted OpenAI GPT-4o-mini for LLM + Google Gemini for TTS.
+# No local model needed for TTS — requires OPENAI_API_KEY and GOOGLE_API_KEY env vars.
+#
+# Prerequisites:
+#   - OPENAI_API_KEY env var set
+#   - GOOGLE_API_KEY env var set
+#   - ASSEMBLYAI_API_KEY env var set
+#
+# Build:  cargo build --release -p voice-pipes-cli --features stt-assemblyai,tts-gemini
+# Usage:  voice-pipes --config examples/live/openai-gemini-tts.toml live
+#         voice-pipes --config examples/live/openai-gemini-tts.toml live --silence-ms 800
+
+[pipeline]
+name = "live-openai-gemini-tts"
+
+[stt]
+provider = "assemblyai"
+model_name = "u3-rt-pro"
+sample_rate = 16000
+
+[turn_detection]
+mode = "provider"
+
+[barge_in]
+enabled = true
+min_chunks = 3
+speech_threshold = 2000.0
+
+[[text_processor]]
+type = "openai-compat"
+model = "gpt-4o-mini"
+system_prompt = "You are a helpful voice assistant. Be concise."
+max_tokens = 256
+temperature = 0.7
+
+[tts]
+provider = "gemini"
+model_name = "gemini-3.1-flash-tts-preview"
+voice = "Kore"
+# prompt      = "Speak in a friendly, conversational tone."
+
+[pipeline.audit]
+enabled = true
+captures_dir = "captures"
+
+[transport]
+enabled = true
+bind = "0.0.0.0"
+port = 8800

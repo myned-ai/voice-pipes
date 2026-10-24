@@ -1,0 +1,29 @@
+{
+  "id": "suite-barge-in-inject-text",
+  "name": "Barge-in via injected text turn (early-barge)",
+  "description": "Send an initial prompt; once TTS starts, send a new text turn that pre-empts the in-flight utterance via the early-barge path.",
+  "created_at": "2026-05-07T00:00:00Z",
+  "scenarios": [
+    {
+      "id": "barge-inject-text-then-recover",
+      "name": "inject text mid-response then recover",
+      "input": {
+        "type": "barge_in",
+        "initial": {
+          "id": "t1",
+          "input": { "type": "text", "text": "Tell me a very long story." }
+        },
+        "interrupt": {
+          "mode": { "kind": "inject_text", "text": "Stop. Just say hi." },
+          "fire_on": { "kind": "first_audio" }
+        }
+      },
+      "expected": {
+        "must_interrupt": true,
+        "interruption_trigger": "early_barge",
+        "max_barge_in_rtt_ms": 800,
+        "max_recovery_ms": 1500
+      }
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+# Worker for the English Moonshine cascade (pipeline-english-moonshine.toml),
+# run by docker-compose.yml alongside the other workers.
+
+id = "worker-english-moonshine"
+max_concurrent = 4
+debug_port = 8085
+# 0.0.0.0 inside the container: the orchestrator reaches the debug API over
+# the compose network via advertise_address.
+debug_bind = "0.0.0.0"
+advertise_address = "worker-english-moonshine:8085"
+# Published on host port 8807; the Playground dispatch must hand browsers
+# this address, not the container's 8800.
+transport_advertise_address = "localhost:8807"
+tags = ["lang:en", "stt:local", "stt:moonshine", "stt-compare"]
+
+[orchestrator]
+endpoint = "http://orchestrator:9090"
+heartbeat_interval_s = 5
+register_timeout_s = 10

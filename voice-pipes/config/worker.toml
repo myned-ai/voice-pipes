@@ -1,0 +1,9 @@
+# Worker node config — passed via `--worker-config worker.toml`.
+# Pipeline behaviour (STT/TTS/VAD/audit) lives in pipeline.toml.
+
+max_concurrent = 10
+debug_port = 8085
+debug_bind = "127.0.0.1"
+
+[orchestrator]
+endpoint = "http://127.0.0.1:9090"

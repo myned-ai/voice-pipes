@@ -1,0 +1,36 @@
+[package]
+name = "voice-pipes-net"
+version.workspace = true
+edition = "2024"
+description = "The one place a voice-pipes provider gets a network client: rustls on ring, bounded waits, no credential-carrying redirects, plain text refused for keys"
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# `json`, `stream` and `http2` are the features the providers use; they reach
+# `reqwest` only through this crate.
+reqwest = { workspace = true, features = ["rustls-tls-native-roots", "json", "stream", "http2"] }
+rustls = { workspace = true, features = ["ring", "std", "tls12", "logging"] }
+thiserror.workspace = true
+serde_json.workspace = true
+voice-pipes-sdk.workspace = true
+tokio-tungstenite = { workspace = true, features = ["rustls-tls-native-roots"], optional = true }
+# The connect timeout (feature `ws`).
+tokio = { workspace = true, features = ["time", "net"], optional = true }
+
+[features]
+# WebSocket client settings (the speech-to-speech client, AssemblyAI).
+ws = ["dep:tokio-tungstenite", "dep:tokio"]
+# Loopback HTTP servers for provider tests: enable it as a dev-dependency.
+testing = ["dep:tokio", "tokio/rt", "tokio/io-util"]
+
+[dev-dependencies]
+futures-util.workspace = true
+tokio = { workspace = true, features = ["rt", "macros", "net", "io-util", "time"] }

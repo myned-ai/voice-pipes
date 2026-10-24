@@ -1,0 +1,139 @@
+# Croatian cascade workers, added next to the default worker. Three variants,
+# identical except for speech recognition:
+#   worker-croatian             Google Chirp 3 (cloud, needs gcloud ADC)
+#   worker-croatian-parakeet    Parakeet TDT 0.6B v3 (local, CPU, no credentials)
+#   worker-croatian-nemotron35  Nemotron 3.5 ASR via the plugin crate (local, GPU)
+#
+#   docker compose -f voice-pipes/deploy/docker/docker-compose.yml `
+#       -f voice-pipes/deploy/docker/docker-compose.croatian.yml `
+#       --profile llama up -d llama-server worker-croatian worker-croatian-parakeet worker-croatian-nemotron35
+#
+# Reuse the GPU worker image (it already carries stt-google, stt-parakeet,
+# stt-nemotron35-cuda and tts-pocket). All need the Croatian Pocket-TTS
+# fork serving on host :8010; see config/pipeline-croatian.toml.
+
+services:
+  # Local Gemma 4 E4B on the GPU for the Croatian replies. Thinking is off in
+  # the chat template: with it on, open-ended prompts spend the short reply
+  # budget planning in English, and a reasoning budget of 0 alone does not
+  # stop that text reaching the content.
+  llama-server:
+    command:
+      - >
+        /app/llama-server
+        -m /models/gemma4-e4b/gemma-4-E4B-it-Q4_K_M.gguf
+        --port 8081
+        --host 0.0.0.0
+        -ngl 99
+        -c 4096
+        --jinja
+        --reasoning-budget 0
+        --chat-template-kwargs '{"enable_thinking":false}'
+
+  worker-croatian:
+    image: docker-worker-custom-gpu
+    command:
+      - --config
+      - deploy/docker/config/pipeline-croatian.toml
+      - serve
+      - --worker-config
+      - deploy/docker/config/worker-croatian.toml
+    depends_on:
+      - orchestrator
+      - llama-server
+    ports:
+      - "8801:8800"
+    volumes:
+      - ../../models:/app/models
+      - ../../captures:/app/captures
+      - ../../audit:/app/audit
+      - ./config:/app/deploy/docker/config
+      # gcloud user ADC is only read from $HOME/.config/gcloud; setting
+      # GOOGLE_APPLICATION_CREDENTIALS would force a service-account parse.
+      - ${APPDATA}/gcloud:/tmp/.config/gcloud:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    gpus: all
+    environment:
+      - VP_CLIENT_TOKEN
+      - VP_INTERNAL_TOKEN
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - OPENAI_API_KEY
+      - GOOGLE_CLOUD_PROJECT
+      - HOME=/tmp
+    user: "${VP_UID:-10001}:${VP_GID:-10001}"
+    restart: unless-stopped
+
+  # Same pipeline with local speech recognition: no cloud credentials, no
+  # per-turn cost. Parakeet runs on CPU inside this container; the GPU is
+  # still reserved because the image is the CUDA build.
+  worker-croatian-parakeet:
+    image: docker-worker-custom-gpu
+    command:
+      - --config
+      - deploy/docker/config/pipeline-croatian-parakeet.toml
+      - serve
+      - --worker-config
+      - deploy/docker/config/worker-croatian-parakeet.toml
+    depends_on:
+      - orchestrator
+      - llama-server
+    ports:
+      - "8802:8800"
+    volumes:
+      - ../../models:/app/models
+      - ../../captures:/app/captures
+      - ../../audit:/app/audit
+      - ./config:/app/deploy/docker/config
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    gpus: all
+    environment:
+      - VP_CLIENT_TOKEN
+      - VP_INTERNAL_TOKEN
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - HOME=/tmp
+    user: "${VP_UID:-10001}:${VP_GID:-10001}"
+    restart: unless-stopped
+
+  # The same pipeline on the Nemotron 3.5 plugin recogniser, for comparison
+  # against the two above (it is the weakest of the three on Croatian; see
+  # the pipeline file). The GPU image carries stt-nemotron35-cuda, and
+  # VP_ORT_EP=cuda would put the fp16 encoders on the GPU; the ONNX Runtime
+  # build the engine links (1.20) has no kernels for Blackwell cards
+  # (compute capability 12.0: "cudaErrorNoKernelImageForDevice" on the
+  # first run), so the recogniser runs on the CPU, at about twice real
+  # time, until the runtime is upgraded. The export comes from
+  # scripts/download_nemotron35.py into models/nemotron-3.5.
+  worker-croatian-nemotron35:
+    image: docker-worker-custom-gpu
+    command:
+      - --config
+      - deploy/docker/config/pipeline-croatian-nemotron35.toml
+      - serve
+      - --worker-config
+      - deploy/docker/config/worker-croatian-nemotron35.toml
+    depends_on:
+      - orchestrator
+      - llama-server
+    ports:
+      - "8809:8800"
+    volumes:
+      - ../../models:/app/models
+      - ../../captures:/app/captures
+      - ../../audit:/app/audit
+      - ./config:/app/deploy/docker/config
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    gpus: all
+    environment:
+      - VP_CLIENT_TOKEN
+      - VP_INTERNAL_TOKEN
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - VP_ORT_EP=cpu
+      - HOME=/tmp
+    user: "${VP_UID:-10001}:${VP_GID:-10001}"
+    restart: unless-stopped

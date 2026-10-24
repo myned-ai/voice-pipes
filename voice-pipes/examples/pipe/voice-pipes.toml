@@ -1,0 +1,30 @@
+# Full pipeline config: WAV → STT → LLM → TTS → WAV
+#
+# Loads all three providers. Unlike the single-component commands (tts, stt, text),
+# the pipe command requires STT, text processor, and TTS to all be configured.
+#
+# Models required:
+#   - models/parakeet-tdt/                                  (Parakeet-TDT ONNX model directory)
+#   - models/smollm2/SmolLM2-135M-Instruct-Q4_K_M.gguf     (or any GGUF model)
+#   - models/en_US-lessac-medium.onnx                       (Piper ONNX voice model)
+#
+# Build:  cargo build --release
+# Usage:  voice-pipes --config examples/pipe/voice-pipes.toml pipe --input story.wav --output response.wav
+
+[pipeline]
+name = "full-pipeline"
+
+[stt]
+provider = "parakeet-tdt"
+model_dir = "models/parakeet-tdt"
+
+[[text_processor]]
+type = "llm"
+model = "models/smollm2/SmolLM2-135M-Instruct-Q4_K_M.gguf"
+system_prompt = "You are a helpful voice assistant. Be concise."
+max_tokens = 256
+temperature = 0.7
+
+[tts]
+provider = "piper"
+model = "models/en_US-lessac-medium.onnx"

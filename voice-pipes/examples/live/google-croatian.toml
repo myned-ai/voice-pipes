@@ -1,0 +1,95 @@
+# Live mode, Croatian in and out:
+#   mic → Google Chirp 3 STT (hr-HR) → LLM (answers in Croatian) → Croatian
+#   Pocket-TTS → speaker.
+#
+# This is the full Croatian loop that examples/live/pocket-http-croatian.toml
+# could not close: AssemblyAI's streaming models don't cover Croatian, Google's
+# `chirp_3` does (measured on ParlaSpeech-HR audio).
+#
+# Prerequisites:
+#   - Google credentials + project (see examples/stt/google.toml for the options).
+#   - OPENAI_API_KEY env var set.
+#   - HF auth for the private checkpoint:
+#       uvx --from huggingface_hub huggingface-cli login
+#   - Croatian sidecar running (keep the terminal open):
+#       uvx pocket-tts serve --config hf://myned-ai/pocket-tts-croatian/croatian.yaml `
+#           --host 127.0.0.1 --port 8010
+#
+# Cost note: Chirp bills per 15 s of audio and the mic streams continuously
+# while you speak; Google's VAD only gates what it transcribes.
+#
+# Build:  cargo build --release -p voice-pipes-cli --features "stt-google tts-pocket"
+# Usage:  voice-pipes --config examples/live/google-croatian.toml live
+
+[pipeline]
+name = "live-google-croatian"
+
+[stt]
+provider    = "google"
+model_name  = "chirp_3"
+sample_rate = 16000
+
+[stt.options]
+# project_id   = "my-gcp-project"   # else GOOGLE_CLOUD_PROJECT, else the credential's
+location       = "eu"
+language_codes = ["hr-HR"]
+enable_voice_activity_events = true
+interim_results              = true
+
+# Google's SPEECH_ACTIVITY_END + final results drive the turn; the silence
+# fallback in `layered` still guards a missed signal.
+[turn_detection]
+mode = "layered"
+silence_timeout_ms = 700
+
+[barge_in]
+enabled = true
+min_chunks = 3
+speech_threshold = 2000.0
+
+[[text_processor]]
+type = "openai-compat"
+model = "gpt-4o-mini"
+# One short sentence is not a style preference -- it is a workaround. The
+# Croatian Pocket-TTS checkpoint fails to emit EOS on multi-sentence input,
+# padding each ≤50-token chunk with seconds of silence. Sentence-at-a-time
+# keeps it clean.
+system_prompt = """
+You are a Croatian voice assistant. Always answer in Croatian, in exactly one \
+short sentence of at most 12 words. Never use lists, numbers, or abbreviations.
+"""
+max_tokens = 64
+temperature = 0.7
+
+[tts]
+provider = "pocket-http"
+endpoint = "http://127.0.0.1:8010"
+model    = "myned-ai/pocket-tts-croatian"
+voice    = "hf://myned-ai/pocket-tts-croatian/voices/croatian_male_sample.wav"
+request_timeout_ms = 120000
+# This checkpoint sometimes runs to its generation cap in silence (2 of 6
+# runs of one sentence, measured 2026-09-05); the guard re-requests a
+# fragment whose first 2 s carry no sound. See the voice-pipes-tts-pocket crate docs.
+silent_start_ms      = 2000
+silent_start_retries = 2
+
+# One synthesis request per sentence — no comma splits: each extra request
+# is another chance for the checkpoint to misfire.
+[pipeline.text_chunking]
+min_soft_split_chars = 400
+min_soft_split_words = 80
+
+# The 24-layer Croatian model runs at ~1.0x real-time on CPU, so there is no
+# synthesis headroom. Small frames keep barge-in responsive anyway.
+[output.chunking]
+enabled = true
+frame_ms = 50
+
+[pipeline.audit]
+enabled = true
+captures_dir = "captures"
+
+[transport]
+enabled = true
+bind = "0.0.0.0"
+port = 8800

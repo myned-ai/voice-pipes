@@ -1,0 +1,62 @@
+# Live mode: mic → VAD → STT → LLM → TTS → speaker (full real-time voice loop).
+#
+# Uses Kyutai Pocket-TTS (CPU, ~100M params, 24 kHz) via the upstream HTTP
+# sidecar. Hosted OpenAI GPT-4o-mini handles the LLM step (swap for any
+# OpenAI-compatible endpoint to go fully local).
+#
+# Prerequisites:
+#   - OPENAI_API_KEY env var set
+#   - ASSEMBLYAI_API_KEY env var set
+#   - `pocket-tts serve` running on http://127.0.0.1:8000
+#       irm https://astral.sh/uv/install.ps1 | iex
+#       uvx pocket-tts generate --text "hello" --output-path $env:TEMP\warm.wav   # one-time cache prefetch
+#       uvx pocket-tts serve --host 127.0.0.1 --port 8000                          # keep this terminal open
+#
+# Build:  cargo build --release -p voice-pipes-cli --features "stt-assemblyai tts-pocket"
+# Usage:  voice-pipes --config examples/live/pocket-http.toml live
+#         voice-pipes --config examples/live/pocket-http.toml live --silence-ms 800
+
+[pipeline]
+name = "live-pocket-http"
+
+[stt]
+provider = "assemblyai"
+model_name = "u3-rt-pro"
+sample_rate = 16000
+
+[turn_detection]
+mode = "provider"
+
+[barge_in]
+enabled = true
+min_chunks = 3
+speech_threshold = 2000.0
+
+[[text_processor]]
+type = "openai-compat"
+model = "gpt-4o-mini"
+system_prompt = "You are a helpful voice assistant. Be concise."
+max_tokens = 256
+temperature = 0.7
+
+[tts]
+provider  = "pocket-http"
+endpoint  = "http://127.0.0.1:8000"   # default — same machine as `pocket-tts serve`
+model     = "kyutai/pocket-tts"
+voice     = "alba"                    # built-in voice; or "hf://kyutai/tts-voices/<path>.wav"
+# request_timeout_ms = 60000          # optional whole-request cap
+
+# Smaller TTS frames keep barge-in responsive (Pocket-TTS is single-stream
+# per server process; chunking on our side helps interruption latency).
+[output.chunking]
+enabled = true
+frame_ms = 50
+
+[pipeline.audit]
+enabled = true
+captures_dir = "captures"
+
+[transport]
+enabled = true
+bind = "0.0.0.0"
+port = 8800

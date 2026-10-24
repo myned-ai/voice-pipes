@@ -1,0 +1,17 @@
+# LLM-only config for local candle inference (e.g. SmolLM2, GGUF models).
+#
+# Model required (`voice-pipes models fetch smollm2-360m`):
+#   - models/smollm2-360m/SmolLM2-360M-Instruct-Q4_K_M.gguf   (or any GGUF model)
+#
+# Build:  cargo build --release
+# Usage:  voice-pipes --config examples/llm/local.toml text --input "Explain quantum computing in one sentence"
+
+[pipeline]
+name = "llm-local"
+
+[[text_processor]]
+type = "llm"
+model = "models/smollm2-360m/SmolLM2-360M-Instruct-Q4_K_M.gguf"
+system_prompt = "You are a helpful assistant. Be concise."
+max_tokens = 256
+temperature = 0.7

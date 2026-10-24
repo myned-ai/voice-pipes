@@ -1,0 +1,104 @@
+# Croatian cascade on the Nemotron 3.5 plugin recogniser, in and out:
+#   mic → Silero VAD → Nemotron 3.5 ASR (hr-HR, streaming) → local Gemma 4 E4B
+#   → Croatian Pocket-TTS → speaker.
+#
+# Same as pipeline-croatian.toml except the speech recognition: NVIDIA's
+# Nemotron 3.5 (40 locales, Croatian in its broad-coverage tier) runs
+# in-process through the `voice-pipes-stt-nemotron35` plugin crate, so the
+# session needs no cloud credentials and costs nothing per turn. It is the
+# third Croatian recogniser beside Google Chirp 3 and Parakeet v3; everything
+# else here is identical, so a Component check or a session on each is a
+# like-for-like comparison of the recognisers alone.
+#
+# Measured on the Croatian corpus before this pipeline existed: WER 48.8%
+# (Parakeet v3 32.9%, Chirp 3 well under both), so this is the comparison
+# pipeline, not the recommended one. The model streams natively, chunk by
+# chunk with a 320 ms lookahead, so interims arrive while the user speaks.
+#
+# The export (2.6 GB) is fetched by scripts/download_nemotron35.py into
+# models/nemotron-3.5. Run by the `worker-croatian-nemotron35` service in
+# docker-compose.croatian.yml; it needs the Croatian Pocket-TTS fork on host
+# :8010 and the llama-server sidecar, see pipeline-croatian.toml for both.
+
+[pipeline]
+name = "croatian-cascade-nemotron35"
+
+[pipeline.audit]
+enabled = true
+
+[stt]
+provider  = "nemotron-3.5"
+model_dir = "models/nemotron-3.5"
+
+[stt.options]
+# The locale the model decodes with for every session that does not name
+# its own; `auto` is offered but costs accuracy on short utterances.
+language  = "hr-HR"
+# One session set is enough for a single playground user; each set is a
+# full copy of the model (about 1.3 GB), so raise for concurrency only.
+pool_size = 1
+threads   = 4
+
+# Nemotron emits no end-of-turn signal, so a real VAD drives the turn.
+# `mode = "auto"` selects Silero when `model` points at its ONNX file.
+[vad]
+mode = "auto"
+model = "models/silero_vad.onnx"
+threshold = 0.5
+
+[turn_detection]
+mode = "silence"
+silence_timeout_ms = 700
+
+[barge_in]
+enabled = true
+min_chunks = 3
+speech_threshold = 2000.0
+
+[[text_processor]]
+type = "openai-compat"
+# Local Gemma 4 E4B served by the llama-server sidecar on the GPU.
+base_url = "http://llama-server:8081/v1"
+model = "gemma-4-E4B-it"
+# Short spoken replies; lists, digits and abbreviations read badly aloud.
+system_prompt = """
+You are a Croatian voice assistant. Always answer in Croatian, in one or two \
+short sentences. Never use lists, numbers, or abbreviations.
+"""
+max_tokens = 96
+temperature = 0.7
+# Gemma 4 thinks before it answers; docker-compose.croatian.yml starts the
+# llama sidecar with thinking off in the chat template.
+
+[tts]
+provider = "pocket-http"
+endpoint = "http://host.docker.internal:8010"
+model    = "myned-ai/pocket-tts-croatian"
+# Custom reference voice, served over local HTTP; see pipeline-croatian.toml.
+voice    = "http://127.0.0.1:8013/recording14.wav"
+request_timeout_ms = 30000
+# Re-request a fragment whose first 2 s carry no sound (a generation that runs
+# to its cap in near-silence).
+silent_start_ms      = 2000
+silent_start_retries = 2
+
+# One synthesis request per sentence, no comma splits.
+[pipeline.text_chunking]
+min_soft_split_chars = 400
+min_soft_split_words = 80
+
+[output]
+sample_rate = 24000
+
+# Small frames keep barge-in responsive.
+[output.chunking]
+enabled = true
+frame_ms = 50
+
+[transport]
+enabled = true
+bind = "0.0.0.0"
+port = 8800
+
+[auth]
+required = true

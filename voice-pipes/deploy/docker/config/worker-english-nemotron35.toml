@@ -1,0 +1,21 @@
+# Worker for the English Nemotron 3.5 cascade (pipeline-english-nemotron35.toml),
+# run by docker-compose.yml alongside the other workers.
+
+id = "worker-english-nemotron35"
+# One session at a time: the pipeline loads one session set (1.3 GB each),
+# and the worker warns at start when it admits more sessions than that.
+max_concurrent = 1
+debug_port = 8085
+# 0.0.0.0 inside the container: the orchestrator reaches the debug API over
+# the compose network via advertise_address.
+debug_bind = "0.0.0.0"
+advertise_address = "worker-english-nemotron35:8085"
+# Published on host port 8810; the Playground dispatch must hand browsers
+# this address, not the container's 8800.
+transport_advertise_address = "localhost:8810"
+tags = ["lang:en", "stt:local", "stt:nemotron35", "stt:plugin", "stt-compare"]
+
+[orchestrator]
+endpoint = "http://orchestrator:9090"
+heartbeat_interval_s = 5
+register_timeout_s = 10

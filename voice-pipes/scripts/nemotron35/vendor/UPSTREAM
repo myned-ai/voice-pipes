@@ -1,0 +1,4 @@
+https://github.com/codavidgarcia/nemotron-3.5-asr-streaming-onnx
+commit fe19096c852a957af1362c8facb2957b8f606c57 (2026-07-22)
+files: export/export_onnx.py -> export_onnx.py, export/quantize.py -> quantize.py, LICENSE
+unchanged

@@ -1,0 +1,11 @@
+{
+  "target": "x86_64-unknown-linux-gnu",
+  "counts": {
+    "bare engine": 164,
+    "engine batteries": 212,
+    "CLI, hosted providers only": 184,
+    "CLI defaults": 316,
+    "CLI, CPU image": 348,
+    "CLI, GPU image": 351
+  }
+}

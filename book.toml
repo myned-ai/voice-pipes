@@ -1,0 +1,25 @@
+[book]
+title = "Voice Pipes"
+description = "A modular, observable real-time voice AI runtime in Rust."
+authors = ["Myned AI"]
+language = "en"
+src = "docs"
+
+[build]
+build-dir = "book"
+create-missing = false
+
+[output.html]
+default-theme = "light"
+preferred-dark-theme = "navy"
+git-repository-url = "https://github.com/myned-ai/voice-pipes"
+edit-url-template = "https://github.com/myned-ai/voice-pipes/edit/main/{path}"
+no-section-label = true
+
+[output.html.search]
+limit-results = 20
+use-boolean-and = true
+
+[output.html.fold]
+enable = true
+level = 1

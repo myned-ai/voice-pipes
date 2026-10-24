@@ -1,0 +1,11 @@
+# TTS-only config for Piper.
+#
+# Model required:
+#   - models/en_US-lessac-medium.onnx   (Piper ONNX voice model)
+#
+# Build:  cargo build --release
+# Usage:  voice-pipes --config examples/tts/piper.toml tts --text "Hello, world!" --output hello.wav
+
+[tts]
+provider = "piper"
+model = "models/en_US-lessac-medium.onnx"
