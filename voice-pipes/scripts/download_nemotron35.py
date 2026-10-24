@@ -53,7 +53,7 @@ REVISION = "ae46ba711456c2d71f17d1c6d6f5ac2ba65077aa"
 
 # The project's own export: a data-only tag whose one asset is a tar of the
 # directory below, weights once.
-GITHUB_REPO = "goran-j/vp"
+GITHUB_REPO = "myned-ai/voice-pipes"
 GITHUB_TAG = "models-nemotron35-onnx-r2"
 GITHUB_ASSET = "nemotron-3.5-onnx-320ms-r2.tar"
 GITHUB_ASSET_SHA256 = "7652c65883836ffede9dba58bdd07ab844708463a4fb2f6bf6a07bc088336969"
