@@ -1,7 +1,7 @@
 # cargo-deny policy — run with `cargo deny check` (CI: core-tests.yml lint job).
 # https://embarkstudios.github.io/cargo-deny/checks/index.html
 #
-# Licenses: the workspace is Apache-2.0; only permissive, attribution-style
+# Licenses: the workspace is BUSL-1.1; only permissive, attribution-style
 # licenses are allowed in the dependency tree. The August 2026 audit found no
 # copyleft anywhere; this keeps it that way.
 
@@ -29,6 +29,7 @@ ignore = [
 [licenses]
 version = 2
 allow = [
+    "BUSL-1.1",
     "Apache-2.0",
     "Apache-2.0 WITH LLVM-exception",
     "MIT",

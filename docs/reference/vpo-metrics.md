@@ -1,11 +1,13 @@
 # VPO‑Metrics — Voice Pipeline Open Standard, Layer 1
 ## Canonical Metric Taxonomy & SLOs — Specification v0.1 (Draft)
 
-> **Status:** Draft v0.1. This is the normative specification for Layer 1 of VPO
-> (see VPO-BLUEPRINT-OUTLINE.md, Part 3). It is intended to be
-> adoptable standalone: a team on *any* voice stack (LiveKit, Pipecat, Vapi, Retell, OpenAI
-> Realtime, or a custom engine) can adopt these names, units, and definitions without changing
-> their runtime.
+> **Status:** Draft v0.1. This is the normative specification for Layer 1 of the Voice Pipeline
+> Open Standard (VPO), paired with [VPO-Telemetry (Layer 2)](vpo-telemetry.md),
+> [VPO-Protocol (Layer 3)](vpo-protocol.md), the machine-readable OpenTelemetry schema
+> [`vpo-semconv.yaml`](vpo-semconv.yaml), and the implementation-level
+> [Metrics glossary](metrics-glossary.md). It is intended to be adoptable standalone: a team on
+> *any* decomposed STT→LLM→TTS or speech-to-speech voice stack can adopt these names, units, and
+> definitions without changing their runtime.
 >
 > **Conformance language.** The key words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**,
 > and **MAY** are to be interpreted as in RFC 2119.
@@ -74,6 +76,7 @@ A conformant server MUST produce exactly one **turn snapshot** per turn, with th
 | `utterance_id` | u32 | MUST | Join key for the turn. |
 | `total_ms` | u64 | MUST | Wall-clock from turn start to snapshot, server-measured. |
 | `interrupted` | bool | MUST | Whether the turn was cut short by barge-in. |
+| `initiator` | string | SHOULD | `"user"` (default; MAY be omitted on the wire when `"user"`) or `"agent"` (proactive greeting / `agent_say`). Agent-initiated turns have no user-utterance anchor and MUST be excluded from user-perceived critical-path latency percentiles. |
 | `components` | array | MUST | Per-component spans, in begin-time (== pipeline) order. |
 | `llm_response_text` | string | MAY | Response text accumulated this turn, when available. |
 
@@ -109,8 +112,19 @@ Adding a unit is a spec change (one enum arm). A value's unit MUST match its cat
 ### 3.4 Descriptors (the extensibility mechanism)
 A component MAY advertise a `ComponentMetricDescriptor` at session start declaring the `extras`
 keys it publishes. A descriptor has `component_id`, `kind`, `label`, and `fields[]`; each field
-is `{ key, label, unit, format?, health? }` where `key` matches a key in that component's
-`extras`.
+(`MetricFieldDescriptor`) is `{ key, label, unit, format?, health?, owner?, start_anchor?, end_anchor?, includes?, contained_in? }`
+where `key` matches a key in that component's `extras`.
+
+| Field | Meaning |
+|---|---|
+| `key` | Key in `TurnComponentMetrics.extras`. |
+| `label` | Short human-readable label (e.g. `"TTFT"`, `"RTF"`). |
+| `unit` | `MetricUnit` (§3.3). |
+| `format` | Optional printf-style display precision hint (e.g. `".2f"`). |
+| `owner` | `"engine"` (measured by the pipeline engine at the trait seam with one monotonic clock) \| `"provider"` (breakdown reported by the provider plugin inside the engine's stage span). |
+| `start_anchor` / `end_anchor` | Machine-readable start and end anchors for latency spans (see [Metrics glossary](metrics-glossary.md)). |
+| `includes` | Human-readable specification of what is inside and outside the measurement (e.g. queue/lock wait, connect, prompt ingest, retries). |
+| `contained_in` | For `"provider"` breakdown fields, the `"engine"` stage span key that bounds it (e.g. `ttft_ms` has `contained_in: "llm_wait_ms"`; `ttfb_ms` has `contained_in: "tts_wait_ms"`). If a provider breakdown exceeds its containing engine stage span, consumers MUST flag a measurement fault rather than charging the discrepancy to another stage. |
 
 - A consumer (dashboard, exporter) MUST be able to render/forward any descripted metric **without
   hardcoding its key**. This is what makes the taxonomy extensible without code changes.
@@ -249,7 +263,8 @@ The STT span's `latency_ms` (and `extras["processing_ms"]`) carries the authorit
 ### 5.3 TTS (`kind: "tts"`)
 | Key | Unit | Definition |
 |---|---|---|
-| `ttfb_ms` | ms | Time to first audio byte, from synthesis request (first text fragment in) to first TTS audio emitted. |
+| `ttfb_ms` | ms | Time to first audio byte, from synthesis request (first text fragment in) to first TTS audio emitted (`contained_in: "tts_wait_ms"`). |
+| `tts_internal_ttfb_ms` | ms | Pre-pacer provider startup and first audio chunk generation before engine queueing (`contained_in: "tts_wait_ms"`). |
 | `tts_wait_ms` | ms | Engine-measured contiguous TTS stage wait (first LLM text fragment to first raw TTS audio chunk). |
 | `output_wait_ms` | ms | Engine-measured contiguous output stage wait (first raw TTS audio chunk to first emitted audio frame after post-processing/pacing). |
 | `commit_to_first_audio_ms` | ms | Engine-measured total post-commit wait (`utterance.committed_at` to first emitted audio frame; `llm_wait_ms + tts_wait_ms + output_wait_ms`). |
@@ -262,25 +277,79 @@ The STT span's `latency_ms` (and `extras["processing_ms"]`) carries the authorit
 | `stage_skipped_reason` | raw | Why on-commit TTS synthesis did not run (`"speculative_accept"`). |
 
 ### 5.4 Realtime S2S (`kind: "realtime"`)
-When a single speech-to-speech model collapses STT+LLM+TTS, the turn has **one** component whose
-`extras` carry only what the provider exposes:
+When a single speech-to-speech model collapses STT+LLM+TTS, the turn has **one** `realtime`
+component (optionally accompanied by `output`, `audio_post`, or `annotator` spans, §5.5) whose
+`extras` carry what the engine and provider observe:
 
 | Key | Unit | Definition |
 |---|---|---|
 | `ttfb_ms` | ms | Time to first audio delta from the model, anchored at end-of-user-speech when an anchor was captured. |
+| `provider_endpointing_ms` | ms | Delay between the engine's uplink VAD speech-end stamp (`vp_speech_end_epoch_ms`) and the provider's speech-stopped notification. |
+| `first_text_ms` | ms | Diagnostic delay from the end-of-user-speech anchor to the first transcript delta. |
+| `ttfb_anchor_source` | raw | Provenance of the end-of-speech anchor used for `ttfb_ms`: `provider_speech_stopped`, `vp_vad`, `client_speech_end`, `input_transcript_proxy`, `text_submit`, or `turn_start` (unanchored). |
 | `audio_output_ms` | ms | Duration of audio output produced. |
 | `input_audio_ms` | ms | Accumulated input audio duration. |
 | `sample_rate` | count | Output sample rate (Hz). |
 | `user_speech_end_epoch_ms` | ms (epoch) | Wall clock of the end-of-user-speech anchor (provider VAD stop, last input transcript, or text submit). Present iff the anchor was captured; its presence certifies `ttfb_ms` is speech-end-anchored, and it is the S2S `user_audio_end` input for perceived E2E (§6) — S2S turns emit no `stt_timing` event and the transcript-arrival timestamp is too late to serve as one. |
+| `input_speech_dbfs` | db | RMS level of active speech frames in dBFS. |
+| `input_noise_dbfs` | db | Estimated noise floor of non-speech frames in dBFS. |
+| `input_snr_db` | db | Input signal-to-noise ratio (`input_speech_dbfs − input_noise_dbfs`) in dB. |
+| `input_peak_dbfs` | db | Peak sample amplitude of the utterance in dBFS. |
+| `input_clipped_ratio` | ratio | Fraction of input samples at full-scale clipping. |
+| `input_speech_ratio` | ratio | Fraction of input frames classified as speech. |
+| `input_speech_ms` | ms | Cumulative duration of speech-classified input frames. |
+| `input_level_source` | raw | Source of the input audio level measurement (e.g. `"vp_uplink_meter"`). |
 
 **Graceful degradation rule.** Consumers MUST NOT require per-stage STT/LLM/TTS metrics; a
 `realtime` component is a complete, conformant turn. Cross-topology comparisons MUST use derived
 KPIs (§6) that are defined for both topologies (e.g. TTFA, E2E), not stage-internal metrics.
 
-### 5.5 Other kinds
-`vad`, `audio_post`, `text_post`, `translator`, and custom kinds carry their metrics in `extras`
-with a descriptor. They follow the same rules; canonical keys for these kinds are reserved for
-future versions. Until then they MUST use vendor-prefixed keys (`x_<vendor>_...`).
+### 5.5 Output, Audio Post-Processor, Annotator, and other kinds
+The reference engine also defines canonical descriptors for the output emission path, inline audio
+post-processors, and off-critical-path audio annotators (`ComponentMetricDescriptor::{output_default,
+audio_post_default, annotator_default}`):
+
+**Output (`kind: "output"`):**
+
+| Key | Unit | Definition |
+|---|---|---|
+| `emit_rtf` | ratio | Streaming-phase output emission wall time ÷ audio duration (`≤ 1.0` keeps pace with real-time playback). |
+| `source_rtf` | ratio | Pre-post-processor provider emission wall time ÷ audio duration (isolates model speed from inline post-processors). |
+| `chain_overhead_ms` | ms | Summed wall time spent in inline `audio_post` processors during the turn (`0` when none ran). |
+| `audio_output_ms` | ms | Total duration of emitted output audio. |
+| `output_wait_ms` | ms | Engine-measured contiguous output stage wait (first raw audio chunk to first emitted audio frame). |
+| `commit_to_first_audio_ms` | ms | Engine-measured total post-commit wait (`utterance.committed_at` to first emitted audio frame). |
+
+**Audio Post-Processor (`kind: "audio_post"`):**
+
+| Key | Unit | Definition |
+|---|---|---|
+| `budget_ratio` | ratio | Mean call latency ÷ mean chunk audio duration (`> 1.0` cannot keep up with real-time playback). |
+| `latency_p50_ms` | ms | Median per-chunk processing latency. |
+| `latency_max_ms` | ms | Maximum per-chunk processing latency in the turn. |
+| `calls` | count | Chunks processed in the turn. |
+| `timeouts` | count | Calls that exceeded the per-chunk timeout. |
+| `failures` | count | Calls that returned an error. |
+
+**Annotator (`kind: "annotator"`):**
+
+| Key | Unit | Definition |
+|---|---|---|
+| `latency_p50_ms` | ms | Median per-segment annotation latency. |
+| `lag_max_ms` | ms | Maximum lag of an annotation frame behind its corresponding audio timestamp. |
+| `latency_max_ms` | ms | Maximum per-segment annotation latency in the turn. |
+| `segments` | count | Audio segments submitted to the annotator. |
+| `annotations` | count | Annotation frames emitted. |
+| `dropped_chunks` | count | Audio chunks dropped due to backpressure. |
+| `timeouts` | count | Annotator calls that timed out. |
+| `skipped_segments` | count | Segments skipped while the circuit breaker was open. |
+| `annotation_kbps` | ratio | Annotation payload bitrate (kbps). |
+| `annotation_bytes` | bytes | Total annotation payload bytes emitted in the turn. |
+| `breaker_open` | count | `1` if the annotator circuit breaker opened during the turn, `0` otherwise. |
+
+Other kinds (`vad`, `text_post`, `translator`, and custom kinds) carry their metrics in `extras`
+with a descriptor; non-canonical vendor-specific metrics MUST use vendor-prefixed keys
+(`x_<vendor>_...`).
 
 ---
 
@@ -419,29 +488,38 @@ The drop-in adoption path: a deployment on any stack emits VPO metrics as OTel w
 - Derived KPIs (§6) are recorded as metrics (`vpo.ttfa_ms`, `vpo.ttfb_ms`, …) with provenance as
   an attribute (`vpo.provenance = client|server`).
 
-A machine-readable OTel semantic-convention YAML is the deliverable for v0.2 and is the artifact
-intended for publication and external adoption.
+A machine-readable OpenTelemetry semantic-convention YAML is shipped alongside this specification
+in [`vpo-semconv.yaml`](vpo-semconv.yaml) for direct integration and external adoption.
 
 ---
 
 ## Appendix A — Canonical key quick-reference
 
 ```
-STT:      processing_ms, endpointing_ms, stt_audio_duration_ms, stt_rtfx,
-          stt_algorithmic_delay_ms, stt_effective_latency_ms,
-          stt_inference_count, stt_streaming_window_ms
-LLM:      ttft_ms, generation_ms, token_count, token_estimate,
-          llm_perceived_ttft_ms, speculative_rollbacks,
-          speculative_tokens_generated, speculative_tokens_accepted,
-          speculative_efficiency
-TTS:      ttfb_ms, synthesis_ms, audio_duration_ms, rtf, rtfx, chars, sample_rate
-Realtime: ttfb_ms, audio_output_ms, input_audio_ms, sample_rate,
-          user_speech_end_epoch_ms, input_speech_dbfs, input_peak_dbfs,
-          input_noise_dbfs, input_snr_db, input_clipped_ratio,
-          input_speech_ratio, input_speech_ms, input_level_source
-Client:   speech_start, speech_end, audio_receive, playback_start,
-          first_byte_played, playback_end, underrun  (+ PlaybackReport.played_ms)
-Units:    ms, percent, ratio, count, tokens_per_sec, bytes, raw, db
+STT:        processing_ms, endpointing_ms, stt_audio_duration_ms, stt_rtfx,
+            stt_algorithmic_delay_ms, stt_effective_latency_ms,
+            stt_inference_count, stt_streaming_window_ms
+LLM:        ttft_ms, llm_wait_ms, generation_ms, token_count, token_estimate,
+            llm_perceived_ttft_ms, stage_skipped_reason, speculative_rollbacks,
+            speculative_tokens_generated, speculative_tokens_accepted,
+            speculative_efficiency
+TTS:        ttfb_ms, tts_internal_ttfb_ms, tts_wait_ms, output_wait_ms,
+            commit_to_first_audio_ms, synthesis_ms, audio_duration_ms, rtf, rtfx,
+            chars, sample_rate, stage_skipped_reason
+Realtime:   ttfb_ms, provider_endpointing_ms, first_text_ms, ttfb_anchor_source,
+            audio_output_ms, input_audio_ms, sample_rate,
+            user_speech_end_epoch_ms, input_speech_dbfs, input_peak_dbfs,
+            input_noise_dbfs, input_snr_db, input_clipped_ratio,
+            input_speech_ratio, input_speech_ms, input_level_source
+Output:     emit_rtf, source_rtf, chain_overhead_ms, audio_output_ms,
+            output_wait_ms, commit_to_first_audio_ms
+AudioPost:  budget_ratio, latency_p50_ms, latency_max_ms, calls, timeouts, failures
+Annotator:  latency_p50_ms, lag_max_ms, latency_max_ms, segments, annotations,
+            dropped_chunks, timeouts, skipped_segments, annotation_kbps,
+            annotation_bytes, breaker_open
+Client:     speech_start, speech_end, audio_receive, playback_start,
+            first_byte_played, playback_end, underrun  (+ PlaybackReport.played_ms)
+Units:      ms, percent, ratio, count, tokens_per_sec, bytes, raw, db
 ```
 
 ## Appendix B — Worked turn (informative)

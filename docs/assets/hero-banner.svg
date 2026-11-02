@@ -1,0 +1,368 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 460" width="100%" height="100%" role="img" aria-label="Voice-Pipes — Modular Real-Time Conversational Voice Runtime in Rust">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#020617"/>
+      <stop offset="55%" stop-color="#0b1120"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+
+    <radialGradient id="indigoGlow" cx="72%" cy="38%" r="48%">
+      <stop offset="0%" stop-color="#4f46e5" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#4f46e5" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Exact UI Node Gradients from PipelineNode.tsx -->
+    <linearGradient id="nodeInput" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#059669"/>
+      <stop offset="100%" stop-color="#064e3b"/>
+    </linearGradient>
+    <linearGradient id="nodeAi" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4f46e5"/>
+      <stop offset="100%" stop-color="#3730a3"/>
+    </linearGradient>
+    <linearGradient id="nodeOutput" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ea580c"/>
+      <stop offset="100%" stop-color="#9a3412"/>
+    </linearGradient>
+
+    <!-- Exact 45-degree diagonal hatch for Silence (EOU) from PipelineTimeline.tsx -->
+    <pattern id="eouHatch" width="8" height="8" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
+      <rect width="8" height="8" fill="#0c4a6e" fill-opacity="0.35"/>
+      <line x1="0" y1="0" x2="0" y2="8" stroke="#38bdf8" stroke-width="3" stroke-opacity="0.45"/>
+    </pattern>
+
+    <!-- Subtle ReactFlow dot grid -->
+    <pattern id="dotGrid" width="20" height="20" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1" fill="#1e293b"/>
+    </pattern>
+
+    <filter id="cardShadow" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#000000" flood-opacity="0.45"/>
+    </filter>
+    <filter id="aiShadow" x="-15%" y="-15%" width="130%" height="135%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#4f46e5" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <!-- Outer Frame -->
+  <rect width="1280" height="460" rx="16" fill="url(#bgGrad)" stroke="#1e293b" stroke-width="1.5"/>
+  <rect width="1280" height="460" rx="16" fill="url(#indigoGlow)"/>
+
+  <!-- ======================================================================= -->
+  <!-- LEFT COLUMN: Brand Identity & Key Capabilities                          -->
+  <!-- ======================================================================= -->
+  <g transform="translate(48, 44)">
+    <!-- Voice-Pipes Admin Console Brand Header -->
+    <g transform="translate(0, 0)">
+      <rect x="0" y="0" width="44" height="44" rx="10" fill="#1e1b4b" stroke="#4f46e5" stroke-width="1.5"/>
+      <!-- Lucide Mic Icon in Indigo-400 (#818cf8) -->
+      <rect x="17" y="9" width="10" height="16" rx="5" fill="none" stroke="#818cf8" stroke-width="2.2"/>
+      <path d="M12 20 A10 10 0 0 0 32 20" fill="none" stroke="#818cf8" stroke-width="2.2" stroke-linecap="round"/>
+      <line x1="22" y1="30" x2="22" y2="35" stroke="#818cf8" stroke-width="2.2" stroke-linecap="round"/>
+      <line x1="17" y1="35" x2="27" y2="35" stroke="#818cf8" stroke-width="2.2" stroke-linecap="round"/>
+
+      <text x="56" y="23" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="22" font-weight="700" fill="#ffffff" letter-spacing="-0.02em">Voice-Pipes</text>
+      <text x="57" y="39" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="10" font-weight="700" fill="#64748b" letter-spacing="0.12em">MODULAR VOICE RUNTIME &amp; ADMIN CONSOLE</text>
+
+      <!-- Healthy status pill from SessionDetail -->
+      <rect x="330" y="6" width="96" height="24" rx="12" fill="#10b981" fill-opacity="0.15" stroke="#10b981" stroke-opacity="0.35"/>
+      <text x="378" y="22" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="11" font-weight="600" fill="#6ee7b7">&#10003; HEALTHY</text>
+    </g>
+
+    <!-- Main Headline -->
+    <text x="0" y="96" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="38" font-weight="800" fill="#f8fafc" letter-spacing="-0.025em">
+      Real-Time Voice AI,
+    </text>
+    <text x="0" y="140" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="38" font-weight="800" fill="#818cf8" letter-spacing="-0.025em">
+      Engineered in Rust.
+    </text>
+
+    <!-- Subtitle -->
+    <text x="0" y="178" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="14.5" fill="#94a3b8">
+      <tspan x="0" dy="0">Orchestrate streaming speech over WebSockets with sub-500ms turn latency,</tspan>
+      <tspan x="0" dy="22">instant barge-in cancellation, 20+ hot-swappable local &amp; cloud plugins,</tspan>
+      <tspan x="0" dy="22">and per-turn Gantt timeline observability built into the Admin Console.</tspan>
+    </text>
+
+    <!-- UI-styled Feature Badges -->
+    <g transform="translate(0, 250)" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11.5" font-weight="600">
+      <!-- Row 1 -->
+      <rect x="0" y="0" width="190" height="30" rx="8" fill="#1e293b" stroke="#334155"/>
+      <circle cx="15" cy="15" r="4" fill="#818cf8"/>
+      <text x="27" y="19" fill="#e2e8f0">#![forbid(unsafe_code)]</text>
+
+      <rect x="200" y="0" width="142" height="30" rx="8" fill="#1e293b" stroke="#334155"/>
+      <circle cx="215" cy="15" r="4" fill="#34d399"/>
+      <text x="227" y="19" fill="#e2e8f0">27 Rust Crates</text>
+
+      <rect x="352" y="0" width="146" height="30" rx="8" fill="#1e293b" stroke="#334155"/>
+      <circle cx="367" cy="15" r="4" fill="#38bdf8"/>
+      <text x="379" y="19" fill="#e2e8f0">16 kHz PCM Core</text>
+
+      <!-- Row 2 -->
+      <rect x="0" y="40" width="164" height="30" rx="8" fill="#1e293b" stroke="#334155"/>
+      <circle cx="15" cy="55" r="4" fill="#f59e0b"/>
+      <text x="27" y="59" fill="#e2e8f0">20+ Model Plugins</text>
+
+      <rect x="174" y="40" width="156" height="30" rx="8" fill="#1e293b" stroke="#334155"/>
+      <circle cx="189" cy="55" r="4" fill="#a78bfa"/>
+      <text x="201" y="59" fill="#e2e8f0">Cascade &amp; S2S Live</text>
+
+      <rect x="340" y="40" width="158" height="30" rx="8" fill="#1e293b" stroke="#334155"/>
+      <circle cx="355" cy="55" r="4" fill="#fb923c"/>
+      <text x="367" y="59" fill="#e2e8f0">Instant Barge-In</text>
+    </g>
+
+    <!-- Bottom Quick-Launch Command Pill -->
+    <g transform="translate(0, 342)">
+      <rect x="0" y="0" width="498" height="36" rx="8" fill="#090d16" stroke="#1e293b"/>
+      <text x="14" y="23" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" fill="#64748b">$</text>
+      <text x="28" y="23" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" fill="#e2e8f0">./launch-stack.sh</text>
+      <text x="164" y="23" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11.5" fill="#64748b"># starts Orchestrator + Worker + Admin UI (:3000)</text>
+    </g>
+  </g>
+
+  <!-- ======================================================================= -->
+  <!-- RIGHT COLUMN: Authentic Voice-Pipes Admin Console Preview               -->
+  <!-- ======================================================================= -->
+  <g transform="translate(576, 26)" filter="url(#cardShadow)">
+    <!-- Mini App Window Frame -->
+    <rect x="0" y="0" width="668" height="408" rx="12" fill="#0f172a" stroke="#334155" stroke-width="1.5"/>
+
+    <!-- Window Top Bar (matches LiveGraph & SessionDetail headers) -->
+    <rect x="0" y="0" width="668" height="38" rx="12" fill="#020617"/>
+    <rect x="0" y="26" width="668" height="12" fill="#020617"/>
+    <line x1="0" y1="38" x2="668" y2="38" stroke="#1e293b" stroke-width="1"/>
+
+    <!-- Left Mini Brand in Window Bar -->
+    <circle cx="18" cy="19" r="4.5" fill="#818cf8"/>
+    <text x="30" y="23" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="12" font-weight="700" fill="#f8fafc">Voice-Pipes</text>
+    <text x="104" y="23" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="9.5" font-weight="700" fill="#64748b" letter-spacing="0.08em">ADMIN CONSOLE</text>
+
+    <!-- View Tabs -->
+    <rect x="218" y="7" width="84" height="24" rx="6" fill="#1e293b"/>
+    <rect x="218" y="11" width="2.5" height="16" rx="1.2" fill="#818cf8"/>
+    <text x="262" y="23" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="11" font-weight="600" fill="#ffffff">Live Graph</text>
+
+    <rect x="308" y="7" width="102" height="24" rx="6" fill="#1e293b"/>
+    <rect x="308" y="11" width="2.5" height="16" rx="1.2" fill="#818cf8"/>
+    <text x="360" y="23" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="11" font-weight="600" fill="#ffffff">Turn Timeline</text>
+
+    <!-- Right Worker Online Status Pill (from LivePipeline.tsx) -->
+    <rect x="524" y="7" width="132" height="24" rx="6" fill="#0f172a" stroke="#1e293b"/>
+    <text x="536" y="23" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="10.5" font-weight="700" fill="#cbd5e1">1/1 <tspan font-weight="400" fill="#64748b">workers</tspan></text>
+    <line x1="598" y1="11" x2="598" y2="27" stroke="#1e293b"/>
+    <circle cx="609" cy="19" r="3.5" fill="#34d399"/>
+    <text x="618" y="23" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="10.5" font-weight="600" fill="#e2e8f0">Online</text>
+
+    <!-- =================================================================== -->
+    <!-- TOP HALF: Live Graph ReactFlow Nodes (Exact PipelineNode.tsx style) -->
+    <!-- =================================================================== -->
+    <g transform="translate(12, 46)">
+      <rect x="0" y="0" width="644" height="142" rx="10" fill="#0b1120" stroke="#1e293b"/>
+      <rect x="0" y="0" width="644" height="142" rx="10" fill="url(#dotGrid)"/>
+
+      <!-- Smoothstep Edges -->
+      <!-- Mic -> VAD (blue audio) -->
+      <path d="M 118 46 H 128 V 98 H 138" fill="none" stroke="#3b82f6" stroke-width="1.8" stroke-dasharray="3 3"/>
+      <!-- VAD -> STT (blue audio) -->
+      <path d="M 244 98 H 254 V 46 H 264" fill="none" stroke="#3b82f6" stroke-width="1.8" stroke-dasharray="3 3"/>
+      <!-- STT -> LLM (purple text) -->
+      <path d="M 380 46 H 400" fill="none" stroke="#a78bfa" stroke-width="1.8" stroke-dasharray="3 3"/>
+      <!-- LLM -> TTS (purple text) -->
+      <path d="M 516 46 H 522 V 98 H 400" fill="none" stroke="#a78bfa" stroke-width="1.8" stroke-dasharray="3 3"/>
+      <!-- TTS -> Speaker (blue audio) -->
+      <path d="M 516 98 H 526 V 46 H 536" fill="none" stroke="#3b82f6" stroke-width="1.8" stroke-dasharray="3 3"/>
+
+      <!-- Node 1: Mic (WebSocket) - INPUT -->
+      <g transform="translate(12, 16)">
+        <rect x="0" y="0" width="106" height="60" rx="9" fill="url(#nodeInput)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="10" y="19" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="10" font-weight="700" fill="#ffffff">Mic (WS)</text>
+        <rect x="68" y="8" width="30" height="14" rx="3" fill="#000000" fill-opacity="0.28"/>
+        <text x="83" y="18" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="7.5" font-weight="700" fill="#a7f3d0">INPUT</text>
+        <text x="10" y="33" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="8.5" fill="#a7f3d0">Provider: <tspan font-weight="600" fill="#ffffff">websocket</tspan></text>
+        <rect x="10" y="40" width="52" height="13" rx="3" fill="#000000" fill-opacity="0.3"/>
+        <text x="36" y="49" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="7.5" font-weight="600" fill="#d1fae5">OUT 16 kHz</text>
+        <circle cx="106" cy="30" r="3" fill="#10b981" stroke="#064e3b" stroke-width="1.5"/>
+      </g>
+
+      <!-- Node 2: Silero VAD + Smart-Turn - Structural -->
+      <g transform="translate(138, 68)">
+        <rect x="0" y="0" width="106" height="60" rx="9" fill="#1e293b" stroke="#334155" stroke-width="1.5"/>
+        <circle cx="0" cy="30" r="3" fill="#64748b" stroke="#0f172a" stroke-width="1.5"/>
+        <text x="10" y="19" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="10" font-weight="700" fill="#f8fafc">VAD + Turn</text>
+        <text x="10" y="33" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="8.5" fill="#94a3b8">Mode: <tspan font-weight="600" fill="#e2e8f0">layered</tspan></text>
+        <rect x="10" y="40" width="86" height="13" rx="3" fill="#000000" fill-opacity="0.25"/>
+        <text x="53" y="49" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="7.5" fill="#93c5fd">silero + smart-turn</text>
+        <circle cx="106" cy="30" r="3" fill="#3b82f6" stroke="#0f172a" stroke-width="1.5"/>
+      </g>
+
+      <!-- Node 3: STT - AI Node -->
+      <g transform="translate(264, 14)" filter="url(#aiShadow)">
+        <rect x="0" y="0" width="116" height="64" rx="9" fill="url(#nodeAi)" stroke="#818cf8" stroke-width="1.5"/>
+        <circle cx="0" cy="32" r="3" fill="#818cf8" stroke="#1e1b4b" stroke-width="1.5"/>
+        <text x="10" y="19" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="10.5" font-weight="700" fill="#ffffff">STT</text>
+        <rect x="36" y="8" width="18" height="14" rx="3" fill="#000000" fill-opacity="0.28"/>
+        <text x="45" y="18" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="7.5" font-weight="700" fill="#c7d2fe">AI</text>
+        <text x="10" y="33" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="8.5" fill="#c7d2fe">Provider: <tspan font-weight="600" fill="#ffffff">nemotron</tspan></text>
+        <rect x="8" y="39" width="100" height="18" rx="4" fill="#000000" fill-opacity="0.2"/>
+        <text x="14" y="51" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="8" fill="#e0e7ff">IN 16 kHz · streaming</text>
+        <circle cx="116" cy="32" r="3" fill="#a78bfa" stroke="#1e1b4b" stroke-width="1.5"/>
+      </g>
+
+      <!-- Node 4: LLM - AI Node -->
+      <g transform="translate(400, 14)" filter="url(#aiShadow)">
+        <rect x="0" y="0" width="116" height="64" rx="9" fill="url(#nodeAi)" stroke="#818cf8" stroke-width="1.5"/>
+        <circle cx="0" cy="32" r="3" fill="#a78bfa" stroke="#1e1b4b" stroke-width="1.5"/>
+        <text x="10" y="19" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="10.5" font-weight="700" fill="#ffffff">LLM</text>
+        <rect x="38" y="8" width="18" height="14" rx="3" fill="#000000" fill-opacity="0.28"/>
+        <text x="47" y="18" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="7.5" font-weight="700" fill="#c7d2fe">AI</text>
+        <text x="10" y="33" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="8.5" fill="#c7d2fe">Provider: <tspan font-weight="600" fill="#ffffff">openai-compat</tspan></text>
+        <rect x="8" y="39" width="100" height="18" rx="4" fill="#000000" fill-opacity="0.2"/>
+        <text x="14" y="51" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="8" fill="#e0e7ff">Model: gemma4-e2b</text>
+        <circle cx="116" cy="32" r="3" fill="#a78bfa" stroke="#1e1b4b" stroke-width="1.5"/>
+      </g>
+
+      <!-- Node 5: TTS - AI Node -->
+      <g transform="translate(400, 72)" filter="url(#aiShadow)">
+        <rect x="0" y="0" width="116" height="58" rx="9" fill="url(#nodeAi)" stroke="#818cf8" stroke-width="1.5"/>
+        <circle cx="0" cy="29" r="3" fill="#a78bfa" stroke="#1e1b4b" stroke-width="1.5"/>
+        <text x="10" y="18" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="10.5" font-weight="700" fill="#ffffff">TTS</text>
+        <rect x="36" y="7" width="18" height="14" rx="3" fill="#000000" fill-opacity="0.28"/>
+        <text x="45" y="17" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="7.5" font-weight="700" fill="#c7d2fe">AI</text>
+        <text x="10" y="31" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="8.5" fill="#c7d2fe">Provider: <tspan font-weight="600" fill="#ffffff">piper / kokoro</tspan></text>
+        <rect x="8" y="37" width="100" height="15" rx="4" fill="#000000" fill-opacity="0.2"/>
+        <text x="14" y="47" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="7.5" fill="#e0e7ff">0.14x RTF · streaming</text>
+        <circle cx="116" cy="29" r="3" fill="#3b82f6" stroke="#1e1b4b" stroke-width="1.5"/>
+      </g>
+
+      <!-- Node 6: Speaker (WebSocket) - OUTPUT -->
+      <g transform="translate(532, 16)">
+        <rect x="0" y="0" width="102" height="60" rx="9" fill="url(#nodeOutput)" stroke="#fb923c" stroke-width="1.5"/>
+        <circle cx="0" cy="30" r="3" fill="#fb923c" stroke="#7c2d12" stroke-width="1.5"/>
+        <text x="10" y="19" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="10" font-weight="700" fill="#ffffff">Speaker</text>
+        <rect x="58" y="8" width="36" height="14" rx="3" fill="#000000" fill-opacity="0.28"/>
+        <text x="76" y="18" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="7" font-weight="700" fill="#fed7aa">OUTPUT</text>
+        <text x="10" y="33" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="8.5" fill="#fed7aa">Provider: <tspan font-weight="600" fill="#ffffff">websocket</tspan></text>
+        <rect x="10" y="40" width="52" height="13" rx="3" fill="#000000" fill-opacity="0.3"/>
+        <text x="36" y="49" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="7.5" font-weight="600" fill="#ffedd5">OUT 16 kHz</text>
+      </g>
+    </g>
+
+    <!-- =================================================================== -->
+    <!-- BOTTOM HALF: Authentic TurnCard + PIPELINE TIMELINE Gantt Chart     -->
+    <!-- =================================================================== -->
+    <g transform="translate(12, 196)">
+      <!-- TurnCard Container (bg-slate-800 border-slate-700 rounded-xl) -->
+      <rect x="0" y="0" width="644" height="200" rx="10" fill="#1e293b" stroke="#334155"/>
+
+      <!-- TurnCardHeader -->
+      <g transform="translate(14, 12)">
+        <rect x="0" y="0" width="26" height="20" rx="5" fill="#6366f1" fill-opacity="0.2"/>
+        <text x="13" y="14" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="10.5" font-weight="700" fill="#a5b4fc">#1</text>
+        <text x="34" y="15" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="13.5" font-weight="700" fill="#ffffff">Turn</text>
+
+        <!-- Completed Badge -->
+        <rect x="72" y="1" width="74" height="19" rx="9.5" fill="#10b981" fill-opacity="0.15" stroke="#10b981" stroke-opacity="0.35"/>
+        <text x="109" y="14" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="10" font-weight="600" fill="#34d399">&#8857; Completed</text>
+
+        <!-- Right Metric Strip -->
+        <text x="616" y="14" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="10.5" fill="#94a3b8">
+          VAD <tspan fill="#cbd5e1">180ms</tspan> · TTFT <tspan fill="#cbd5e1">142ms</tspan> · TTFB <tspan fill="#cbd5e1">214ms</tspan> · <tspan fill="#34d399" font-weight="700">E2E 214ms</tspan>
+        </text>
+      </g>
+
+      <!-- PIPELINE TIMELINE Box (bg-slate-900/70 border-slate-700/50) -->
+      <g transform="translate(14, 38)">
+        <rect x="0" y="0" width="616" height="132" rx="8" fill="#0f172a" fill-opacity="0.85" stroke="#334155" stroke-opacity="0.7"/>
+
+        <text x="12" y="16" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9.5" font-weight="600" fill="#64748b" letter-spacing="0.06em">
+          PIPELINE TIMELINE <tspan fill="#475569" font-weight="400">(streaming overlap)</tspan>
+        </text>
+
+        <!-- Time Axis Labels & Gridlines (x=48 to x=596, t=0 at x=280) -->
+        <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="8.5" fill="#64748b" text-anchor="middle">
+          <text x="96" y="28">-500ms</text>
+          <line x1="96" y1="32" x2="96" y2="86" stroke="#334155" stroke-opacity="0.4" stroke-dasharray="2 2"/>
+
+          <text x="188" y="28">-250ms</text>
+          <line x1="188" y1="32" x2="188" y2="86" stroke="#334155" stroke-opacity="0.4" stroke-dasharray="2 2"/>
+
+          <text x="280" y="28" fill="#94a3b8" font-weight="700">t=0</text>
+          <line x1="280" y1="32" x2="280" y2="88" stroke="#64748b" stroke-opacity="0.75" stroke-width="1.2"/>
+
+          <text x="372" y="28">+250ms</text>
+          <line x1="372" y1="32" x2="372" y2="86" stroke="#334155" stroke-opacity="0.4" stroke-dasharray="2 2"/>
+
+          <text x="464" y="28">+500ms</text>
+          <line x1="464" y1="32" x2="464" y2="86" stroke="#334155" stroke-opacity="0.4" stroke-dasharray="2 2"/>
+
+          <text x="556" y="28">+750ms</text>
+          <line x1="556" y1="32" x2="556" y2="86" stroke="#334155" stroke-opacity="0.4" stroke-dasharray="2 2"/>
+        </g>
+
+        <!-- Row 1: STT (sky-400) -->
+        <text x="38" y="45" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9.5" font-weight="700" fill="#38bdf8">STT</text>
+        <rect x="46" y="34" width="554" height="14" rx="3" fill="#1e293b" fill-opacity="0.5"/>
+        <!-- Speaking hollow bar -->
+        <rect x="58" y="34" width="154" height="14" rx="2" fill="#0c4a6e" fill-opacity="0.3" stroke="#0284c7" stroke-opacity="0.55"/>
+        <text x="135" y="44" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="8.5" fill="#7dd3fc">~420ms</text>
+        <!-- Silence (EOU) hatched bar -->
+        <rect x="212" y="34" width="68" height="14" rx="2" fill="url(#eouHatch)" stroke="#38bdf8" stroke-opacity="0.55"/>
+        <text x="246" y="44" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="8.5" fill="#7dd3fc">~180ms</text>
+
+        <!-- Row 2: LLM (amber-400) -->
+        <text x="38" y="63" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9.5" font-weight="700" fill="#fbbf24">LLM</text>
+        <rect x="46" y="52" width="554" height="14" rx="3" fill="#1e293b" fill-opacity="0.5"/>
+        <!-- TTFT solid orange-amber bar -->
+        <rect x="280" y="52" width="54" height="14" rx="2" fill="#f59e0b"/>
+        <text x="307" y="62" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="8.5" font-weight="600" fill="#ffffff">142ms</text>
+        <!-- LLM streaming bar with token tick marks -->
+        <rect x="334" y="52" width="152" height="14" rx="2" fill="#d97706" fill-opacity="0.65"/>
+        <g stroke="#ffffff" stroke-opacity="0.38" stroke-width="1">
+          <line x1="348" y1="53" x2="348" y2="65"/>
+          <line x1="362" y1="53" x2="362" y2="65"/>
+          <line x1="378" y1="53" x2="378" y2="65"/>
+          <line x1="395" y1="53" x2="395" y2="65"/>
+          <line x1="412" y1="53" x2="412" y2="65"/>
+          <line x1="432" y1="53" x2="432" y2="65"/>
+          <line x1="452" y1="53" x2="452" y2="65"/>
+          <line x1="470" y1="53" x2="470" y2="65"/>
+        </g>
+        <text x="410" y="62" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="8.5" font-weight="600" fill="#fef3c7">415ms · ~38t</text>
+
+        <!-- Row 3: TTS (violet-400) -->
+        <text x="38" y="81" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9.5" font-weight="700" fill="#a78bfa">TTS</text>
+        <rect x="46" y="70" width="554" height="14" rx="3" fill="#1e293b" fill-opacity="0.5"/>
+        <!-- TTS startup -->
+        <rect x="338" y="70" width="22" height="14" rx="2" fill="#7c3aed"/>
+        <!-- TTS streaming -->
+        <rect x="360" y="70" width="218" height="14" rx="2" fill="#8b5cf6" fill-opacity="0.65"/>
+        <text x="469" y="80" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="8.5" font-weight="600" fill="#f3e8ff">510ms</text>
+
+        <!-- 1st token & 1st audio markers + Response bracket -->
+        <line x1="334" y1="86" x2="334" y2="96" stroke="#f59e0b" stroke-dasharray="2 2"/>
+        <text x="334" y="104" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="8" fill="#fbbf24">1st token</text>
+
+        <line x1="360" y1="86" x2="360" y2="96" stroke="#34d399" stroke-dasharray="2 2"/>
+        <text x="384" y="104" text-anchor="start" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="8" fill="#34d399">1st audio</text>
+
+        <!-- Emerald Response Bracket -->
+        <line x1="280" y1="111" x2="360" y2="111" stroke="#10b981" stroke-width="1.2"/>
+        <line x1="280" y1="108" x2="280" y2="114" stroke="#10b981" stroke-width="1.2"/>
+        <line x1="360" y1="108" x2="360" y2="114" stroke="#10b981" stroke-width="1.2"/>
+        <text x="320" y="122" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="8.5" font-weight="700" fill="#34d399">&#8592; Response 214ms &#8594;</text>
+
+        <!-- Violet TTS Tail Bracket -->
+        <line x1="360" y1="111" x2="578" y2="111" stroke="#64748b" stroke-width="1"/>
+        <line x1="578" y1="108" x2="578" y2="114" stroke="#64748b" stroke-width="1"/>
+        <text x="469" y="122" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="8" fill="#94a3b8">+510ms TTS tail</text>
+      </g>
+
+      <!-- Bottom Stats Line of TurnCard -->
+      <text x="16" y="188" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9.5" fill="#64748b">
+        <tspan fill="#fbbf24" font-weight="600">48.2 tok/s</tspan> · 38 tok · <tspan fill="#a78bfa" font-weight="600">0.14x RTF</tspan> · TTS 510ms · <tspan fill="#38bdf8">🎤 "Switch flight to 6 PM"</tspan> &#8594; <tspan fill="#34d399">💬 "Moved to 6:00 PM."</tspan>
+      </text>
+    </g>
+  </g>
+</svg>

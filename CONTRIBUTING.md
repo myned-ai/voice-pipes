@@ -77,10 +77,9 @@ and register a factory; the wizard entry is one descriptor in
 
 - Keep PRs focused; link the issue they address.
 - CI must pass. PRs run the core test suites on Ubuntu.
-- By contributing, you agree that your contributions are licensed under the
-  [Apache License 2.0](LICENSE), the same license as the project
-  (inbound = outbound). Keep third-party code out unless its license is
-  compatible and attributed in [NOTICE](NOTICE).
+- By contributing, you agree to the terms of our
+  [Contributor License Agreement (CLA)](CLA.md). Keep third-party code out
+  unless its license is compatible and attributed in [NOTICE](NOTICE).
 
 ## Reporting security issues
 

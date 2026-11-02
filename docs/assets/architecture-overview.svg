@@ -1,0 +1,494 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1360 720" width="100%" height="100%" role="img" aria-label="Voice-Pipes Live Pipeline Graph &amp; Architecture in Admin Console">
+  <defs>
+    <!-- Exact Node Gradients from PipelineNode.tsx -->
+    <linearGradient id="inputGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#059669"/>
+      <stop offset="100%" stop-color="#064e3b"/>
+    </linearGradient>
+    <linearGradient id="aiGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4f46e5"/>
+      <stop offset="100%" stop-color="#3730a3"/>
+    </linearGradient>
+    <linearGradient id="outputGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ea580c"/>
+      <stop offset="100%" stop-color="#9a3412"/>
+    </linearGradient>
+
+    <pattern id="rfGrid" width="22" height="22" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1" fill="#1e293b"/>
+    </pattern>
+
+    <filter id="nodeGlowAi" x="-15%" y="-15%" width="130%" height="135%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#4f46e5" flood-opacity="0.38"/>
+    </filter>
+    <filter id="nodeGlowIn" x="-15%" y="-15%" width="130%" height="135%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#059669" flood-opacity="0.28"/>
+    </filter>
+    <filter id="nodeGlowOut" x="-15%" y="-15%" width="130%" height="135%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#ea580c" flood-opacity="0.28"/>
+    </filter>
+    <filter id="nodeShadow" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#000000" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+
+  <!-- App Shell Outer Frame -->
+  <rect width="1360" height="720" rx="14" fill="#0b1120" stroke="#1e293b" stroke-width="1.5"/>
+
+  <!-- ======================================================================= -->
+  <!-- LEFT SIDEBAR: Exact Voice-Pipes Admin Console Navigation (App.tsx)      -->
+  <!-- ======================================================================= -->
+  <g>
+    <rect x="0" y="0" width="216" height="720" rx="14" fill="#020617"/>
+    <rect x="202" y="0" width="14" height="720" fill="#020617"/>
+    <line x1="216" y1="0" x2="216" y2="720" stroke="#1e293b" stroke-width="1"/>
+
+    <!-- Brand Header -->
+    <g transform="translate(18, 20)">
+      <!-- Lucide Mic Icon -->
+      <rect x="4" y="2" width="8" height="13" rx="4" fill="none" stroke="#818cf8" stroke-width="2"/>
+      <path d="M0 11 A8 8 0 0 0 16 11" fill="none" stroke="#818cf8" stroke-width="2" stroke-linecap="round"/>
+      <line x1="8" y1="19" x2="8" y2="23" stroke="#818cf8" stroke-width="2" stroke-linecap="round"/>
+      <line x1="4" y1="23" x2="12" y2="23" stroke="#818cf8" stroke-width="2" stroke-linecap="round"/>
+
+      <text x="26" y="15" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="16" font-weight="700" fill="#ffffff" letter-spacing="-0.02em">Voice-Pipes</text>
+      <text x="26" y="30" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="9" font-weight="700" fill="#64748b" letter-spacing="0.1em">ADMIN CONSOLE</text>
+
+      <!-- Hamburger Menu Icon -->
+      <g transform="translate(166, 6)" stroke="#94a3b8" stroke-width="1.8" stroke-linecap="round">
+        <line x1="0" y1="0" x2="14" y2="0"/>
+        <line x1="0" y1="5" x2="14" y2="5"/>
+        <line x1="0" y1="10" x2="14" y2="10"/>
+      </g>
+    </g>
+
+    <!-- Nav Group: MONITOR -->
+    <g transform="translate(12, 84)" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif">
+      <text x="12" y="0" font-size="10" font-weight="700" fill="#475569" letter-spacing="0.08em">MONITOR</text>
+
+      <!-- Dashboard -->
+      <g transform="translate(0, 12)">
+        <text x="40" y="23" font-size="13" font-weight="500" fill="#94a3b8">Dashboard</text>
+        <path d="M14 25 V13 M19 25 V9 M24 25 V17" stroke="#64748b" stroke-width="1.8" stroke-linecap="round"/>
+      </g>
+
+      <!-- Live Graph (ACTIVE) -->
+      <g transform="translate(0, 50)">
+        <rect x="0" y="0" width="192" height="36" rx="8" fill="#1e293b"/>
+        <!-- Active left vertical bar -->
+        <rect x="0" y="8" width="2.5" height="20" rx="1.2" fill="#818cf8"/>
+        <polyline points="12,18 16,18 18,11 21,25 23,18 26,18" fill="none" stroke="#818cf8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        <text x="40" y="23" font-size="13" font-weight="600" fill="#ffffff">Live Graph</text>
+      </g>
+
+      <!-- Session History -->
+      <g transform="translate(0, 88)">
+        <circle cx="19" cy="18" r="7" fill="none" stroke="#64748b" stroke-width="1.8"/>
+        <polyline points="19,14 19,18 22,20" fill="none" stroke="#64748b" stroke-width="1.8" stroke-linecap="round"/>
+        <text x="40" y="23" font-size="13" font-weight="500" fill="#94a3b8">Session History</text>
+      </g>
+    </g>
+
+    <!-- Nav Group: BUILD & TEST -->
+    <g transform="translate(12, 232)" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif">
+      <text x="12" y="0" font-size="10" font-weight="700" fill="#475569" letter-spacing="0.08em">BUILD &amp; TEST</text>
+
+      <!-- Playground -->
+      <g transform="translate(0, 12)">
+        <rect x="12" y="12" width="14" height="10" rx="3" fill="none" stroke="#64748b" stroke-width="1.8"/>
+        <text x="40" y="22" font-size="13" font-weight="500" fill="#94a3b8">Playground</text>
+      </g>
+
+      <!-- Benchmarks -->
+      <g transform="translate(0, 50)">
+        <path d="M16 11 H22 M17 11 V16 L13 23 H25 L21 16 V11" fill="none" stroke="#64748b" stroke-width="1.8" stroke-linejoin="round"/>
+        <text x="40" y="22" font-size="13" font-weight="500" fill="#94a3b8">Benchmarks</text>
+      </g>
+
+      <!-- Test Suites -->
+      <g transform="translate(0, 88)">
+        <rect x="13" y="10" width="12" height="15" rx="2" fill="none" stroke="#64748b" stroke-width="1.8"/>
+        <text x="40" y="22" font-size="13" font-weight="500" fill="#94a3b8">Test Suites</text>
+      </g>
+    </g>
+
+    <!-- Bottom Theme Toggle -->
+    <g transform="translate(24, 678)">
+      <circle cx="8" cy="8" r="4" fill="none" stroke="#fbbf24" stroke-width="1.8"/>
+      <text x="24" y="12" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="12.5" font-weight="500" fill="#cbd5e1">Light Mode</text>
+    </g>
+  </g>
+
+  <!-- ======================================================================= -->
+  <!-- MAIN CONTENT AREA: Live Pipeline Graph (/live)                          -->
+  <!-- ======================================================================= -->
+  <g transform="translate(216, 0)">
+    <!-- Top Control Bar (LivePipeline.tsx) -->
+    <rect x="0" y="0" width="1144" height="48" fill="#0f172a"/>
+    <line x1="0" y1="48" x2="1144" y2="48" stroke="#1e293b" stroke-width="1"/>
+
+    <!-- Pipeline Selector Title on Left -->
+    <g transform="translate(20, 14)" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif">
+      <circle cx="6" cy="10" r="4" fill="#34d399"/>
+      <text x="18" y="14" font-size="13" font-weight="700" fill="#f8fafc">custom-classic</text>
+      <text x="118" y="14" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" fill="#64748b">worker-custom · ws://localhost:8800/ws</text>
+    </g>
+
+    <!-- Right Controls: Show Workers | Show Resamplers | 1/1 workers Online -->
+    <g transform="translate(680, 9)" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="11.5" font-weight="500">
+      <text x="30" y="20" fill="#94a3b8">&#9787; Show Workers</text>
+      <text x="148" y="20" fill="#94a3b8">&#8767; Show Resamplers</text>
+      <line x1="274" y1="5" x2="274" y2="25" stroke="#334155"/>
+
+      <rect x="288" y="0" width="156" height="30" rx="8" fill="#1e293b" stroke="#334155"/>
+      <text x="304" y="19" font-weight="700" fill="#e2e8f0">1/1 <tspan font-weight="400" fill="#94a3b8">workers</tspan></text>
+      <line x1="378" y1="6" x2="378" y2="24" stroke="#334155"/>
+      <circle cx="392" cy="15" r="4" fill="#34d399"/>
+      <text x="402" y="19" font-weight="600" fill="#f8fafc">Online</text>
+    </g>
+
+    <!-- ReactFlow Canvas Background -->
+    <rect x="1" y="49" width="1142" height="670" fill="#0b1120"/>
+    <rect x="1" y="49" width="1142" height="670" fill="url(#rfGrid)"/>
+
+    <!-- ===================================================================== -->
+    <!-- SMOOTHSTEP ANIMATED EDGES (Audio = #3b82f6, Text = #a78bfa)           -->
+    <!-- ===================================================================== -->
+    <g fill="none" stroke-width="2" stroke-dasharray="4 4">
+      <!-- 1. Mic (WebSocket) -> VAD -->
+      <path d="M 206 164 H 222 V 395 H 188" stroke="#3b82f6"/>
+      <!-- 2. VAD -> STT -->
+      <path d="M 358 395 H 374 V 205 H 336" stroke="#3b82f6"/>
+      <!-- 3. STT -> Turn Detection -->
+      <path d="M 526 205 H 542 V 410 H 506" stroke="#a78bfa"/>
+      <!-- 4. Turn Detection -> LLM -->
+      <path d="M 686 410 H 702 V 215 H 666" stroke="#a78bfa"/>
+      <!-- 5. LLM -> TTS -->
+      <path d="M 866 215 H 882 V 415 H 846" stroke="#a78bfa"/>
+      <!-- 6. TTS -> Speaker (WebSocket) -->
+      <path d="M 1036 415 H 1050 V 164 H 956" stroke="#3b82f6"/>
+    </g>
+
+    <!-- Edge Labels (Exact ReactFlow badge style from LivePipeline.tsx) -->
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9" font-weight="600" text-anchor="middle">
+      <rect x="200" y="270" width="44" height="16" rx="4" fill="#0f172a" stroke="#1e293b"/>
+      <text x="222" y="281" fill="#60a5fa">16 kHz</text>
+
+      <rect x="352" y="290" width="44" height="16" rx="4" fill="#0f172a" stroke="#1e293b"/>
+      <text x="374" y="301" fill="#60a5fa">16 kHz</text>
+
+      <rect x="524" y="300" width="36" height="16" rx="4" fill="#0f172a" stroke="#1e293b"/>
+      <text x="542" y="311" fill="#a78bfa">text</text>
+
+      <rect x="684" y="300" width="36" height="16" rx="4" fill="#0f172a" stroke="#1e293b"/>
+      <text x="702" y="311" fill="#a78bfa">text</text>
+
+      <rect x="864" y="305" width="36" height="16" rx="4" fill="#0f172a" stroke="#1e293b"/>
+      <text x="882" y="316" fill="#a78bfa">text</text>
+
+      <rect x="1028" y="275" width="44" height="16" rx="4" fill="#0f172a" stroke="#1e293b"/>
+      <text x="1050" y="286" fill="#60a5fa">16 kHz</text>
+    </g>
+
+    <!-- ===================================================================== -->
+    <!-- NODE 1: Mic (WebSocket) — INPUT (Emerald Gradient)                    -->
+    <!-- ===================================================================== -->
+    <g transform="translate(30, 114)" filter="url(#nodeGlowIn)">
+      <rect x="0" y="0" width="176" height="100" rx="12" fill="url(#inputGrad)" stroke="#34d399" stroke-width="2"/>
+      <!-- Icon Box -->
+      <rect x="14" y="14" width="28" height="28" rx="8" fill="#ffffff" fill-opacity="0.1"/>
+      <rect x="25" y="19" width="6" height="10" rx="3" fill="none" stroke="#34d399" stroke-width="1.8"/>
+      <path d="M22 26 A6 6 0 0 0 34 26" fill="none" stroke="#34d399" stroke-width="1.8"/>
+      <line x1="28" y1="32" x2="28" y2="36" stroke="#34d399" stroke-width="1.8"/>
+
+      <text x="48" y="26" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="11" font-weight="700" fill="#ffffff">Mic (WebSocket)</text>
+      <rect x="140" y="14" width="28" height="15" rx="3" fill="#000000" fill-opacity="0.28"/>
+      <text x="154" y="24" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="7" font-weight="700" fill="#a7f3d0">INPUT</text>
+
+      <text x="50" y="42" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="10" fill="#a7f3d0">Provider: <tspan font-weight="600" fill="#6ee7b7">websocket</tspan></text>
+
+      <rect x="14" y="64" width="64" height="18" rx="4" fill="#000000" fill-opacity="0.3"/>
+      <text x="46" y="76" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9" font-weight="600" fill="#d1fae5">OUT 16 kHz</text>
+
+      <!-- Source Handle -->
+      <circle cx="176" cy="50" r="4" fill="#10b981" stroke="#064e3b" stroke-width="2"/>
+    </g>
+
+    <!-- ===================================================================== -->
+    <!-- NODE 2: VAD — Structural Card (#1e293b)                               -->
+    <!-- ===================================================================== -->
+    <g transform="translate(188, 290)" filter="url(#nodeShadow)">
+      <rect x="0" y="0" width="170" height="210" rx="12" fill="#1e293b" stroke="#334155" stroke-width="1.5"/>
+      <!-- Handles -->
+      <circle cx="0" cy="105" r="4" fill="#64748b" stroke="#0f172a" stroke-width="2"/>
+      <circle cx="170" cy="105" r="4" fill="#3b82f6" stroke="#0f172a" stroke-width="2"/>
+
+      <rect x="14" y="14" width="28" height="28" rx="8" fill="#ffffff" fill-opacity="0.06"/>
+      <polygon points="29,19 23,28 28,28 27,36 33,27 28,27" fill="none" stroke="#3b82f6" stroke-width="1.6" stroke-linejoin="round"/>
+
+      <text x="50" y="26" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="12.5" font-weight="700" fill="#f8fafc">VAD</text>
+      <text x="50" y="42" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="10" fill="#94a3b8">Provider: <tspan font-weight="600" fill="#cbd5e1">silero-vad</tspan></text>
+
+      <rect x="14" y="54" width="56" height="16" rx="4" fill="#000000" fill-opacity="0.3"/>
+      <text x="42" y="65" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="8.5" fill="#cbd5e1">IN 16 kHz</text>
+      <rect x="76" y="54" width="62" height="16" rx="4" fill="#000000" fill-opacity="0.3"/>
+      <text x="107" y="65" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="8.5" fill="#cbd5e1">OUT 16 kHz</text>
+
+      <!-- CONFIGURATION Box -->
+      <rect x="12" y="78" width="146" height="118" rx="6" fill="#000000" fill-opacity="0.22"/>
+      <text x="20" y="93" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="8.5" font-weight="700" fill="#94a3b8" letter-spacing="0.06em">CONFIGURATION</text>
+
+      <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="9.5" fill="#cbd5e1">
+        <text x="20" y="112" text-decoration="underline" stroke-dasharray="1 1">Mode</text>
+        <text x="148" y="112" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-weight="600" fill="#ffffff">auto</text>
+
+        <text x="20" y="134" text-decoration="underline">Model</text>
+        <text x="148" y="134" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-weight="600" fill="#ffffff">silero_vad.on…</text>
+
+        <text x="20" y="156" text-decoration="underline">Energy threshold &#9998;</text>
+        <text x="148" y="156" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-weight="600" fill="#ffffff">200</text>
+
+        <text x="20" y="178" text-decoration="underline">Speech prob &#9998;</text>
+        <text x="148" y="178" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-weight="600" fill="#ffffff">0.5</text>
+      </g>
+    </g>
+
+    <!-- ===================================================================== -->
+    <!-- NODE 3: STT — AI Node (Indigo Gradient)                               -->
+    <!-- ===================================================================== -->
+    <g transform="translate(336, 96)" filter="url(#nodeGlowAi)">
+      <rect x="0" y="0" width="190" height="220" rx="12" fill="url(#aiGrad)" stroke="#818cf8" stroke-width="2"/>
+      <circle cx="0" cy="110" r="4" fill="#818cf8" stroke="#1e1b4b" stroke-width="2"/>
+      <circle cx="190" cy="110" r="4" fill="#a78bfa" stroke="#1e1b4b" stroke-width="2"/>
+
+      <rect x="14" y="14" width="28" height="28" rx="8" fill="#ffffff" fill-opacity="0.12"/>
+      <rect x="22" y="20" width="12" height="16" rx="2" fill="none" stroke="#c7d2fe" stroke-width="1.8"/>
+      <line x1="25" y1="25" x2="31" y2="25" stroke="#c7d2fe" stroke-width="1.5"/>
+      <line x1="25" y1="29" x2="31" y2="29" stroke="#c7d2fe" stroke-width="1.5"/>
+
+      <text x="50" y="26" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="13" font-weight="700" fill="#ffffff">STT</text>
+      <rect x="82" y="14" width="20" height="15" rx="3" fill="#000000" fill-opacity="0.28"/>
+      <text x="92" y="24" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="7.5" font-weight="700" fill="#c7d2fe">AI</text>
+
+      <text x="50" y="42" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="10" fill="#e0e7ff">Provider: <tspan font-weight="600" fill="#a5b4fc">parakeet-tdt</tspan></text>
+
+      <!-- CONFIGURATION Box -->
+      <rect x="12" y="54" width="166" height="96" rx="6" fill="#000000" fill-opacity="0.18"/>
+      <text x="20" y="69" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="8.5" font-weight="700" fill="#c7d2fe" letter-spacing="0.06em">CONFIGURATION</text>
+
+      <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="9.5" fill="#e0e7ff">
+        <text x="20" y="88" text-decoration="underline">Provider</text>
+        <text x="168" y="88" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-weight="600" fill="#ffffff">parakeet-tdt</text>
+
+        <text x="20" y="110" text-decoration="underline">Model</text>
+        <text x="168" y="110" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-weight="600" fill="#ffffff">tdt-0.6b-v3</text>
+
+        <text x="20" y="132" text-decoration="underline">Sample rate</text>
+        <text x="168" y="132" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-weight="600" fill="#ffffff">16000</text>
+      </g>
+
+      <!-- LIVE METRICS (LAST 60S) Box -->
+      <rect x="12" y="158" width="166" height="50" rx="6" fill="#000000" fill-opacity="0.25"/>
+      <text x="20" y="172" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="8" font-weight="700" fill="#c7d2fe" letter-spacing="0.05em">LIVE METRICS (LAST 60S)</text>
+      <text x="20" y="187" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="9.5" fill="#e0e7ff">Latency</text>
+      <text x="168" y="187" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9.5" font-weight="700" fill="#34d399">28 ms</text>
+      <text x="20" y="201" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="9.5" fill="#e0e7ff">Throughput</text>
+      <text x="168" y="201" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9.5" font-weight="600" fill="#ffffff">14.2/min</text>
+    </g>
+
+    <!-- ===================================================================== -->
+    <!-- NODE 4: Turn Detection — AI Node (Indigo Gradient)                    -->
+    <!-- ===================================================================== -->
+    <g transform="translate(506, 336)" filter="url(#nodeGlowAi)">
+      <rect x="0" y="0" width="180" height="150" rx="12" fill="url(#aiGrad)" stroke="#818cf8" stroke-width="2"/>
+      <circle cx="0" cy="75" r="4" fill="#818cf8" stroke="#1e1b4b" stroke-width="2"/>
+      <circle cx="180" cy="75" r="4" fill="#a78bfa" stroke="#1e1b4b" stroke-width="2"/>
+
+      <rect x="14" y="14" width="28" height="28" rx="8" fill="#ffffff" fill-opacity="0.12"/>
+      <circle cx="28" cy="29" r="7" fill="none" stroke="#c7d2fe" stroke-width="1.8"/>
+      <polyline points="28,25 28,29 31,31" fill="none" stroke="#c7d2fe" stroke-width="1.6"/>
+
+      <text x="50" y="26" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="12.5" font-weight="700" fill="#ffffff">Turn Detection</text>
+      <rect x="144" y="14" width="20" height="15" rx="3" fill="#000000" fill-opacity="0.28"/>
+      <text x="154" y="24" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="7.5" font-weight="700" fill="#c7d2fe">AI</text>
+
+      <text x="50" y="42" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="10" fill="#e0e7ff">Provider: <tspan font-weight="600" fill="#a5b4fc">layered</tspan></text>
+
+      <!-- CONFIGURATION Box -->
+      <rect x="12" y="54" width="156" height="82" rx="6" fill="#000000" fill-opacity="0.18"/>
+      <text x="20" y="69" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="8.5" font-weight="700" fill="#c7d2fe" letter-spacing="0.06em">CONFIGURATION</text>
+
+      <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="9.5" fill="#e0e7ff">
+        <text x="20" y="90" text-decoration="underline">Mode</text>
+        <text x="158" y="90" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-weight="600" fill="#ffffff">layered</text>
+
+        <text x="20" y="114" text-decoration="underline">Silence timeout (ms) &#9998;</text>
+        <text x="158" y="114" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-weight="600" fill="#ffffff">450</text>
+      </g>
+    </g>
+
+    <!-- ===================================================================== -->
+    <!-- NODE 5: LLM — AI Node (Indigo Gradient)                               -->
+    <!-- ===================================================================== -->
+    <g transform="translate(666, 96)" filter="url(#nodeGlowAi)">
+      <rect x="0" y="0" width="200" height="236" rx="12" fill="url(#aiGrad)" stroke="#818cf8" stroke-width="2"/>
+      <circle cx="0" cy="118" r="4" fill="#818cf8" stroke="#1e1b4b" stroke-width="2"/>
+      <circle cx="200" cy="118" r="4" fill="#a78bfa" stroke="#1e1b4b" stroke-width="2"/>
+
+      <rect x="14" y="14" width="28" height="28" rx="8" fill="#ffffff" fill-opacity="0.12"/>
+      <rect x="22" y="22" width="12" height="12" rx="2" fill="none" stroke="#c7d2fe" stroke-width="1.8"/>
+
+      <text x="50" y="26" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="13" font-weight="700" fill="#ffffff">LLM</text>
+      <rect x="84" y="14" width="20" height="15" rx="3" fill="#000000" fill-opacity="0.28"/>
+      <text x="94" y="24" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="7.5" font-weight="700" fill="#c7d2fe">AI</text>
+
+      <text x="50" y="42" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="10" fill="#e0e7ff">Provider: <tspan font-weight="600" fill="#a5b4fc">openai-compat</tspan></text>
+
+      <!-- CONFIGURATION Box -->
+      <rect x="12" y="54" width="176" height="114" rx="6" fill="#000000" fill-opacity="0.18"/>
+      <text x="20" y="69" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="8.5" font-weight="700" fill="#c7d2fe" letter-spacing="0.06em">CONFIGURATION</text>
+
+      <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="9.5" fill="#e0e7ff">
+        <text x="20" y="88" text-decoration="underline">Base URL</text>
+        <text x="178" y="88" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-weight="600" fill="#ffffff">host.docker.int…</text>
+
+        <text x="20" y="108" text-decoration="underline">Model</text>
+        <text x="178" y="108" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-weight="600" fill="#ffffff">gemma4-e2b</text>
+
+        <text x="20" y="128" text-decoration="underline">System prompt &#9998;</text>
+        <text x="178" y="128" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-weight="600" fill="#ffffff">You are a…</text>
+
+        <text x="20" y="148" text-decoration="underline">Max tok &#9998; / Temp &#9998;</text>
+        <text x="178" y="148" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-weight="600" fill="#ffffff">256 / 0.7</text>
+      </g>
+
+      <!-- LIVE METRICS Box -->
+      <rect x="12" y="176" width="176" height="48" rx="6" fill="#000000" fill-opacity="0.25"/>
+      <text x="20" y="190" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="8" font-weight="700" fill="#c7d2fe" letter-spacing="0.05em">LIVE METRICS (LAST 60S)</text>
+      <text x="20" y="205" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="9.5" fill="#e0e7ff">TTFT (p50)</text>
+      <text x="178" y="205" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9.5" font-weight="700" fill="#34d399">142 ms</text>
+      <text x="20" y="218" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="9.5" fill="#e0e7ff">Stream rate</text>
+      <text x="178" y="218" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9.5" font-weight="600" fill="#fbbf24">48.2 tok/s</text>
+    </g>
+
+    <!-- ===================================================================== -->
+    <!-- NODE 6: TTS — AI Node (Indigo Gradient)                               -->
+    <!-- ===================================================================== -->
+    <g transform="translate(846, 336)" filter="url(#nodeGlowAi)">
+      <rect x="0" y="0" width="190" height="156" rx="12" fill="url(#aiGrad)" stroke="#818cf8" stroke-width="2"/>
+      <circle cx="0" cy="78" r="4" fill="#818cf8" stroke="#1e1b4b" stroke-width="2"/>
+      <circle cx="190" cy="78" r="4" fill="#a78bfa" stroke="#1e1b4b" stroke-width="2"/>
+
+      <rect x="14" y="14" width="28" height="28" rx="8" fill="#ffffff" fill-opacity="0.12"/>
+      <circle cx="26" cy="26" r="5" fill="none" stroke="#c7d2fe" stroke-width="1.8"/>
+      <path d="M33 23 A5 5 0 0 1 33 31" fill="none" stroke="#c7d2fe" stroke-width="1.8"/>
+
+      <text x="50" y="26" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="13" font-weight="700" fill="#ffffff">TTS</text>
+      <rect x="82" y="14" width="20" height="15" rx="3" fill="#000000" fill-opacity="0.28"/>
+      <text x="92" y="24" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="7.5" font-weight="700" fill="#c7d2fe">AI</text>
+
+      <text x="50" y="42" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="10" fill="#e0e7ff">Provider: <tspan font-weight="600" fill="#a5b4fc">piper</tspan></text>
+
+      <!-- CONFIGURATION Box -->
+      <rect x="12" y="54" width="166" height="88" rx="6" fill="#000000" fill-opacity="0.18"/>
+      <text x="20" y="69" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="8.5" font-weight="700" fill="#c7d2fe" letter-spacing="0.06em">CONFIGURATION</text>
+
+      <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="9.5" fill="#e0e7ff">
+        <text x="20" y="90" text-decoration="underline">Provider</text>
+        <text x="168" y="90" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-weight="600" fill="#ffffff">piper</text>
+
+        <text x="20" y="112" text-decoration="underline">Model file</text>
+        <text x="168" y="112" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-weight="600" fill="#ffffff">en_US-lessac-…</text>
+
+        <text x="20" y="132" text-decoration="underline">Synthesis RTF</text>
+        <text x="168" y="132" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-weight="700" fill="#34d399">0.14x (58ms)</text>
+      </g>
+    </g>
+
+    <!-- ===================================================================== -->
+    <!-- NODE 7: Speaker (WebSocket) — OUTPUT (Orange Gradient)                -->
+    <!-- ===================================================================== -->
+    <g transform="translate(956, 114)" filter="url(#nodeGlowOut)">
+      <rect x="0" y="0" width="174" height="100" rx="12" fill="url(#outputGrad)" stroke="#fb923c" stroke-width="2"/>
+      <circle cx="0" cy="50" r="4" fill="#fb923c" stroke="#7c2d12" stroke-width="2"/>
+
+      <rect x="14" y="14" width="28" height="28" rx="8" fill="#ffffff" fill-opacity="0.1"/>
+      <polygon points="21,25 25,25 29,21 29,35 25,31 21,31" fill="none" stroke="#fdba74" stroke-width="1.8" stroke-linejoin="round"/>
+      <path d="M32 24 A5 5 0 0 1 32 32" fill="none" stroke="#fdba74" stroke-width="1.8" stroke-linecap="round"/>
+
+      <text x="48" y="26" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="11.5" font-weight="700" fill="#ffffff">Speaker (WS)</text>
+      <rect x="130" y="14" width="36" height="15" rx="3" fill="#000000" fill-opacity="0.28"/>
+      <text x="148" y="24" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="7" font-weight="700" fill="#fed7aa">OUTPUT</text>
+
+      <text x="48" y="42" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="10" fill="#fed7aa">Provider: <tspan font-weight="600" fill="#fdba74">websocket</tspan></text>
+
+      <rect x="14" y="64" width="58" height="18" rx="4" fill="#000000" fill-opacity="0.3"/>
+      <text x="43" y="76" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="8.5" font-weight="600" fill="#ffedd5">IN 16 kHz</text>
+
+      <rect x="78" y="64" width="64" height="18" rx="4" fill="#000000" fill-opacity="0.3"/>
+      <text x="110" y="76" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="8.5" font-weight="600" fill="#ffedd5">OUT 16 kHz</text>
+    </g>
+
+    <!-- ===================================================================== -->
+    <!-- BOTTOM ARCHITECTURAL STRIP: S2S Mode, Barge-In & Fleet Orchestrator   -->
+    <!-- ===================================================================== -->
+    <g transform="translate(76, 536)">
+      <!-- Card 1: Instant Barge-In Loop -->
+      <rect x="0" y="0" width="332" height="152" rx="10" fill="#0f172a" stroke="#334155"/>
+      <rect x="14" y="14" width="88" height="20" rx="5" fill="#f43f5e" fill-opacity="0.15" stroke="#f43f5e" stroke-opacity="0.35"/>
+      <text x="58" y="28" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9.5" font-weight="700" fill="#fda4af">&#9889; BARGE-IN</text>
+      <text x="112" y="28" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="12.5" font-weight="700" fill="#f8fafc">Immediate Interruption</text>
+      <text x="14" y="52" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="11" fill="#94a3b8">
+        <tspan x="14" dy="0">When Silero VAD detects user speech during TTS</tspan>
+        <tspan x="14" dy="17">playback, the engine cancels in-flight LLM &amp; TTS</tspan>
+        <tspan x="14" dy="17">tasks, flushes outbound PCM frames, and records</tspan>
+        <tspan x="14" dy="17">exact heard vs. unheard words in the turn audit.</tspan>
+      </text>
+      <text x="14" y="138" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9.5" fill="#64748b">Cancel signal: <tspan fill="#fda4af">&lt; 5 ms</tspan> · Audio tail truncated</text>
+
+      <!-- Card 2: Alternate S2S Realtime Mode -->
+      <rect x="350" y="0" width="332" height="152" rx="10" fill="#0f172a" stroke="#334155"/>
+      <rect x="364" y="14" width="76" height="20" rx="5" fill="#6366f1" fill-opacity="0.2" stroke="#818cf8" stroke-opacity="0.4"/>
+      <text x="402" y="28" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9.5" font-weight="700" fill="#a5b4fc">S2S MODE</text>
+      <text x="450" y="28" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="12.5" font-weight="700" fill="#f8fafc">Speech-to-Speech Providers</text>
+      <text x="364" y="52" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="11" fill="#94a3b8">
+        <tspan x="364" dy="0">Swap the 4-stage cascade for a native Speech-to-</tspan>
+        <tspan x="364" dy="17">Speech model in TOML while keeping the exact</tspan>
+        <tspan x="364" dy="17">same client WebSocket protocol and turn grading:</tspan>
+      </text>
+      <g transform="translate(364, 114)" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9.5" font-weight="600">
+        <rect x="0" y="0" width="102" height="22" rx="5" fill="#1e1b4b" stroke="#4f46e5"/>
+        <text x="51" y="14" text-anchor="middle" fill="#c7d2fe">openai-realtime</text>
+        <rect x="108" y="0" width="86" height="22" rx="5" fill="#1e1b4b" stroke="#4f46e5"/>
+        <text x="151" y="14" text-anchor="middle" fill="#c7d2fe">gemini-live</text>
+        <rect x="200" y="0" width="96" height="22" rx="5" fill="#1e1b4b" stroke="#4f46e5"/>
+        <text x="248" y="14" text-anchor="middle" fill="#c7d2fe">elevenlabs-s2s</text>
+      </g>
+
+      <!-- Card 3: Fleet Orchestrator & 20+ Plugins -->
+      <rect x="700" y="0" width="348" height="152" rx="10" fill="#0f172a" stroke="#334155"/>
+      <rect x="714" y="14" width="92" height="20" rx="5" fill="#10b981" fill-opacity="0.15" stroke="#10b981" stroke-opacity="0.35"/>
+      <text x="760" y="28" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9.5" font-weight="700" fill="#34d399">FLEET :9090</text>
+      <text x="816" y="28" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="12.5" font-weight="700" fill="#f8fafc">Orchestrator &amp; SDK Isolation</text>
+      <text x="714" y="52" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif" font-size="11" fill="#94a3b8">
+        <tspan x="714" dy="0">Workers register capabilities &amp; heartbeats with</tspan>
+        <tspan x="714" dy="17">the Orchestrator (:9090) for least-connections</tspan>
+        <tspan x="714" dy="17">routing, live config hot-reload, and SSE telemetry.</tspan>
+      </text>
+      <text x="714" y="138" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9.5" fill="#64748b">SDK crate: <tspan fill="#e2e8f0">voice-pipes-sdk</tspan> · <tspan fill="#34d399">20 plugin crates</tspan></text>
+    </g>
+
+    <!-- ReactFlow Bottom-Left Zoom Controls (Exact match to 02-live-graph.png) -->
+    <g transform="translate(16, 588)">
+      <rect x="0" y="0" width="28" height="112" rx="4" fill="#1e293b" stroke="#334155"/>
+      <line x1="0" y1="28" x2="28" y2="28" stroke="#334155"/>
+      <line x1="0" y1="56" x2="28" y2="56" stroke="#334155"/>
+      <line x1="0" y1="84" x2="28" y2="84" stroke="#334155"/>
+      <text x="14" y="19" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="16" fill="#cbd5e1">+</text>
+      <text x="14" y="47" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="16" fill="#cbd5e1">&#8722;</text>
+      <rect x="9" y="65" width="10" height="10" fill="none" stroke="#cbd5e1" stroke-width="1.3" stroke-dasharray="3 2"/>
+      <rect x="10" y="95" width="8" height="7" rx="1" fill="#cbd5e1"/>
+      <path d="M11 95 V93 A3 3 0 0 1 17 93 V95" fill="none" stroke="#cbd5e1" stroke-width="1.3"/>
+    </g>
+  </g>
+</svg>

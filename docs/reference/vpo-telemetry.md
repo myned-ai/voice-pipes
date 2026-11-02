@@ -1,9 +1,9 @@
 # VPO‑Telemetry — Voice Pipeline Open Standard, Layer 2
 ## Turn Lifecycle, Event Stream, Correlation, Aggregation & Health — Specification v0.1 (Draft)
 
-> **Status:** Draft v0.1. Normative specification for Layer 2 of VPO
-> (see VPO-BLUEPRINT-OUTLINE.md, Part 4). Layer 2 sits on top of
-> [VPO-Metrics v0.1](vpo-metrics.md): Metrics defines *what is measured*; Telemetry defines
+> **Status:** Draft v0.1. Normative specification for Layer 2 of the Voice Pipeline Open Standard
+> (VPO). Layer 2 sits on top of [VPO-Metrics v0.1](vpo-metrics.md) and pairs with
+> [VPO-Protocol v0.1](vpo-protocol.md): Metrics defines *what is measured*; Telemetry defines
 > *how it is emitted, correlated, aggregated, and turned into a health signal*.
 >
 > **Conformance language.** **MUST / MUST NOT / SHOULD / SHOULD NOT / MAY** per RFC 2119.
@@ -11,8 +11,8 @@
 > **Reference implementation.** Every event, field, and rule traces to:
 > `src/pipeline/events.rs` (`PipelineEvent`, `InterruptionTrigger`, `HistoryModification`,
 > `TruncationMethod`), `voice-pipes-admin/backend/app/analytics/rollup.py` (durable rollup store),
-> and `voice-pipes-admin/backend/app/report/analysis.py` (`_detect_anomalies`,
-> `_distribution_stats`, `_compute_verdict`, `_DEFAULT_TARGETS`, `_PROVIDER_TARGETS`).
+> and `voice-pipes-admin/backend/app/report/` (`anomalies.py`, `verdict.py`, `targets.py`,
+> `analysis.py`).
 
 ---
 
@@ -200,32 +200,52 @@ classified `stability ∈ {stable, variable, unstable}`:
 ## 5. Anomaly taxonomy (normative)
 
 ### 5.1 Anomaly record shape
-An anomaly is `{ utt, kind, level, observed, target, detail }` where `level ∈ {info, warn}`.
-`info` anomalies are explanatory context and MUST NOT count toward a health verdict; `warn`
-anomalies do (§6).
+An anomaly is `{ utt, kind, level, severity, on_critical_path, observed, target, detail, owner? }`:
+- `level ∈ {info, warn, error}` — coarse triage bucket. `info` anomalies provide explanatory
+  context and MUST NOT degrade the session health verdict; `warn` and `error` anomalies do (§6).
+- `severity ∈ {negligible, minor, moderate, severe}` — graded overage relative to `target`. For
+  latency and throughput metrics, default multiplicative bands are `(1.15×, 1.5×, 2.5×)` of
+  `target` (`<1.15× → negligible`, `<1.5× → minor`, `<2.5× → moderate`, `≥2.5× → severe`); RTF
+  uses absolute bands `(1.0, 1.2, 1.5)` and jitter silence fraction uses `(0.02, 0.10, 0.25)`.
+- `on_critical_path: bool` — whether the anomaly added directly to user-perceived turn latency or
+  caused a user-audible defect. Off-critical-path anomalies (e.g. incremental STT `processing_ms`
+  that overlapped speech, or metadata-only `annotator.*` lag) are still surfaced for diagnostics
+  without falsely blaming user-felt wait on them.
 
 ### 5.2 Canonical anomaly kinds
 Kinds use the form `<component>.<signal>` and are normative:
 
-| Kind | Default level | Condition (vs resolved target) |
-|---|---|---|
-| `llm.ttft_high` | warn¹ | LLM time-to-first-token over target. |
-| `llm.throughput_low` | warn | tokens/sec under target (only when not cold, ≥30 completion tokens, generation > 200 ms). |
-| `tts.ttfb_high` | warn | TTS time-to-first-byte over target (only when synthesis completed). |
-| `tts.rtf_high` | warn | TTS realtime factor over target (synthesis slower than playback). |
-| `tts.audio_truncated` | warn | Chars present but ≈no audio — likely synthesis failure (non-interrupted turns). |
-| `stt.processing_high` | warn | STT transcription latency over target (batch STT only). |
-| `stt.endpointing_high` | warn | VAD endpointing over target (slow turn-taking). |
-| `bi.likely_self_barge` | info | `server_vad` barge-in with `played_ms` below the self-barge floor — likely echo. |
-| `bi.rtt_high` | warn¹ | Barge-in round-trip over target (user hears stale TTS). |
-| `turn.total_outlier` | info | Turn `total_ms` > `outlier_total_ms_factor` × session median. |
+| Kind | Owner | Default level | Condition (vs resolved target) |
+|---|---|---|---|
+| `llm.ttft_high` | `llm` (`transport` when connect-dominated) | warn¹ | LLM time-to-first-token over target. |
+| `llm.throughput_low` | `llm` | warn | tokens/sec under target (only when not cold, ≥30 completion tokens, generation > 200 ms; `on_critical_path = false` unless TTS starved). |
+| `tts.ttfb_high` | `tts` (or `s2s` in S2S mode) | warn / error | TTS time-to-first-byte over target (only when synthesis completed). |
+| `tts.rtf_high` | `tts` | warn / error | TTS realtime factor over target (synthesis slower than playback). |
+| `tts.audio_truncated` | `tts` | error | Chars present but ≈no audio (`<100 ms`) — synthesis failure on a non-interrupted turn. |
+| `stt.processing_high` | `stt` | warn | STT transcription latency over target (batch STT only; `on_critical_path` only when post-speech tail > 0). |
+| `stt.endpointing_high` | `stt` or `turn_detection`² (or `s2s` in S2S mode) | warn | VAD / turn-detection endpointing over target (slow turn-taking). |
+| `stt.transcript_empty` | `stt` | error | Turn committed on an empty transcript (no words recognized). |
+| `bi.likely_self_barge` | `stt` | info | `server_vad` barge-in with `played_ms` below the self-barge floor — likely echo. |
+| `bi.rtt_high` | `transport` | warn¹ | Barge-in round-trip over target (user hears stale TTS). |
+| `turn.total_outlier` | `turn` | info | Turn `total_ms` > `outlier_total_ms_factor` × session median. |
+| `tool.unresolved` | `client_tools` | warn / info | Client tool call dispatched (`trigger_action`) with no matching `client_tool_result` (`warn` when speech is gated on the tool result, `info` when fire-and-forget). |
+| `tool.failed` | `client_tools` | info | Client tool returned `ok = false` (app-side error; pipeline continued). |
+| `tool.roundtrip_high` | `client_tools` | info | Client tool round-trip exceeded `tool_roundtrip_ms` target (app-side execution time; never degrades pipeline health). |
+| `measurement.zero_with_work` | `measurement` | warn | A stage reported `0 ms` while performing non-trivial work (e.g. tokens or audio generated) — instrumentation fault. |
+| `measurement.breakdown_exceeds_stage` | `measurement` | warn | A provider breakdown metric (e.g. `ttft_ms`, `ttfb_ms`) exceeded its containing engine stage span (`llm_wait_ms`, `tts_wait_ms`). |
+| `measurement.stages_disagree` | `measurement` | warn | Sum of contiguous engine stage waits (`llm_wait_ms + tts_wait_ms + output_wait_ms`) disagreed with `commit_to_first_audio_ms`. |
+| `measurement.missing` | `measurement` | warn | A required critical-path stage measurement was absent (`null`) on a completed turn. |
+| `measurement.audio_inconsistent` | `measurement` | warn | Emitted audio duration disagreed with synthesized/captured audio beyond tolerance. |
 
-¹ Demoted to `info` under documented benign conditions (§5.4): e.g. connect-dominated TTFT,
-estimated TTFT, ≤5% marginal overage; or a real user barge-in (`played_ms ≥ 1000`) with ≤1.5×
-RTT overage.
+¹ Demoted to `info` (`severity: negligible`) under documented benign conditions (§5.4): e.g.
+connect-dominated TTFT, estimated TTFT, ≤15% marginal overage; or a real user barge-in
+(`played_ms ≥ 1000`) with ≤1.5× RTT overage.
+² Attributed to `turn_detection` when the configured `silence_timeout_ms` floor accounts for ≥80%
+of the observed endpointing delay (the pipeline waited as configured, rather than the STT
+recognizer lagging).
 
 New anomaly kinds MAY be added, but each MUST: (a) declare a component owner (§6.2), (b) declare a
-default level, (c) specify the exact condition and the target it reads.
+default level and severity bands, (c) specify the exact condition and the target it reads.
 
 ### 5.3 Target rubric & provider-aware resolution
 Anomalies are evaluated against a resolved target set. Resolution order (last wins):
@@ -317,8 +337,8 @@ back to the anchored server-side estimate (`e2e_estimated`), never for `turn_sta
 **Reading S2S latency anomalies (operator guide).**
 - The `s2s` headline now distinguishes the fix: *"answers late (TTFB p50 N ms from `<source>`)"* when
   `tts.ttfb_high` dominates (model / provider choice) vs *"is slow to notice the end of speech
-  (endpointing p50 N ms)"* when `stt.endpointing_high` dominates (provider VAD tuning — see the plan's
-  WP7), alongside the throughput verb from §5.5.
+  (endpointing p50 N ms)"* when `stt.endpointing_high` dominates (provider VAD tuning), alongside the
+  throughput verb from §5.5.
 - An `s2s.anchor_proxy` row means every latency on that turn under-reports; enable vp's endpoint
   observer or a client with VAD `speech_end` reports to get a real anchor.
 
@@ -328,22 +348,46 @@ back to the anchored server-side estimate (`e2e_estimated`), never for `turn_sta
 
 ### 6.1 Session verdict
 A session reduces to `{ level, primary_culprit, headline, supporting_anomaly_kinds,
-unstable_components }` where `level ∈ {healthy, degraded, broken}`.
+unstable_components }` where `level ∈ {healthy, fair, degraded, broken, unknown}` (v2 graded
+model, default; legacy v1 `{healthy, degraded, broken}` remains selectable via `VP_HEALTH_MODEL=v1`
+or `?health=v1`):
 
-- `broken` — the session terminated mid-flight at scale (reference: ≥50% of turns terminated).
-- `healthy` — zero `warn`-level anomalies. A purely jittery component (`unstable` but no turn
-  breached its target) stays `healthy` with an `unstable_components` note — jitter alone is not a
-  user-visible defect.
-- `degraded` — otherwise (one or more `warn` anomalies, or instability with breaches).
+- `unknown` — the session has zero gradable critical-path measurements and zero anomalies (e.g. a
+  text-only or uninstrumented capture). A session with no measurements MUST be reported as
+  `unknown`, never silently reported as `healthy`.
+- `broken` — the session terminated mid-flight at scale (reference: ≥50% of turns terminated), or
+  user-perceived critical-path p90 latency exceeds the `unusable` ceiling (`5000 ms`).
+- `degraded` — one or more `severe` on-critical-path anomalies occurred, or critical-path p90
+  exceeds the `poor` threshold (`3000 ms`).
+- `fair` — only `minor` or `moderate` on-critical-path anomalies occurred, or critical-path p90
+  exceeds the `good` threshold (`1500 ms`), or metadata-only `annotator.*` anomalies occurred
+  (which cap the session at `fair` because audio playback is unaffected).
+- `healthy` — zero material (`minor`/`moderate`/`severe`) on-critical-path anomalies and
+  critical-path p90 ≤ `good` (`1500 ms`). A purely jittery component (`unstable` but no turn
+  breached its target) stays `healthy` with an `unstable_components` note.
 
-Only `warn` anomalies count toward the verdict; `info` rows are explanatory.
+`info` / `negligible` rows and app-owned informational `client_tools` rows (`tool.failed`,
+`tool.roundtrip_high`) never degrade the pipeline verdict.
 
 ### 6.2 Culprit attribution
-Each anomaly kind maps to exactly one responsible component via a flat ownership table
-(`_ANOMALY_COMPONENT`): `llm.*→llm`, `tts.*→tts`, `stt.*→stt`, `bi.rtt_high→transport`,
-`bi.likely_self_barge→stt`, `turn.total_outlier→turn`. The `primary_culprit` is the component with
-the most `warn` anomalies, tie-broken toward `unstable` components. Adding an anomaly kind MUST
-extend this table.
+Each anomaly maps to a responsible component via its explicit `owner` field or the canonical
+ownership table (`_ANOMALY_COMPONENT` in `report/verdict.py`):
+- `llm.* → llm` (or `transport` when connect-dominated)
+- `tts.* → tts` (or `s2s` on speech-to-speech turns)
+- `stt.endpointing_high → turn_detection` (when the configured `silence_timeout_ms` floor explains
+  the wait), `s2s` (on S2S turns), or `stt`
+- `stt.* → stt`
+- `output.slower_than_realtime → audio_post` (when `emit_rtf − source_rtf > 0.3`), else `s2s` / `tts`
+- `audio_post.over_budget → audio_post`
+- `client.starvation → s2s` / `tts` / `audio_post` (server output path)
+- `client.jitter`, `bi.rtt_high → transport`
+- `annotator.* → annotator` (metadata-only dimension)
+- `tool.* → client_tools`
+- `measurement.* → measurement`
+
+The `primary_culprit` is the component with the highest **severity-weighted score** across
+on-critical-path anomalies (`negligible = 0`, `minor = 1`, `moderate = 3`, `severe = 8`),
+tie-broken toward `unstable` components. Adding an anomaly kind MUST declare its owner.
 
 ### 6.3 Fleet health (normative)
 Across workers/pipelines, health MUST be a **fraction-healthy** model — *X of Y workers healthy* —
@@ -426,19 +470,33 @@ Side:       client_timing, caption_emitted, pipeline_error, turn_metrics_ready
 ## Appendix B — Anomaly kinds & owners
 
 ```
-llm.ttft_high          -> llm        (info if connect-dominant / estimated / <=5% over)
-llm.throughput_low     -> llm
+# Core stage & barge-in kinds (§5.2)
+llm.ttft_high          -> llm        (transport if connect-dominant; info if estimated / <=15% over)
+llm.throughput_low     -> llm        (off critical path unless TTS starved)
 tts.ttfb_high          -> tts        (skipped on interrupted turns; S2S: -> s2s, needs an honest
                                       ttfb_anchor_source, error from 2.5x target — §5.6)
 tts.rtf_high           -> tts
-tts.audio_truncated    -> tts
+tts.audio_truncated    -> tts        (error; chars present but <100 ms audio)
 stt.processing_high    -> stt        (skipped for streaming STT)
-stt.endpointing_high   -> stt        (S2S: -> s2s, from provider_endpointing_ms — §5.6)
+stt.endpointing_high   -> stt | turn_detection (when silence_timeout_ms floor explains wait) | s2s
+stt.transcript_empty   -> stt        (error; turn committed on empty transcript)
 bi.likely_self_barge   -> stt        (info)
 bi.rtt_high            -> transport  (info if real user barge-in & <=1.5x over)
 turn.total_outlier     -> turn       (info)
 
-# §5.5 — throughput & annotator kinds
+# Client tools (§5.2)
+tool.unresolved        -> client_tools (warn when speech-gated, info when fire-and-forget)
+tool.failed            -> client_tools (info; app-side failure)
+tool.roundtrip_high    -> client_tools (info; app-side latency)
+
+# Measurement integrity faults (§5.2)
+measurement.zero_with_work          -> measurement
+measurement.breakdown_exceeds_stage -> measurement
+measurement.stages_disagree         -> measurement
+measurement.missing                 -> measurement
+measurement.audio_inconsistent      -> measurement
+
+# Throughput & annotator kinds (§5.5)
 output.slower_than_realtime -> s2s/tts, or audio_post when emit_rtf - source_rtf > 0.3
 audio_post.over_budget      -> audio_post:<name>    (error; never collapsed into s2s)
 client.starvation           -> server output        (underruns and arrival_rtf > 1)
@@ -447,18 +505,27 @@ annotator.lagging           -> annotator:<name>     (metadata only; session <= f
 annotator.degraded          -> annotator:<name>     (metadata only; session <= fair)
 annotator.unavailable       -> annotator:<name>     (error, metadata only; session <= fair)
 
-# §5.6 — speech-to-speech anchoring
+# Speech-to-speech anchoring (§5.6)
 s2s.anchor_proxy            -> s2s                  (info; ttfb_anchor_source = input_transcript_proxy
                                                      with no vp/client end-of-speech stamp)
 
-Verdict: warn-only count -> level {healthy|degraded|broken};
-         primary_culprit = component with most warns, tie-break to unstable.
+Verdict (v2 default): severity-weighted on-critical-path anomalies + perceived p90
+                      -> level {healthy | fair | degraded | broken | unknown};
+                      primary_culprit = component with highest severity weight
+                      (negligible=0, minor=1, moderate=3, severe=8), tie-break to unstable.
 ```
 
-## Appendix C — Note on the outline's placeholder taxonomy
+## Appendix C — Measurement plausibility & integrity guarantees
 
-VPO-BLUEPRINT-OUTLINE.md §4.4 listed placeholder anomaly flags
-(`high_latency`, `underrun`, `barge_storm`, `quota_breach`, `low_success`). The normative taxonomy
-is §5 here — `<component>.<signal>` kinds with provider/mode-aware resolution and a verdict
-reducer — matching the reference implementation in `report/analysis.py`. The outline should be
-updated to point here.
+A core invariant of VPO is that **an impossible metric value is a measurement fault, never
+slowness charged to the next component**:
+
+1. **Missing is `null`, never `0`.** If a stage did not run or a timestamp was not captured, the
+   metric is omitted (`null`), never synthesized as `0`.
+2. **Containment check (`measurement.breakdown_exceeds_stage`).** Critical-path stage spans
+   (`llm_wait_ms`, `tts_wait_ms`, `output_wait_ms`) are measured by the engine at the trait seam
+   with one monotonic clock. Provider-reported breakdowns (`ttft_ms`, `ttfb_ms`) must fit inside
+   their containing engine span; if a breakdown exceeds its container, the analyzer emits
+   `measurement.breakdown_exceeds_stage` (`owner = "measurement"`).
+3. **Additivity check (`measurement.stages_disagree`).** The contiguous post-commit stage spans must
+   sum to `commit_to_first_audio_ms` within rounding tolerance (`5 ms`).

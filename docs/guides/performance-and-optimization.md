@@ -4,7 +4,7 @@
 **Owner:** Observability & Performance  
 **Audience:** Performance Engineers, Voice AI Developers, and DevOps/SREs
 
-Voice Pipes is designed for sub-500ms glass-to-glass conversational latency. Achieving and sustaining this in real-world deployments requires tuning across four layers: engine optimizations, configuration parameters, hardware sizing, and hosting topology.
+Voice Pipes is engineered to support sub-500ms turn latency when paired with local or low-latency streaming providers. Achieving and sustaining this in real-world deployments depends on your chosen models, hardware sizing, configuration parameters, and hosting topology.
 
 This guide provides the authoritative reference for optimizing pipeline responsiveness, eliminating cold-start latency, and deploying robust production fleets.
 

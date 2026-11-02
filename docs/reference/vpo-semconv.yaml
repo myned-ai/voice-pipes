@@ -1,12 +1,12 @@
 # VPO — Voice Pipeline Open Standard
 # OpenTelemetry Semantic Conventions for voice-agent metrics (Layer 1, VPO-Metrics)
 #
-# Status: draft, tracks VPO-Metrics v0.1 (see docs/VPO-METRICS-v0.1.md).
+# Status: draft, tracks VPO-Metrics v0.1 (see docs/reference/vpo-metrics.md).
 # Format: OpenTelemetry semantic-convention YAML (groups of attributes, spans, metrics).
 #
-# Purpose: the drop-in adoption artifact. A team on ANY voice stack (LiveKit, Pipecat,
-# Vapi, Retell, OpenAI Realtime, custom) can emit VPO-conformant telemetry by mapping
-# their existing signals onto these attributes — no VPO runtime required.
+# Purpose: the drop-in adoption artifact. A team on ANY decomposed STT->LLM->TTS or
+# speech-to-speech voice stack can emit VPO-conformant telemetry by mapping their
+# existing signals onto these attributes — no VPO runtime required.
 #
 # Modelling summary:
 #   - A TURN is an OTel span (root of the turn trace). Span name: "vpo.turn".
@@ -87,6 +87,17 @@ groups:
         type: boolean
         requirement_level: required
         brief: Whether the turn was cut short by barge-in.
+      - id: vpo.turn.initiator
+        type:
+          members:
+            - id: user
+              value: "user"
+              brief: Turn initiated by user speech or text input.
+            - id: agent
+              value: "agent"
+              brief: Turn initiated proactively by the agent (e.g. greeting / agent_say).
+        requirement_level: recommended
+        brief: Who initiated the turn. Agent-initiated turns are excluded from user-perceived critical-path latency percentiles.
       - id: vpo.turn.llm_response_text
         type: string
         requirement_level: opt_in
@@ -114,7 +125,7 @@ groups:
         type: string
         requirement_level: required
         brief: Coarse class (snake_case).
-        examples: ["stt", "llm", "tts", "vad", "audio_post", "text_post", "translator", "realtime"]
+        examples: ["stt", "llm", "tts", "vad", "output", "audio_post", "annotator", "text_post", "translator", "realtime"]
       - id: vpo.component.started_at_ms
         type: int
         requirement_level: required
@@ -181,7 +192,10 @@ groups:
     attributes:
       - id: vpo.llm.ttft_ms
         type: int
-        brief: "Time to first token (model first-token latency). unit=ms"
+        brief: "Time to first token (model first-token latency, contained in llm_wait_ms). unit=ms"
+      - id: vpo.llm.wait_ms
+        type: int
+        brief: "Engine-measured contiguous LLM stage wait (utterance.committed_at -> first LLM text fragment). unit=ms"
       - id: vpo.llm.perceived_ttft_ms
         type: int
         brief: "TTFT including scheduling/queueing as the pipeline experienced it. unit=ms"
@@ -194,6 +208,9 @@ groups:
       - id: vpo.llm.token_estimate
         type: int
         brief: "Estimated tokens when an exact count is unavailable. unit=count"
+      - id: vpo.llm.stage_skipped_reason
+        type: string
+        brief: "Why the LLM stage did not run (agent_say or speculative_accept). unit=raw"
       - id: vpo.llm.speculative_rollbacks
         type: int
         brief: "Speculative-decoding rollbacks. unit=count"
@@ -213,7 +230,19 @@ groups:
     attributes:
       - id: vpo.tts.ttfb_ms
         type: int
-        brief: "Time to first audio byte (synthesis request -> first audio). unit=ms"
+        brief: "Time to first audio byte (synthesis request -> first audio, contained in tts_wait_ms). unit=ms"
+      - id: vpo.tts.internal_ttfb_ms
+        type: int
+        brief: "Pre-pacer provider startup and first audio chunk generation (contained in tts_wait_ms). unit=ms"
+      - id: vpo.tts.wait_ms
+        type: int
+        brief: "Engine-measured contiguous TTS stage wait (first LLM text fragment -> first raw TTS audio chunk). unit=ms"
+      - id: vpo.tts.output_wait_ms
+        type: int
+        brief: "Engine-measured contiguous output stage wait (first raw TTS audio chunk -> first emitted audio frame). unit=ms"
+      - id: vpo.tts.commit_to_first_audio_ms
+        type: int
+        brief: "Engine-measured total post-commit wait (llm_wait_ms + tts_wait_ms + output_wait_ms). unit=ms"
       - id: vpo.tts.synthesis_ms
         type: int
         brief: "Total synthesis wall-time. unit=ms"
@@ -232,6 +261,9 @@ groups:
       - id: vpo.tts.sample_rate
         type: int
         brief: "Output sample rate (Hz). unit=count"
+      - id: vpo.tts.stage_skipped_reason
+        type: string
+        brief: "Why on-commit TTS synthesis did not run (speculative_accept). unit=raw"
 
   - id: registry.vpo.realtime
     type: attribute_group
@@ -239,7 +271,16 @@ groups:
     attributes:
       - id: vpo.realtime.ttfb_ms
         type: int
-        brief: "Time to first audio delta from the model. unit=ms"
+        brief: "Time to first audio delta from the model, anchored at end-of-user-speech. unit=ms"
+      - id: vpo.realtime.provider_endpointing_ms
+        type: int
+        brief: "Delay between engine uplink VAD speech end and provider speech-stopped notification. unit=ms"
+      - id: vpo.realtime.first_text_ms
+        type: int
+        brief: "Diagnostic delay from end-of-user-speech anchor to first transcript delta. unit=ms"
+      - id: vpo.realtime.ttfb_anchor_source
+        type: string
+        brief: "End-of-speech anchor provenance (provider_speech_stopped, vp_vad, client_speech_end, input_transcript_proxy, text_submit, turn_start). unit=raw"
       - id: vpo.realtime.audio_output_ms
         type: int
         brief: "Duration of audio output produced. unit=ms"
@@ -249,6 +290,117 @@ groups:
       - id: vpo.realtime.sample_rate
         type: int
         brief: "Output sample rate (Hz). unit=count"
+      - id: vpo.realtime.user_speech_end_epoch_ms
+        type: int
+        brief: "Wall-clock epoch (ms) of the end-of-user-speech anchor. unit=ms"
+      - id: vpo.realtime.input_speech_dbfs
+        type: double
+        brief: "RMS level of active speech frames in dBFS. unit=db"
+      - id: vpo.realtime.input_noise_dbfs
+        type: double
+        brief: "Estimated noise floor of non-speech frames in dBFS. unit=db"
+      - id: vpo.realtime.input_snr_db
+        type: double
+        brief: "Input signal-to-noise ratio (input_speech_dbfs - input_noise_dbfs). unit=db"
+      - id: vpo.realtime.input_peak_dbfs
+        type: double
+        brief: "Peak sample amplitude of the utterance in dBFS. unit=db"
+      - id: vpo.realtime.input_clipped_ratio
+        type: double
+        brief: "Fraction of input samples at full-scale clipping. unit=ratio"
+      - id: vpo.realtime.input_speech_ratio
+        type: double
+        brief: "Fraction of input frames classified as speech. unit=ratio"
+      - id: vpo.realtime.input_speech_ms
+        type: int
+        brief: "Cumulative duration of speech-classified input frames. unit=ms"
+      - id: vpo.realtime.input_level_source
+        type: string
+        brief: "Source of the input audio level measurement (e.g. vp_uplink_meter). unit=raw"
+
+  - id: registry.vpo.output
+    type: attribute_group
+    brief: "Canonical Output emission metrics (kind: output). Units per VPO-Metrics §5.5."
+    attributes:
+      - id: vpo.output.emit_rtf
+        type: double
+        brief: "Streaming-phase output emission wall time / audio duration. unit=ratio"
+      - id: vpo.output.source_rtf
+        type: double
+        brief: "Pre-post-processor provider emission wall time / audio duration. unit=ratio"
+      - id: vpo.output.chain_overhead_ms
+        type: int
+        brief: "Summed wall time spent in inline audio_post processors during the turn. unit=ms"
+      - id: vpo.output.audio_output_ms
+        type: int
+        brief: "Total duration of emitted output audio. unit=ms"
+      - id: vpo.output.output_wait_ms
+        type: int
+        brief: "Engine-measured contiguous output stage wait (first raw audio chunk -> first emitted frame). unit=ms"
+      - id: vpo.output.commit_to_first_audio_ms
+        type: int
+        brief: "Engine-measured total post-commit wait (utterance.committed_at -> first emitted frame). unit=ms"
+
+  - id: registry.vpo.audio_post
+    type: attribute_group
+    brief: "Canonical inline Audio Post-Processor metrics (kind: audio_post). Units per VPO-Metrics §5.5."
+    attributes:
+      - id: vpo.audio_post.budget_ratio
+        type: double
+        brief: "Mean call latency / mean chunk audio duration (>1.0 cannot keep up with real time). unit=ratio"
+      - id: vpo.audio_post.latency_p50_ms
+        type: int
+        brief: "Median per-chunk processing latency. unit=ms"
+      - id: vpo.audio_post.latency_max_ms
+        type: int
+        brief: "Maximum per-chunk processing latency in the turn. unit=ms"
+      - id: vpo.audio_post.calls
+        type: int
+        brief: "Chunks processed in the turn. unit=count"
+      - id: vpo.audio_post.timeouts
+        type: int
+        brief: "Calls that exceeded the per-chunk timeout. unit=count"
+      - id: vpo.audio_post.failures
+        type: int
+        brief: "Calls that returned an error. unit=count"
+
+  - id: registry.vpo.annotator
+    type: attribute_group
+    brief: "Canonical off-critical-path Audio Annotator metrics (kind: annotator). Units per VPO-Metrics §5.5."
+    attributes:
+      - id: vpo.annotator.latency_p50_ms
+        type: int
+        brief: "Median per-segment annotation latency. unit=ms"
+      - id: vpo.annotator.lag_max_ms
+        type: int
+        brief: "Maximum lag of an annotation frame behind its corresponding audio timestamp. unit=ms"
+      - id: vpo.annotator.latency_max_ms
+        type: int
+        brief: "Maximum per-segment annotation latency in the turn. unit=ms"
+      - id: vpo.annotator.segments
+        type: int
+        brief: "Audio segments submitted to the annotator. unit=count"
+      - id: vpo.annotator.annotations
+        type: int
+        brief: "Annotation frames emitted. unit=count"
+      - id: vpo.annotator.dropped_chunks
+        type: int
+        brief: "Audio chunks dropped due to backpressure. unit=count"
+      - id: vpo.annotator.timeouts
+        type: int
+        brief: "Annotator calls that timed out. unit=count"
+      - id: vpo.annotator.skipped_segments
+        type: int
+        brief: "Segments skipped while the circuit breaker was open. unit=count"
+      - id: vpo.annotator.annotation_kbps
+        type: double
+        brief: "Annotation payload bitrate (kbps). unit=ratio"
+      - id: vpo.annotator.annotation_bytes
+        type: int
+        brief: "Total annotation payload bytes emitted in the turn. unit=bytes"
+      - id: vpo.annotator.breaker_open
+        type: int
+        brief: "1 if the annotator circuit breaker opened during the turn, 0 otherwise. unit=count"
 
   # ───────────────────────────────────────────────────────────────────────
   # Client timing events (span events on the turn span) — provenance=client

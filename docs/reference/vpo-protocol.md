@@ -1,11 +1,13 @@
 # VPO‑Protocol — Voice Pipeline Open Standard, Layer 3
 ## Client ↔ Server Contract — Specification v0.1 (Draft)
 
-> **Status:** Draft v0.1. Normative specification for Layer 3 of VPO
-> (see VPO-BLUEPRINT-OUTLINE.md, Part 5). Layer 3 defines the full
-> message contract between a voice client and the pipeline server. It is the **reference** layer:
-> a greenfield build adopts it wholesale; an existing stack adopts Layers 1–2 (Metrics, Telemetry)
-> and maps its own transport onto these semantics.
+> **Status:** Draft v0.1. Normative specification for Layer 3 of the Voice Pipeline Open Standard
+> (VPO), paired with [VPO-Metrics (Layer 1)](vpo-metrics.md),
+> [VPO-Telemetry (Layer 2)](vpo-telemetry.md), and the full client integration reference in
+> [Wire protocol](../clients/protocol.md). Layer 3 defines the message contract between a voice
+> client and the pipeline server. It is the **reference** layer: a greenfield build adopts it
+> wholesale; an existing stack adopts Layers 1–2 (Metrics, Telemetry) and maps its own transport
+> onto these semantics.
 >
 > **Conformance language.** **MUST / MUST NOT / SHOULD / SHOULD NOT / MAY** per RFC 2119.
 >
@@ -213,10 +215,6 @@ The server MUST emit `state_changed` on each transition. The `draining` state is
 is where the server waits for `playback_complete` / `playback_report` to finalize the turn (and
 metrics) with knowledge of what the client actually played.
 
-> **Note on prior drafts.** Earlier outline text listed a longer state set
-> (`Idle/Synthesizing/Playing/Complete/Error`). The authoritative wire states are the four above;
-> the blueprint outline §2.1 should be reconciled to these.
-
 ---
 
 ## 7. Audio format & connection quality (normative)
@@ -330,9 +328,8 @@ without a `turn_id` (session-level) distinctly from a turn-scoped one.
   §4.3) to a tenant key so no client can address or observe another tenant's sessions.
 - **PII.** Transcripts and audio are sensitive. `PipelineMessage` text, `text_truncated.final_text`,
   and `turn_metrics.snapshot.llm_response_text` MAY contain PII; deployments MUST define retention
-  and redaction policy for these fields. (The reference implementation's multi-tenant auth
-  hardening is in-progress — see the production go-live checklist; this section states the
-  requirement, which the reference does not yet fully satisfy.)
+  and redaction policy for these fields (see [Deployment guide](../guides/deployment.md) for
+  session capture retention and authentication configuration).
 
 ---
 

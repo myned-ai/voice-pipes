@@ -205,7 +205,7 @@ too_many_arguments = "allow"
 # version is the promise plugin authors build on (its stability policy is
 # docs/extending/sdk-stability.md); the rest move together.
 version = "0.1.0"
-license = "Apache-2.0"
+license = "BUSL-1.1"
 repository = "https://github.com/myned-ai/voice-pipes"
 # MSRV — Duration::from_mins/from_hours need 1.91 (duration_constructors_lite).
 # Keep in sync with voice-pipes/Dockerfile and Dockerfile.cuda.
