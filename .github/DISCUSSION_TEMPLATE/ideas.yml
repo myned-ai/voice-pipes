@@ -1,0 +1,22 @@
+title: "[Idea / RFC] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Idea or RFC summary
+      description: What capability, architectural improvement, or VPO-Metrics refinement are you proposing?
+    validations:
+      required: true
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation & use case
+      description: What problem does this solve for real-time voice agents?
+    validations:
+      required: true
+  - type: textarea
+    id: design
+    attributes:
+      label: Proposed design or trade-offs
+      description: How would this fit into Voice Pipes (SDK traits, TOML config, wire protocol, or observability)?

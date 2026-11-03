@@ -1,0 +1,25 @@
+title: "[Q&A] "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reaching out! Tip: running `voice-pipes --config <your-config.toml> check` or clicking **"Report for LLM"** on a session in the Admin Console often pinpoints configuration and latency issues immediately.
+  - type: textarea
+    id: question
+    attributes:
+      label: What are you trying to do or troubleshoot?
+      description: Describe your setup, goal, or question.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Configuration / Diagnostic output (optional)
+      description: Paste your relevant TOML config, `voice-pipes check` output, or Admin Console "Report for LLM" summary (**redact any API keys**).
+      render: toml
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: "e.g. Docker Compose on Ubuntu 24.04 (RTX 4090), Windows 11 native CPU, macOS M3"

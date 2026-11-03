@@ -1,5 +1,11 @@
-blank_issues_enabled: true
+blank_issues_enabled: false
 contact_links:
+  - name: Ask a question or get configuration help
+    url: https://github.com/myned-ai/voice-pipes/discussions
+    about: Use GitHub Discussions for usage questions, latency tuning, hardware sizing, and general help.
+  - name: Commercial licensing & enterprise support
+    url: https://github.com/myned-ai/voice-pipes/blob/main/COMMERCIAL.md
+    about: Inquiries regarding commercial production licenses, enterprise SLAs, or custom integrations.
   - name: Security vulnerability
     url: https://github.com/myned-ai/voice-pipes/blob/main/SECURITY.md
     about: Please report security issues privately — see the security policy, not a public issue.

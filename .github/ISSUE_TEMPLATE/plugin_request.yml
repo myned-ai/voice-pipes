@@ -1,0 +1,54 @@
+name: Provider / Plugin request
+description: Request or propose a new STT, TTS, LLM, S2S, VAD, or Turn Detection plugin
+labels: ["enhancement", "plugin"]
+body:
+  - type: dropdown
+    id: stage
+    attributes:
+      label: Pipeline stage
+      description: Which stage of the voice pipeline does this provider implement?
+      options:
+        - Speech-to-Text (STT)
+        - Text-to-Speech (TTS)
+        - LLM / Text Processor
+        - Speech-to-Speech (S2S / Realtime)
+        - Voice Activity Detection (VAD)
+        - Turn Detection
+    validations:
+      required: true
+  - type: dropdown
+    id: execution
+    attributes:
+      label: Execution model
+      options:
+        - Local / On-Device (ONNX, GGUF, native)
+        - Cloud API (WebSocket, gRPC, HTTP streaming)
+        - Local Sidecar (HTTP / gRPC)
+    validations:
+      required: true
+  - type: input
+    id: provider
+    attributes:
+      label: Model or provider name & links
+      description: Link to the model weights (Hugging Face), API documentation, or paper.
+      placeholder: "e.g. Deepgram Nova-3 WebSocket API (https://developers.deepgram.com/...)"
+    validations:
+      required: true
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Why this provider?
+      description: What latency, accuracy, language coverage, or licensing advantage does it bring?
+    validations:
+      required: true
+  - type: dropdown
+    id: contribution
+    attributes:
+      label: Are you interested in contributing this plugin via `voice-pipes-sdk`?
+      description: Plugins live under `plugins/<stage>/<name>` and depend only on `voice-pipes-sdk` (see `docs/extending/plugin-sdk.md`).
+      options:
+        - Yes — I would like to implement and submit a PR
+        - Maybe — with maintainer guidance
+        - No — requesting for the roadmap
+    validations:
+      required: true
