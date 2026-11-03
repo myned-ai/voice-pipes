@@ -99,6 +99,6 @@ pass-through.
 ## Pull requests
 
 Keep them focused and link the issue. CI must pass. Contributions are
-licensed under Apache-2.0 like the project (inbound = outbound); third-party
+covered by the [Contributor License Agreement](../../CLA.md); third-party
 code needs a compatible license and an entry in `NOTICE`. Security issues go
 to the address in `SECURITY.md`, not to a public issue.
