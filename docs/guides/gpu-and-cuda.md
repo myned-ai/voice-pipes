@@ -26,7 +26,7 @@ provider:
 2. Adding an opt-in CUDA execution provider for the ONNX Runtime
    sessions (encoder, decoder, joint, mel).
 
-Code lives under [voice-pipes-stt-nemotron/src/](../../voice-pipes-stt-nemotron/src/).
+Code lives under [plugins/stt/nemotron/src/](../../plugins/stt/nemotron/src/).
 
 ---
 
@@ -41,7 +41,7 @@ Symptoms (live mic playground):
   capability advertised streaming.
 
 Root cause: the `SttProvider::transcribe_stream` impl in
-[lib.rs](../../voice-pipes-stt-nemotron/src/lib.rs) buffered the entire utterance into
+[lib.rs](../../plugins/stt/nemotron/src/lib.rs) buffered the entire utterance into
 a `Vec<f32>` and only on `is_last` invoked the batch
 `transcribe_buffered`. So all encoder/decoder work happened **after**
 endpointing — wall time ≈ `audio_seconds × RTF` of the *full* VAD-tail
@@ -55,7 +55,7 @@ trait method just wasn't calling it.
 
 ## 2. The fix — true cache-aware streaming
 
-[streaming::StreamingEngine](../../voice-pipes-stt-nemotron/src/streaming.rs) owns:
+[streaming::StreamingEngine](../../plugins/stt/nemotron/src/streaming.rs) owns:
 
 - `NemotronSessions` (encoder + decoder + joint + mel)
 - `CacheTensors` (mutated in place across chunks)
@@ -72,7 +72,7 @@ It exposes:
   zero-pads remaining audio to a chunk window and runs final
   encoder/decoder steps so the right context lookahead is drained.
 
-[lib.rs::transcribe_stream](../../voice-pipes-stt-nemotron/src/lib.rs) now:
+[lib.rs::transcribe_stream](../../plugins/stt/nemotron/src/lib.rs) now:
 
 1. Checks out `NemotronSessions` from the pool, constructs
    `StreamingEngine`.
@@ -100,8 +100,8 @@ the 7-10-7 export) plus a small constant.
 
 | File | Change |
 |---|---|
-| [voice-pipes-stt-nemotron/src/lib.rs](../../voice-pipes-stt-nemotron/src/lib.rs) | Rewrote `transcribe_stream` end-to-end. Added `engine_chunk_progress` helper. Added `StreamingEngine` to the import set. |
-| [voice-pipes-stt-nemotron/src/streaming.rs](../../voice-pipes-stt-nemotron/src/streaming.rs) | Made `StreamingEngine.sample_pos` `pub` so the helper can read chunk progress without a new method. |
+| [plugins/stt/nemotron/src/lib.rs](../../plugins/stt/nemotron/src/lib.rs) | Rewrote `transcribe_stream` end-to-end. Added `engine_chunk_progress` helper. Added `StreamingEngine` to the import set. |
+| [plugins/stt/nemotron/src/streaming.rs](../../plugins/stt/nemotron/src/streaming.rs) | Made `StreamingEngine.sample_pos` `pub` so the helper can read chunk progress without a new method. |
 | [voice-pipes-admin/backend/app/main.py](../../voice-pipes-admin/backend/app/main.py) | Added `"nemotron-streaming"` to `_STREAMING_STT_PROVIDERS` so the diagnostic flips from `mode: "batch"` to `mode: "streaming"` and stops flagging `processing_ms` as an anomaly. |
 
 ### What was intentionally dropped
@@ -297,8 +297,8 @@ If absent, that's a DLL/PATH issue, not a build issue.
 ### Related files
 
 - [Cargo.toml](../../voice-pipes/Cargo.toml) — feature gates.
-- [voice-pipes-stt-nemotron/src/streaming.rs](../../voice-pipes-stt-nemotron/src/streaming.rs) — `open_session`.
-- [build-cuda.ps1](../build-cuda.ps1) — existing CUDA build helper for the candle/LLM path. Not directly required here.
+- [plugins/stt/nemotron/src/streaming.rs](../../plugins/stt/nemotron/src/streaming.rs) — `open_session`.
+- [build-cuda.ps1](../../scripts/build-cuda.ps1) — existing CUDA build helper for the candle/LLM path. Not directly required here.
 
 ---
 

@@ -1,0 +1,78 @@
+# Benchmark variant: Kyutai Pocket-TTS via HTTP sidecar.
+#
+# TTS-comparison variant. Mirror of bench-piper.toml with the TTS block
+# swapped to `pocket-http`; everything else is identical so the only
+# variable in the experiment is the TTS engine.
+#
+# Pair with: voice-pipes/worker-bench-pocket.toml
+#
+# Sidecar prerequisite (in another terminal):
+#   uvx pocket-tts serve --host 127.0.0.1 --port 8000
+#
+# Pre-warm the model cache (one-time, avoids cold-start dominating the
+# first scenario in the experiment):
+#   uvx pocket-tts generate --text "warm" --output-path $env:TEMP\warm.wav
+#
+# Build (one-time; needed because of the tts-pocket feature flag):
+#   cargo build --release -p voice-pipes-cli --features tts-pocket
+#
+# Run standalone (no orchestrator; WebSocket on 127.0.0.1:8802/ws):
+#   cargo run --release -p voice-pipes-cli --features tts-pocket -- --config examples/bench/bench-pocket-http.toml serve
+#   # or, after build:
+#   target\release\voice-pipes.exe --config examples/bench/bench-pocket-http.toml serve
+#
+# Run as a benchmark worker (registers with a running orchestrator):
+#   target\release\voice-pipes.exe --config examples/bench/bench-pocket-http.toml serve `
+#       --worker-config worker-bench-pocket.toml
+#
+# See also:
+#   - examples/bench/bench-piper.toml  (companion variant)
+#   - examples/tts/pocket-http.toml
+#   - run-benchmark-piper-vs-pocket.ps1
+
+[pipeline]
+name = "bench-pocket-http"
+
+[pipeline.audit]
+enabled = true
+captures_dir = "captures"
+
+[transport]
+enabled = true
+port = 8803
+
+[vad]
+mode = "silero"
+model = "models/silero_vad.onnx"
+speech_prob = 0.5
+min_speech_ms = 100
+min_silence_ms = 50
+
+[stt]
+provider = "parakeet-tdt"
+model_dir = "models/parakeet-tdt"
+
+[stt.options]
+initial_buffer_ms = 800.0
+inference_step_ms = 1000.0
+
+[turn_detection]
+mode = "layered"
+silence_timeout_ms = 1000
+
+[barge_in]
+enabled = true
+min_chunks = 3
+speech_threshold = 200.0
+
+[tts]
+provider = "pocket-http"
+endpoint = "http://127.0.0.1:8000"
+voice    = "alba"
+# request_timeout_ms = 60000
+
+# Echo the STT transcript straight to TTS — no LLM in the loop. This makes
+# the run a pure STT→TTS comparison so per-rep variance comes only from
+# the TTS engine.
+[[text_processor]]
+type = "echo"

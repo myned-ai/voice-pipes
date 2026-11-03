@@ -45,5 +45,5 @@ through function calling added to the OpenAI-compatible processor
 `voice-pipes/src/agent/client_tools.rs` (declarations, merge, fencing),
 `src/transport/mod.rs` (`ClientControl::ClientToolResult`),
 `src/transport/serve/realtime_runner/context/provider_handlers.rs`
-(dispatch and resolve), `voice-pipes-llm-openai-compat/` (function calling).
+(dispatch and resolve), `plugins/llm/openai-compat/` (function calling).
 Guide: [Tool calling](../../guides/tool-calling.md).

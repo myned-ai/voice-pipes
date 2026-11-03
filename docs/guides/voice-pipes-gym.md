@@ -290,7 +290,7 @@ The pre-configured test suite [`voice-pipes-bench/examples/benchmark/gym-suite.j
 Start a local worker running Parakeet STT, Qwen 2.5 LLM, and Piper TTS:
 
 ```sh
-voice-pipes --config examples/bench-gym.toml serve
+voice-pipes --config examples/bench/bench-gym.toml serve
 ```
 
 ### 2. Execute the Gym Benchmark Suite

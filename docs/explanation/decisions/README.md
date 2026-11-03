@@ -20,6 +20,7 @@ implementation plans that drove the work; the plans themselves are internal.
 | [Throughput observability](throughput-observability.md) | Real-time factors on the output stage and per-processor budgets, because a stream that trickles is invisible to latency metrics |
 | [Honest speech-to-speech latency](s2s-latency-measurement.md) | Time to first byte is anchored on the first audio, with the anchor's provenance on the wire and the provider's endpointing lag measured separately |
 | [STT session lifecycle](stt-session-lifecycle.md) | Parse every server frame, classify capacity apart from auth, and terminate or deadline every session on every exit path |
+| [Workspace layout](workspace-layout.md) | Keep the 7 core/shared crates at the repository root and group all 20 provider plugin crates under `plugins/<stage>/<name>` while preserving `voice-pipes-<stage>-<name>` package names |
 
 ## Writing one
 

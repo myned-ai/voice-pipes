@@ -47,7 +47,7 @@ external weights (1.2 GB each, byte-identical), `LICENSE-OpenMDW-1.1` and
 `NOTICE`:
 
 ```sh
-python voice-pipes/scripts/download_nemotron35.py
+python scripts/download_nemotron35.py
 ```
 
 The script verifies every file's SHA-256 and fetches the shared weights once
@@ -56,7 +56,7 @@ needed. Two pinned sources: the default fetches the community export from
 Hugging Face file by file; `--source github` fetches this project's own
 export as one archive from its release (`models-nemotron35-onnx-r2`,
 `SHA256SUMS` inside), made with the tooling under
-`voice-pipes/scripts/nemotron35/` — while the repository is private that
+`scripts/nemotron35/` — while the repository is private that
 needs a token in `GITHUB_TOKEN` or a logged-in `gh`. The two exports carry
 byte-identical encoder weights and decode identically. The wizard offers
 the provider and points at the directory but does not download it.
@@ -164,7 +164,7 @@ NVIDIA NeMo; model card `nvidia/nemotron-3.5-asr-streaming-0.6b`
 (OpenMDW-1.1, ungated). This project's export (release
 `models-nemotron35-onnx-r2`) is made from that checkpoint with the
 community tooling of `codavidgarcia/nemotron-3.5-asr-streaming-onnx`
-(Apache-2.0), vendored under `voice-pipes/scripts/nemotron35/`; the
+(Apache-2.0), vendored under `scripts/nemotron35/`; the
 community's own export `codavidgarcia/nemotron-3.5-asr-streaming-0.6b-onnx`
 is the download script's Hugging Face source and the reference the plugin's
 token tests are held to. The English-only

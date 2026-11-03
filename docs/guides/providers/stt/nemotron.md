@@ -66,8 +66,8 @@ no longer gated: no token or license click needed as of 2026-09) and run the
 export once:
 
 ```sh
-# see voice-pipes/scripts/README-export-nemotron.md
-pwsh voice-pipes/scripts/export-nemotron.ps1          # or export_nemotron_streaming.py / Dockerfile.nemo-export
+# see scripts/README-export-nemotron.md
+pwsh scripts/export-nemotron.ps1          # or export_nemotron_streaming.py / Dockerfile.nemo-export
 ```
 
 The result is `encoder.onnx`, `decoder.onnx`, `joint.onnx`,

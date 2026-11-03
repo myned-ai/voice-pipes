@@ -1,5 +1,5 @@
 # Pipeline config — passed via `--config pipeline.toml`.
-# Based on examples/test-live-parakeet.toml. Requires OPENAI_API_KEY.
+# Based on examples/dev/test-live-parakeet.toml. Requires OPENAI_API_KEY.
 #
 # Build features required:
 #   stt-parakeet, tts-piper, llm-gguf, vad-silero, turn-smart, synthetic-caller

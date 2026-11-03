@@ -9,7 +9,7 @@ This directory (`voice-pipes/examples/features/`) together with sibling folders 
 | Feature | Pipeline Mode | Cargo Feature(s) | Example Config |
 | :--- | :--- | :--- | :--- |
 | **VAP Turn Detection** (`mode = "vap"`, stereo floor prediction + lead-time `expected_end_in`) | Cascade (`STT -> LLM -> TTS`), `serve` & `live` | `turn-vap` | [`examples/features/turn-vap.toml`](turn-vap.toml) |
-| **Smart Turn Detection** (`mode = "smart"`, Pipecat Whisper 8 s acoustic endpointer) | Cascade (`STT -> LLM -> TTS`), `serve` & `live` | `turn-smart` | [`examples/test-live-parakeet-smart.toml`](../test-live-parakeet-smart.toml) |
+| **Smart Turn Detection** (`mode = "smart"`, Pipecat Whisper 8 s acoustic endpointer) | Cascade (`STT -> LLM -> TTS`), `serve` & `live` | `turn-smart` | [`examples/dev/test-live-parakeet-smart.toml`](../dev/test-live-parakeet-smart.toml) |
 | **Turn-Detection Corpus Recording & Offline Scoring** (`record_session_audio = true`) | Cascade (`serve` & `live`) + `voice-pipes-bench` | `turn-smart`, `turn-vap` | [`examples/live/english-turn-corpus.toml`](../live/english-turn-corpus.toml) |
 | **Speculative Execution** (`[speculative]` partial LLM prefill + speculative TTS) | Cascade (`STT -> LLM -> TTS`), `serve` | *(built-in)* | [`examples/features/speculative-execution.toml`](speculative-execution.toml) |
 | **Adaptive Network Quality & Custom Grading** (`[adaptive_quality]`, `[grading]`) | Cascade & Realtime S2S, `serve` | *(built-in)* | [`examples/features/adaptive-quality.toml`](adaptive-quality.toml) |
@@ -45,7 +45,7 @@ cargo run --release -p voice-pipes-cli --features turn-vap -- \
 ```sh
 cd voice-pipes
 cargo run --release -p voice-pipes-cli --features turn-smart -- \
-  --config examples/test-live-parakeet-smart.toml live
+  --config examples/dev/test-live-parakeet-smart.toml live
 ```
 
 ### 3. Speculative Execution (`speculative-execution.toml`)

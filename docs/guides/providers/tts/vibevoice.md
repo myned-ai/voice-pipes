@@ -19,7 +19,7 @@ VibeVoice is a **quality-first, long-form** TTS. It is **not** a low-latency
 conversational model — see [Performance](#performance-measured).
 
 ## How it runs
-The sidecar (`voice-pipes/scripts/vibevoice/server.py`) loads the model and
+The sidecar (`scripts/vibevoice/server.py`) loads the model and
 exposes an **OpenAI-compatible** API:
 - `POST /v1/audio/speech` — synthesis (streams raw PCM when `response_format: "pcm"`).
 - `GET  /v1/models` — advertises the model **id + runtime version** (so the

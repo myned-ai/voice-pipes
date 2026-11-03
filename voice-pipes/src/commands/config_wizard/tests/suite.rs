@@ -930,12 +930,17 @@ fn every_workspace_member_is_copied_into_the_worker_images() {
             })
             .collect();
         for member in &members {
+            let target_manifest = format!("{member}/Cargo.toml");
+            let target_segs: Vec<&str> = target_manifest.split('/').collect();
             let copied = copy_args.iter().any(|arg| {
+                let arg_segs: Vec<&str> = arg.split('/').collect();
                 *arg == *member
                     || arg.starts_with(&format!("{member}/"))
-                    || arg.split_once('/').is_some_and(|(dir, rest)| {
-                        rest == "Cargo.toml" && segment_matches(dir, member)
-                    })
+                    || (arg_segs.len() == target_segs.len()
+                        && arg_segs
+                            .iter()
+                            .zip(&target_segs)
+                            .all(|(pat, name)| segment_matches(pat, name)))
             });
             assert!(
                 copied,
@@ -959,21 +964,27 @@ fn every_logging_workspace_crate_is_named_in_the_images_rust_log() {
         .and_then(|(_, rest)| rest.split_once(']'))
         .map(|(block, _)| block)
         .expect("workspace members");
-    let logging: Vec<&str> = members_block
+    let logging: Vec<String> = members_block
         .split('"')
         .skip(1)
         .step_by(2)
-        .filter(|m| {
+        .filter_map(|m| {
             let manifest: toml::Table = repo_file(&format!("{m}/Cargo.toml"))
                 .parse()
                 .unwrap_or_else(|e| panic!("{m}/Cargo.toml: {e}"));
-            manifest
+            let logs = manifest
                 .get("dependencies")
                 .and_then(toml::Value::as_table)
-                .is_some_and(|deps| deps.contains_key("tracing"))
+                .is_some_and(|deps| deps.contains_key("tracing"));
+            logs.then(|| {
+                manifest["package"]["name"]
+                    .as_str()
+                    .unwrap_or_else(|| panic!("{m}/Cargo.toml has no package.name"))
+                    .to_string()
+            })
         })
         .collect();
-    assert!(logging.contains(&"voice-pipes"), "{logging:?}");
+    assert!(logging.iter().any(|m| m == "voice-pipes"), "{logging:?}");
 
     for dockerfile in ["voice-pipes/Dockerfile", "voice-pipes/Dockerfile.cuda"] {
         let text = repo_file(dockerfile);
@@ -1005,7 +1016,8 @@ fn a_crate_outside_the_copy_pattern_is_caught() {
         .find(|l| l.trim_start().starts_with("COPY --parents"))
         .expect("the Dockerfile copies crates by pattern");
     assert!(
-        pattern_copy.contains("voice-pipes*/Cargo.toml"),
+        pattern_copy.contains("voice-pipes*/Cargo.toml")
+            && pattern_copy.contains("plugins/*/*/Cargo.toml"),
         "{pattern_copy}"
     );
     // Every current member follows the naming the pattern relies on.
@@ -1016,9 +1028,11 @@ fn a_crate_outside_the_copy_pattern_is_caught() {
         .map(|(block, _)| block)
         .expect("workspace members");
     for member in members_block.split('"').skip(1).step_by(2) {
+        let valid = member.starts_with("voice-pipes")
+            || (member.starts_with("plugins/") && member.split('/').count() == 3);
         assert!(
-            member.starts_with("voice-pipes"),
-            "workspace member `{member}` is outside the `voice-pipes*` pattern the Dockerfiles copy"
+            valid,
+            "workspace member `{member}` is outside the `voice-pipes*` / `plugins/*/*` pattern the Dockerfiles copy"
         );
     }
 }

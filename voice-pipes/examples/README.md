@@ -65,10 +65,10 @@ You can run any pipeline component independently without running a full conversa
   - [`orchestrate/worker.toml`](orchestrate/worker.toml): Fleet cluster worker configuration.
 
 * **A/B Benchmarking & Variant Evaluation** in root [`examples/`](.):
-  - [`bench-piper.toml`](bench-piper.toml): Isolated TTS benchmark variant (STT $\to$ Echo $\to$ Piper TTS) evaluating voice latency without LLM jitter.
-  - [`bench-pocket-http.toml`](bench-pocket-http.toml): Pocket-TTS companion variant for side-by-side TTS shootout.
-  - [`bench-openai.toml`](bench-openai.toml): Cloud OpenAI GPT-4o-mini LLM benchmark variant for latency/quality comparison against local models.
-  - [`bench-gemma4-concise.toml`](bench-gemma4-concise.toml): Local GGUF Gemma 4 LLM benchmark variant.
+  - [`bench-piper.toml`](bench/bench-piper.toml): Isolated TTS benchmark variant (STT $\to$ Echo $\to$ Piper TTS) evaluating voice latency without LLM jitter.
+  - [`bench-pocket-http.toml`](bench/bench-pocket-http.toml): Pocket-TTS companion variant for side-by-side TTS shootout.
+  - [`bench-openai.toml`](bench/bench-openai.toml): Cloud OpenAI GPT-4o-mini LLM benchmark variant for latency/quality comparison against local models.
+  - [`bench-gemma4-concise.toml`](bench/bench-gemma4-concise.toml): Local GGUF Gemma 4 LLM benchmark variant.
 
 ---
 

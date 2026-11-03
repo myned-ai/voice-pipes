@@ -1,5 +1,5 @@
 # Worker config for benchmark variant: Pocket-TTS (HTTP sidecar)
-# Transport:  8803 (set in examples/bench-pocket-http.toml)
+# Transport:  8803 (set in examples/bench/bench-pocket-http.toml)
 # Debug API:  8088
 # Tags:       variant:pocket-http, tts:pocket-http
 #

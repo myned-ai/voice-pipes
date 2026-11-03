@@ -38,8 +38,29 @@ fn root() -> PathBuf {
         .to_path_buf()
 }
 
+fn provider_rel_dir(name: &str) -> String {
+    for prefix in PROVIDER_PREFIXES {
+        if let Some(rest) = name.strip_prefix(prefix) {
+            let stage = prefix
+                .strip_prefix("voice-pipes-")
+                .expect("voice-pipes- prefix")
+                .trim_end_matches('-');
+            return format!("plugins/{stage}/{rest}");
+        }
+    }
+    name.to_string()
+}
+
+fn member_dir(name_or_dir: &str) -> PathBuf {
+    if is_provider(name_or_dir) {
+        root().join(provider_rel_dir(name_or_dir))
+    } else {
+        root().join(name_or_dir)
+    }
+}
+
 fn manifest(dir: &str) -> toml::Table {
-    let path = root().join(dir).join("Cargo.toml");
+    let path = member_dir(dir).join("Cargo.toml");
     let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
     text.parse()
         .unwrap_or_else(|e| panic!("{}: {e}", path.display()))
@@ -50,7 +71,13 @@ fn members() -> Vec<String> {
         .as_array()
         .expect("workspace.members")
         .iter()
-        .map(|m| m.as_str().expect("member path").to_string())
+        .map(|m| {
+            let dir = m.as_str().expect("member path");
+            manifest(dir)["package"]["name"]
+                .as_str()
+                .expect("package.name")
+                .to_string()
+        })
         .collect()
 }
 
@@ -643,12 +670,12 @@ fn codeowners_problems(owners: &str, providers: &[String]) -> Vec<String> {
     providers
         .iter()
         .filter(|p| {
-            let entry = format!("/{p}/");
+            let entry = format!("/{}/", provider_rel_dir(p));
             !owners
                 .lines()
                 .any(|l| l.split_whitespace().next() == Some(entry.as_str()))
         })
-        .map(|p| format!(".github/CODEOWNERS has no `/{p}/` line"))
+        .map(|p| format!(".github/CODEOWNERS has no `/{}/` line", provider_rel_dir(p)))
         .collect()
 }
 
@@ -662,14 +689,14 @@ fn every_provider_has_a_codeowners_entry() {
 #[test]
 fn the_codeowners_rule_catches_a_missing_or_commented_entry() {
     let providers = ["voice-pipes-tts-x".to_string()];
-    assert_holds(&codeowners_problems("/voice-pipes-tts-x/ @a\n", &providers));
+    assert_holds(&codeowners_problems("/plugins/tts/x/ @a\n", &providers));
     assert_reports(
-        &codeowners_problems("# /voice-pipes-tts-x/ @a\n", &providers),
-        "no `/voice-pipes-tts-x/`",
+        &codeowners_problems("# /plugins/tts/x/ @a\n", &providers),
+        "no `/plugins/tts/x/`",
     );
     assert_reports(
-        &codeowners_problems("/voice-pipes-tts-xy/ @a\n", &providers),
-        "no `/voice-pipes-tts-x/`",
+        &codeowners_problems("/plugins/tts/xy/ @a\n", &providers),
+        "no `/plugins/tts/x/`",
     );
 }
 
@@ -696,7 +723,7 @@ fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
 fn crate_sources(member: &str) -> Vec<PathBuf> {
     let mut files = Vec::new();
     for dir in ["src", "tests", "examples", "benches"] {
-        rust_files(&root().join(member).join(dir), &mut files);
+        rust_files(&member_dir(member).join(dir), &mut files);
     }
     files
 }
@@ -781,11 +808,11 @@ fn unsafe_problems(file: &syn::File, is_library_root: bool) -> Vec<String> {
 #[test]
 fn every_provider_forbids_unsafe_code() {
     for p in providers() {
-        let lib = root().join(&p).join("src/lib.rs");
+        let lib = member_dir(&p).join("src/lib.rs");
         for file in crate_sources(&p) {
             let is_root = file == lib;
             // The library's own modules are under its forbid.
-            if !is_root && file.starts_with(root().join(&p).join("src")) {
+            if !is_root && file.starts_with(member_dir(&p).join("src")) {
                 continue;
             }
             let problems = unsafe_problems(&parse(&read(&file), &file), is_root);
@@ -893,7 +920,7 @@ fn undenied_parsing_lints(file: &syn::File) -> Vec<String> {
 #[test]
 fn every_provider_denies_the_panicking_parsing_lints() {
     for p in providers() {
-        let lib = root().join(&p).join("src/lib.rs");
+        let lib = member_dir(&p).join("src/lib.rs");
         let missing = undenied_parsing_lints(&parse(&read(&lib), &lib));
         assert!(
             missing.is_empty(),
@@ -1338,7 +1365,7 @@ fn log_lines_carry_no_payload() {
     let mut checked = 0;
     for p in members() {
         let mut files = Vec::new();
-        rust_files(&root().join(&p).join("src"), &mut files);
+        rust_files(&member_dir(&p).join("src"), &mut files);
         for file in files {
             if file.components().any(|c| c.as_os_str() == "tests") {
                 continue;
@@ -1472,7 +1499,7 @@ fn the_engine_names_no_provider() {
     let mut names = BTreeSet::new();
     for p in members().into_iter().filter(|m| is_provider(m)) {
         let mut files = Vec::new();
-        rust_files(&root().join(&p).join("src"), &mut files);
+        rust_files(&member_dir(&p).join("src"), &mut files);
         for file in files {
             names.extend(factory_names(&parse(&read(&file), &file)));
         }
@@ -1796,7 +1823,7 @@ fn unlisted_public(file: &syn::File, allowed: &[&str]) -> Vec<String> {
 #[test]
 fn providers_expose_only_the_listed_api() {
     for p in providers() {
-        let lib = root().join(&p).join("src/lib.rs");
+        let lib = member_dir(&p).join("src/lib.rs");
         let file = parse(&read(&lib), &lib);
         let allowed: Vec<&str> = PUBLIC_API
             .iter()
@@ -2331,23 +2358,23 @@ const LONG_FUNCTIONS: &[(&str, &str)] = &[
     ),
     ("voice-pipes-cli/src/main.rs", "run"),
     (
-        "voice-pipes-llm-gguf/src/generation.rs",
+        "plugins/llm/gguf/src/generation.rs",
         "process_stream_inner",
     ),
-    ("voice-pipes-llm-gguf/src/schema.rs", "schema"),
-    ("voice-pipes-llm-openai-compat/src/schema.rs", "schema"),
-    ("voice-pipes-s2s-elevenlabs/src/lib.rs", "parse_event"),
-    ("voice-pipes-s2s-gemini/src/lib.rs", "build_session_update"),
-    ("voice-pipes-s2s-gemini/src/lib.rs", "parse_event"),
-    ("voice-pipes-s2s-openai/src/lib.rs", "parse_event"),
-    ("voice-pipes-stt-assemblyai/src/schema.rs", "schema"),
-    ("voice-pipes-stt-google/src/schema.rs", "schema"),
+    ("plugins/llm/gguf/src/schema.rs", "schema"),
+    ("plugins/llm/openai-compat/src/schema.rs", "schema"),
+    ("plugins/s2s/elevenlabs/src/lib.rs", "parse_event"),
+    ("plugins/s2s/gemini/src/lib.rs", "build_session_update"),
+    ("plugins/s2s/gemini/src/lib.rs", "parse_event"),
+    ("plugins/s2s/openai/src/lib.rs", "parse_event"),
+    ("plugins/stt/assemblyai/src/schema.rs", "schema"),
+    ("plugins/stt/google/src/schema.rs", "schema"),
     (
-        "voice-pipes-stt-nemotron/src/provider.rs",
+        "plugins/stt/nemotron/src/provider.rs",
         "transcribe_stream",
     ),
     (
-        "voice-pipes-stt-nemotron35/src/provider.rs",
+        "plugins/stt/nemotron35/src/provider.rs",
         "transcribe_stream",
     ),
     ("voice-pipes/src/agent/gateway.rs", "pump"),
@@ -2377,8 +2404,8 @@ const LONG_FUNCTIONS: &[(&str, &str)] = &[
     ("voice-pipes/src/pipeline/tts.rs", "tts_task"),
     ("voice-pipes/src/pipeline/vad.rs", "vad_filter_task"),
     ("voice-pipes/src/realtime/client.rs", "connect_with"),
-    ("voice-pipes-stt-moonshine/src/lib.rs", "transcribe_stream"),
-    ("voice-pipes-stt-parakeet/src/lib.rs", "transcribe_stream"),
+    ("plugins/stt/moonshine/src/lib.rs", "transcribe_stream"),
+    ("plugins/stt/parakeet/src/lib.rs", "transcribe_stream"),
     (
         "voice-pipes/src/transport/serve/realtime_runner/context/provider_handlers.rs",
         "handle_agent_event",

@@ -108,6 +108,7 @@
   - [Throughput observability](explanation/decisions/throughput-observability.md)
   - [Honest speech-to-speech latency](explanation/decisions/s2s-latency-measurement.md)
   - [STT session lifecycle](explanation/decisions/stt-session-lifecycle.md)
+  - [Workspace layout](explanation/decisions/workspace-layout.md)
 
 # Contributing
 

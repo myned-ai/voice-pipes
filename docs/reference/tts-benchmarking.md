@@ -169,7 +169,7 @@ the worker subcommand is `serve` (not `worker`):
 
 ```pwsh
 cd voice-pipes
-cargo run --release -p voice-pipes-cli --features tts-piper -- --config examples/bench-piper.toml serve
+cargo run --release -p voice-pipes-cli --features tts-piper -- --config examples/bench/bench-piper.toml serve
 ```
 
 > **Windows note:** `cargo run` overwrites `target\release\voice-pipes.exe` on
@@ -178,7 +178,7 @@ cargo run --release -p voice-pipes-cli --features tts-piper -- --config examples
 > the pattern.
 
 The worker will print its WS bind address. With the bundled
-[`bench-piper.toml`](../../voice-pipes/examples/bench-piper.toml) the
+[`bench-piper.toml`](../../voice-pipes/examples/bench/bench-piper.toml) the
 transport listens on `127.0.0.1:8802` and the WS endpoint is `/ws`.
 Note the captures directory from the `[pipeline.audit]` section — TTS
 WAVs land at `<captures_dir>/<session_id>/tts-only/<id>.wav`. If
@@ -286,12 +286,12 @@ uvx pocket-tts serve --host 127.0.0.1 --port 8000
 
 # Terminal B — Piper worker
 .\target\release\voice-pipes.exe `
-    --config examples/bench-piper.toml serve `
+    --config examples/bench/bench-piper.toml serve `
     --worker-config worker-bench-piper.toml
 
 # Terminal C — Pocket worker
 .\target\release\voice-pipes.exe `
-    --config examples/bench-pocket-http.toml serve `
+    --config examples/bench/bench-pocket-http.toml serve `
     --worker-config worker-bench-pocket.toml
 ```
 
@@ -339,8 +339,8 @@ $expBody = @{
   name = "piper-vs-pocket smoke"
   test_suite_id = $suiteId
   variants = @(
-    @{ id = "piper";  name = "piper";  config_path = "examples/bench-piper.toml";       config_hash = ""; tags = @("tts:piper") },
-    @{ id = "pocket"; name = "pocket"; config_path = "examples/bench-pocket-http.toml"; config_hash = ""; tags = @("tts:pocket-http") }
+    @{ id = "piper";  name = "piper";  config_path = "examples/bench/bench-piper.toml";       config_hash = ""; tags = @("tts:piper") },
+    @{ id = "pocket"; name = "pocket"; config_path = "examples/bench/bench-pocket-http.toml"; config_hash = ""; tags = @("tts:pocket-http") }
   )
 } | ConvertTo-Json -Depth 5
 

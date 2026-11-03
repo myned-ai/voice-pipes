@@ -17,7 +17,7 @@ Voice Pipes is an ultra-low-latency, modular conversational voice pipeline runti
   - `voice-pipes-bench`: Automated latency, RTF, and WER benchmarking suite.
   - `voice-pipes-cli`: Command-line interface and configuration wizard.
   - `voice-pipes-gym`: Reinforcement-learning environment and regression harness for voice agents.
-- **Plugin Crates (20 crates)**:
+- **Plugin Crates (20 crates in `plugins/{stt,tts,llm,s2s,turn,vad}/`)**:
   - STT: `voice-pipes-stt-parakeet`, `voice-pipes-stt-nemotron`, `voice-pipes-stt-nemotron35`, `voice-pipes-stt-moonshine`, `voice-pipes-stt-assemblyai`, `voice-pipes-stt-google`.
   - TTS: `voice-pipes-tts-kokoro`, `voice-pipes-tts-piper`, `voice-pipes-tts-pocket`, `voice-pipes-tts-openai`, `voice-pipes-tts-gemini`, `voice-pipes-tts-elevenlabs`.
   - LLM: `voice-pipes-llm-openai-compat`, `voice-pipes-llm-gguf`.
@@ -107,7 +107,7 @@ npm test
 When implementing a new AI model provider (e.g. STT, TTS, or LLM):
 
 1. **Create the Crate**:
-   Create a new crate `voice-pipes-<stage>-<name>` in the workspace root.
+   Create a new crate `plugins/<stage>/<name>` (package name `voice-pipes-<stage>-<name>`) in the workspace.
    In `Cargo.toml`:
    ```toml
    [dependencies]

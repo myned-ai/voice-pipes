@@ -18,7 +18,7 @@ Use this skill when a user asks to create, scaffold, or implement a new provider
 ## 2. Scaffolding Steps
 
 ### Step 1: Crate Setup
-Create a new directory in the workspace root named `voice-pipes-<stage>-<name>`:
+Create a new directory under `plugins/<stage>/<name>` (with package name `voice-pipes-<stage>-<name>`):
 - STT: `voice-pipes-stt-<name>`
 - TTS: `voice-pipes-tts-<name>`
 - LLM: `voice-pipes-llm-<name>`
@@ -28,7 +28,7 @@ Create a new directory in the workspace root named `voice-pipes-<stage>-<name>`:
 
 Add the crate to workspace `Cargo.toml` under `members = [...]`.
 
-In `voice-pipes-<stage>-<name>/Cargo.toml`:
+In `plugins/<stage>/<name>/Cargo.toml`:
 ```toml
 [package]
 name = "voice-pipes-<stage>-<name>"

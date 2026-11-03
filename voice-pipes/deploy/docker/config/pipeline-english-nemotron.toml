@@ -18,7 +18,7 @@
 #
 # The model is not downloadable as ONNX. It has to be exported once from
 # NVIDIA's checkpoint (no longer gated) into models/nemotron-streaming/7-10-7 -- see
-# voice-pipes/scripts/README-export-nemotron.md. Until that directory exists
+# scripts/README-export-nemotron.md. Until that directory exists
 # this worker cannot start, which is why its service sits behind the
 # `nemotron` compose profile.
 #

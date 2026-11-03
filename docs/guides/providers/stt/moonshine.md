@@ -37,7 +37,7 @@ model_dir = "models/moonshine"
 `tokenizer.json` from `onnx-community/moonshine-base-ONNX`:
 
 ```sh
-python voice-pipes/scripts/download_moonshine.py
+python scripts/download_moonshine.py
 ```
 
 The wizard downloads them too.

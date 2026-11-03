@@ -18,8 +18,8 @@ Two parallel implementations exist, one per LLM pathway:
 
 | Pathway | Struct | File | Lock |
 |---------|--------|------|------|
-| Local GGUF (candle) | `ConversationMemoryWrapper` | `voice-pipes-llm-gguf/src/memory.rs` | `RwLock<Vec<Message>>` |
-| OpenAI-compat API | `OpenAiCompatProcessor` | `voice-pipes-llm-openai-compat/src/lib.rs` | `Mutex<Vec<ChatMessage>>` |
+| Local GGUF (candle) | `ConversationMemoryWrapper` | `plugins/llm/gguf/src/memory.rs` | `RwLock<Vec<Message>>` |
+| OpenAI-compat API | `OpenAiCompatProcessor` | `plugins/llm/openai-compat/src/lib.rs` | `Mutex<Vec<ChatMessage>>` |
 
 ---
 
@@ -74,7 +74,7 @@ No history is shared across sessions.
 
 ### 2.2 Chat templates (local LLM only)
 
-`ChatTemplate` trait in `voice-pipes-llm-gguf/src/chat_template.rs` formats the
+`ChatTemplate` trait in `plugins/llm/gguf/src/chat_template.rs` formats the
 `[system, history…, user]` message array into the model-specific prompt string:
 
 | Template | Format | Models |
@@ -84,7 +84,7 @@ No history is shared across sessions.
 
 ### 2.3 System-prompt KV-cache prefill
 
-For local models, `voice-pipes-llm-gguf/src/prefill.rs` can pre-compute the system prompt
+For local models, `plugins/llm/gguf/src/prefill.rs` can pre-compute the system prompt
 into the KV-cache at startup. On each turn `reset_cache()` restores the
 prefill snapshot so only conversation tokens (history + new user message) need
 processing. That needs a backend that takes a batch of tokens at an offset;

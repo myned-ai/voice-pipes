@@ -1,0 +1,52 @@
+# Benchmark variant: Voice Pipes Gym with Open LLM (e.g. Qwen 2.5 / Llama 3)
+#
+# Pipeline configured for Voice Pipes Gym RL evaluations and benchmarks.
+# The connected benchmark runner injects task-specific client tools dynamically
+# during session handshake (e.g. banking transfers, order lookups, clinic booking).
+#
+# Run standalone:
+#   cargo run --release --features="stt-parakeet,tts-piper,llm-openai-compat" -- `
+#       --config examples/bench/bench-gym.toml serve
+
+[pipeline]
+name = "bench-gym"
+
+[pipeline.audit]
+enabled = false
+
+[transport]
+enabled = true
+port = 8805
+
+[vad]
+mode = "silero"
+model = "models/silero_vad.onnx"
+speech_prob = 0.5
+min_speech_ms = 100
+min_silence_ms = 150
+
+[stt]
+provider = "parakeet-tdt"
+model_dir = "models/parakeet-tdt"
+
+[turn_detection]
+mode = "layered"
+silence_timeout_ms = 500
+
+[barge_in]
+enabled = true
+min_chunks = 2
+speech_threshold = 200.0
+
+[[text_processor]]
+type = "openai-compat"
+# base_url = "http://localhost:8000/v1"   # uncomment for local vLLM / Ollama
+model = "gpt-4o-mini"
+# api_key = ""                            # uses OPENAI_API_KEY env var by default
+system_prompt = "You are a concise, helpful voice assistant with access to client tools. Call the appropriate tools to answer the user's request. Keep spoken responses short and natural."
+max_tokens = 150
+temperature = 0.2
+
+[tts]
+provider = "piper"
+model = "models/en_US-lessac-medium.onnx"

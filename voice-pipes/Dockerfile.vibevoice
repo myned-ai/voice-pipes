@@ -52,7 +52,7 @@ RUN pip install --upgrade pip \
 # 2. Sidecar runtime deps (incl. sentencepiece + protobuf for the Qwen2 tokenizer)
 #    + huggingface_hub (used by download_model.py). Copy just the requirements
 #    first to keep this layer cached across server.py edits.
-COPY voice-pipes/scripts/vibevoice/requirements.txt /app/scripts/vibevoice/requirements.txt
+COPY scripts/vibevoice/requirements.txt /app/scripts/vibevoice/requirements.txt
 RUN pip install -r /app/scripts/vibevoice/requirements.txt huggingface_hub
 
 # 3. The vendored VibeVoice package (editable), matching the host README's
@@ -75,7 +75,7 @@ ENV HF_HOME=/app/.cache/huggingface
 RUN python -c "from huggingface_hub import snapshot_download; snapshot_download('${TOKENIZER_REPO}', allow_patterns=['tokenizer*','vocab.json','merges.txt','special_tokens_map.json','*.model','generation_config.json','config.json'])"
 
 # 4. Server + download scripts + the boot-time asset bootstrap entrypoint.
-COPY voice-pipes/scripts/vibevoice /app/scripts/vibevoice
+COPY scripts/vibevoice /app/scripts/vibevoice
 COPY voice-pipes/deploy/docker/scripts/vibevoice-entrypoint.sh /usr/local/bin/vibevoice-entrypoint.sh
 RUN chmod +x /usr/local/bin/vibevoice-entrypoint.sh
 

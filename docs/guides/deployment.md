@@ -162,7 +162,7 @@ Moonshine worker 0.5 GB, the Gemini worker under 0.1 GB, llama-server 0.5 GB
 in RAM with the model on the GPU. Two Nemotron workers and the sidecar on a
 16 GB VM is already over.
 
-To see what idle costs on your host, `voice-pipes/scripts/idle_soak.py`
+To see what idle costs on your host, `scripts/idle_soak.py`
 leaves a worker untouched for chosen gaps, then compares its first turn with
 a warm one, stage by stage, alongside the worker's swapped memory and page
 faults; `--squeeze-mb` swaps a worker out on purpose to reproduce the cost

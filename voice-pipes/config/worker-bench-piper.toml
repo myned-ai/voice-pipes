@@ -1,5 +1,5 @@
 # Worker config for benchmark variant: Piper TTS
-# Transport:  8802 (set in examples/bench-piper.toml)
+# Transport:  8802 (set in examples/bench/bench-piper.toml)
 # Debug API:  8087
 # Tags:       variant:piper, tts:piper
 #

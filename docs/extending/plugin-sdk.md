@@ -1313,7 +1313,7 @@ same rule the built-in choices are held to.
 
 ## 11. A local ONNX model as a plugin: Nemotron 3.5
 
-`voice-pipes-stt-nemotron35/` is a recogniser added to the repository without
+`plugins/stt/nemotron35/` (`voice-pipes-stt-nemotron35`) is a recogniser added to the repository without
 a line of provider code in the engine. It exists as much to prove that route
 as to run the model, so this section is the recipe it leaves behind. When a
 model needs an engine edit beyond a defaulted trait addition, that is a gap in
@@ -1345,7 +1345,7 @@ shows only changes that serve every recogniser, and
 ### 11.2 The crate
 
 ```
-voice-pipes-stt-nemotron35/
+plugins/stt/nemotron35/
 ├── Cargo.toml          ← voice-pipes-sdk, voice-pipes-onnx, ort, rustfft; feature ort-cuda
 ├── src/
 │   ├── features.rs     ← log-mel front-end, written to the model's numbers
@@ -1424,7 +1424,7 @@ log, normalisation).
 # voice-pipes-cli/Cargo.toml
 [features]
 stt-nemotron35      = ["dep:voice-pipes-stt-nemotron35"]
-stt-nemotron35-cuda = ["stt-nemotron35", "voice-pipes-stt-nemotron35/ort-cuda"]
+stt-nemotron35-cuda = ["stt-nemotron35", "plugins/stt/nemotron35/ort-cuda"]
 
 [dependencies]
 voice-pipes-stt-nemotron35 = { workspace = true, optional = true }

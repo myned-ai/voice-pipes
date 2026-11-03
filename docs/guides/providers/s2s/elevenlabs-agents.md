@@ -64,12 +64,12 @@ into every worker service. The terminal client also works:
 
 | Piece | File |
 |---|---|
-| Protocol (envelopes + event parsing) | `voice-pipes-s2s-elevenlabs/src/lib.rs` |
-| Factory (config → protocol, validation) | `voice-pipes-s2s-elevenlabs/src/factory.rs` (`ElevenLabsFactory`) |
+| Protocol (envelopes + event parsing) | `plugins/s2s/elevenlabs/src/lib.rs` |
+| Factory (config → protocol, validation) | `plugins/s2s/elevenlabs/src/factory.rs` (`ElevenLabsFactory`) |
 | JSON ping→pong keepalive hook | the SDK's `RealtimeProtocol::build_auto_reply` + the engine's `src/realtime/client.rs` reader |
-| Wizard menu entry | `voice-pipes-s2s-elevenlabs/src/wizard.rs` |
+| Wizard menu entry | `plugins/s2s/elevenlabs/src/wizard.rs` |
 | Terminal client | `voice-pipes/src/commands/interactive.rs` |
-| Tests | `voice-pipes-s2s-elevenlabs/src/tests/` |
+| Tests | `plugins/s2s/elevenlabs/src/tests/` |
 
 The crate is a plugin on the SDK (`voice_pipes_sdk::s2s`); the CLI feature
 `s2s-elevenlabs` (a default) links and registers it.

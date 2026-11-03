@@ -7,26 +7,26 @@ members = [
     "voice-pipes-cli",    # command-line binary (composition root)
     "voice-pipes-onnx",   # inference-session pool shared by local ONNX providers, in and out of tree
     "voice-pipes-net",    # the one network client policy every hosted provider uses
-    "voice-pipes-stt-nemotron35",  # first out-of-tree recogniser plugin, on the SDK only
-    "voice-pipes-stt-google",      # Google Cloud STT (Chirp 3), moved out of the engine
-    "voice-pipes-tts-kokoro",      # Kokoro TTS (local ONNX), moved out of the engine
-    "voice-pipes-tts-pocket",      # Pocket-TTS over its HTTP sidecar
-    "voice-pipes-tts-openai",    # OpenAI TTS (and VibeVoice)
-    "voice-pipes-stt-assemblyai", # AssemblyAI streaming STT (WebSocket)
-    "voice-pipes-tts-elevenlabs", # ElevenLabs TTS (REST)
-    "voice-pipes-tts-gemini",    # Gemini TTS (REST)
-    "voice-pipes-llm-openai-compat", # OpenAI-compatible LLMs (OpenAI, llama-server)
-    "voice-pipes-s2s-openai",        # OpenAI Realtime speech-to-speech
-    "voice-pipes-s2s-gemini",        # Gemini Live speech-to-speech
-    "voice-pipes-s2s-elevenlabs",    # ElevenLabs Agents speech-to-speech
-    "voice-pipes-turn-smart",        # Smart Turn semantic end-of-turn detector
-    "voice-pipes-turn-vap",          # VAP anticipatory turn detector
-    "voice-pipes-stt-nemotron",      # English Nemotron streaming STT (ONNX)
-    "voice-pipes-llm-gguf",          # local GGUF LLM (candle)
-    "voice-pipes-stt-parakeet",      # Parakeet TDT STT (ONNX), the default recogniser
-    "voice-pipes-tts-piper",         # Piper VITS TTS (ONNX), the default voice
-    "voice-pipes-vad-silero",        # Silero VAD (ONNX), the auto VAD
-    "voice-pipes-stt-moonshine",     # Moonshine STT (ONNX), English
+    "plugins/stt/nemotron35",    # first out-of-tree recogniser plugin, on the SDK only
+    "plugins/stt/google",        # Google Cloud STT (Chirp 3), moved out of the engine
+    "plugins/tts/kokoro",        # Kokoro TTS (local ONNX), moved out of the engine
+    "plugins/tts/pocket",        # Pocket-TTS over its HTTP sidecar
+    "plugins/tts/openai",        # OpenAI TTS (and VibeVoice)
+    "plugins/stt/assemblyai",    # AssemblyAI streaming STT (WebSocket)
+    "plugins/tts/elevenlabs",    # ElevenLabs TTS (REST)
+    "plugins/tts/gemini",        # Gemini TTS (REST)
+    "plugins/llm/openai-compat", # OpenAI-compatible LLMs (OpenAI, llama-server)
+    "plugins/s2s/openai",        # OpenAI Realtime speech-to-speech
+    "plugins/s2s/gemini",        # Gemini Live speech-to-speech
+    "plugins/s2s/elevenlabs",    # ElevenLabs Agents speech-to-speech
+    "plugins/turn/smart",        # Smart Turn semantic end-of-turn detector
+    "plugins/turn/vap",          # VAP anticipatory turn detector
+    "plugins/stt/nemotron",      # English Nemotron streaming STT (ONNX)
+    "plugins/llm/gguf",          # local GGUF LLM (candle)
+    "plugins/stt/parakeet",      # Parakeet TDT STT (ONNX), the default recogniser
+    "plugins/tts/piper",         # Piper VITS TTS (ONNX), the default voice
+    "plugins/vad/silero",        # Silero VAD (ONNX), the auto VAD
+    "plugins/stt/moonshine",     # Moonshine STT (ONNX), English
 ]
 resolver = "2"
 
@@ -40,26 +40,26 @@ voice-pipes-gym = { path = "voice-pipes-gym", version = "0.1.0" }
 voice-pipes-net = { path = "voice-pipes-net", version = "0.1.0" }
 voice-pipes-onnx = { path = "voice-pipes-onnx", version = "0.1.0" }
 voice-pipes-sdk = { path = "voice-pipes-sdk", version = "1.0.0" }
-voice-pipes-stt-google = { path = "voice-pipes-stt-google", version = "0.1.0" }
-voice-pipes-stt-nemotron35 = { path = "voice-pipes-stt-nemotron35", version = "0.1.0" }
-voice-pipes-tts-kokoro = { path = "voice-pipes-tts-kokoro", version = "0.1.0" }
-voice-pipes-tts-pocket = { path = "voice-pipes-tts-pocket", version = "0.1.0" }
-voice-pipes-tts-openai = { path = "voice-pipes-tts-openai", version = "0.1.0" }
-voice-pipes-stt-assemblyai = { path = "voice-pipes-stt-assemblyai", version = "0.1.0" }
-voice-pipes-tts-elevenlabs = { path = "voice-pipes-tts-elevenlabs", version = "0.1.0" }
-voice-pipes-tts-gemini = { path = "voice-pipes-tts-gemini", version = "0.1.0" }
-voice-pipes-llm-openai-compat = { path = "voice-pipes-llm-openai-compat", version = "0.1.0" }
-voice-pipes-s2s-openai = { path = "voice-pipes-s2s-openai", version = "0.1.0" }
-voice-pipes-s2s-gemini = { path = "voice-pipes-s2s-gemini", version = "0.1.0" }
-voice-pipes-s2s-elevenlabs = { path = "voice-pipes-s2s-elevenlabs", version = "0.1.0" }
-voice-pipes-turn-smart = { path = "voice-pipes-turn-smart", version = "0.1.0" }
-voice-pipes-turn-vap = { path = "voice-pipes-turn-vap", version = "0.1.0" }
-voice-pipes-stt-nemotron = { path = "voice-pipes-stt-nemotron", version = "0.1.0" }
-voice-pipes-llm-gguf = { path = "voice-pipes-llm-gguf", version = "0.1.0" }
-voice-pipes-stt-parakeet = { path = "voice-pipes-stt-parakeet", version = "0.1.0" }
-voice-pipes-tts-piper = { path = "voice-pipes-tts-piper", version = "0.1.0" }
-voice-pipes-vad-silero = { path = "voice-pipes-vad-silero", version = "0.1.0" }
-voice-pipes-stt-moonshine = { path = "voice-pipes-stt-moonshine", version = "0.1.0" }
+voice-pipes-stt-google = { path = "plugins/stt/google", version = "0.1.0" }
+voice-pipes-stt-nemotron35 = { path = "plugins/stt/nemotron35", version = "0.1.0" }
+voice-pipes-tts-kokoro = { path = "plugins/tts/kokoro", version = "0.1.0" }
+voice-pipes-tts-pocket = { path = "plugins/tts/pocket", version = "0.1.0" }
+voice-pipes-tts-openai = { path = "plugins/tts/openai", version = "0.1.0" }
+voice-pipes-stt-assemblyai = { path = "plugins/stt/assemblyai", version = "0.1.0" }
+voice-pipes-tts-elevenlabs = { path = "plugins/tts/elevenlabs", version = "0.1.0" }
+voice-pipes-tts-gemini = { path = "plugins/tts/gemini", version = "0.1.0" }
+voice-pipes-llm-openai-compat = { path = "plugins/llm/openai-compat", version = "0.1.0" }
+voice-pipes-s2s-openai = { path = "plugins/s2s/openai", version = "0.1.0" }
+voice-pipes-s2s-gemini = { path = "plugins/s2s/gemini", version = "0.1.0" }
+voice-pipes-s2s-elevenlabs = { path = "plugins/s2s/elevenlabs", version = "0.1.0" }
+voice-pipes-turn-smart = { path = "plugins/turn/smart", version = "0.1.0" }
+voice-pipes-turn-vap = { path = "plugins/turn/vap", version = "0.1.0" }
+voice-pipes-stt-nemotron = { path = "plugins/stt/nemotron", version = "0.1.0" }
+voice-pipes-llm-gguf = { path = "plugins/llm/gguf", version = "0.1.0" }
+voice-pipes-stt-parakeet = { path = "plugins/stt/parakeet", version = "0.1.0" }
+voice-pipes-tts-piper = { path = "plugins/tts/piper", version = "0.1.0" }
+voice-pipes-vad-silero = { path = "plugins/vad/silero", version = "0.1.0" }
+voice-pipes-stt-moonshine = { path = "plugins/stt/moonshine", version = "0.1.0" }
 
 anyhow = "1"
 arc-swap = "1"

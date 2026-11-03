@@ -17,26 +17,26 @@
 /voice-pipes-gym/               @goran-j
 
 # Providers, one line each.
-/voice-pipes-stt-google/        @goran-j
-/voice-pipes-stt-parakeet/      @goran-j
-/voice-pipes-tts-piper/         @goran-j
-/voice-pipes-vad-silero/        @goran-j
-/voice-pipes-stt-moonshine/     @goran-j
-/voice-pipes-stt-nemotron/      @goran-j
-/voice-pipes-stt-nemotron35/    @goran-j
-/voice-pipes-tts-kokoro/        @goran-j
-/voice-pipes-tts-pocket/        @goran-j
-/voice-pipes-tts-openai/       @goran-j
-/voice-pipes-stt-assemblyai/   @goran-j
-/voice-pipes-tts-elevenlabs/   @goran-j
-/voice-pipes-tts-gemini/       @goran-j
-/voice-pipes-llm-openai-compat/ @goran-j
-/voice-pipes-llm-gguf/          @goran-j
-/voice-pipes-s2s-openai/        @goran-j
-/voice-pipes-s2s-gemini/        @goran-j
-/voice-pipes-s2s-elevenlabs/    @goran-j
-/voice-pipes-turn-smart/        @goran-j
-/voice-pipes-turn-vap/          @goran-j
+/plugins/stt/google/            @goran-j
+/plugins/stt/parakeet/          @goran-j
+/plugins/tts/piper/             @goran-j
+/plugins/vad/silero/            @goran-j
+/plugins/stt/moonshine/         @goran-j
+/plugins/stt/nemotron/          @goran-j
+/plugins/stt/nemotron35/        @goran-j
+/plugins/tts/kokoro/            @goran-j
+/plugins/tts/pocket/            @goran-j
+/plugins/tts/openai/            @goran-j
+/plugins/stt/assemblyai/        @goran-j
+/plugins/tts/elevenlabs/        @goran-j
+/plugins/tts/gemini/            @goran-j
+/plugins/llm/openai-compat/     @goran-j
+/plugins/llm/gguf/              @goran-j
+/plugins/s2s/openai/            @goran-j
+/plugins/s2s/gemini/            @goran-j
+/plugins/s2s/elevenlabs/        @goran-j
+/plugins/turn/smart/            @goran-j
+/plugins/turn/vap/              @goran-j
 
 # Supply-chain policy and the gates that enforce it.
 /deny.toml                      @goran-j

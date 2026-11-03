@@ -73,10 +73,24 @@ STT/TTS/text providers are trait-based. External providers implement the
 and register a factory; the wizard entry is one descriptor in
 `voice-pipes/src/commands/config_wizard/providers.rs`.
 
-## Pull requests
+## Pull requests & tracking changes
 
-- Keep PRs focused; link the issue they address.
-- CI must pass. PRs run the core test suites on Ubuntu.
+- **Open an issue or discussion first for non-trivial changes.** Before starting
+  work on a new stage trait, wire-protocol change, or workspace layout refactor,
+  open a GitHub Issue or Discussion to align on the design.
+- **Use Conventional Commits for PR titles and commit messages:**
+  `<type>(<scope>): <imperative summary>` (`feat`, `fix`, `refactor`, `docs`,
+  `perf`, `test`, `chore`; append `!` for breaking changes). Put the **why**
+  (constraints, trade-offs, and the invariant preserved) in the commit/PR body.
+- **Update `CHANGELOG.md` and ADRs:** user-visible or layout changes get a line
+  under `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md). Decisions that alter
+  an architectural boundary or cross-crate contract get a short record in
+  [docs/explanation/decisions/](docs/explanation/decisions/README.md).
+- **Keep PRs focused and atomic;** link the issue they address (`Fixes #123`).
+  `main` uses squash-merges so each merged PR becomes one self-contained commit
+  with its full rationale in `git log`.
+- **CI must pass.** PRs run the core test suites, `workspace_rules`, and
+  `scripts/docs-check.ps1` on Ubuntu.
 - By contributing, you agree to the terms of our
   [Contributor License Agreement (CLA)](CLA.md). Keep third-party code out
   unless its license is compatible and attributed in [NOTICE](NOTICE).

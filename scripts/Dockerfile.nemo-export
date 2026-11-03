@@ -1,0 +1,102 @@
+# Docker image for exporting NVIDIA Nemotron-Speech-Streaming to ONNX.
+#
+# See scripts/README-export-nemotron.md §2 for the pinned
+# environment rationale. This image freezes that env so neither Windows
+# Python nor the developer's local venv ever has to wrangle NeMo's
+# CUDA/torch/numpy version pyramid.
+#
+# Build:
+#   docker build -f scripts/Dockerfile.nemo-export \
+#                -t voice-pipes/nemo-export:1 \
+#                scripts
+#
+# Run (PowerShell line continuations):
+#   docker run --rm `
+#       -v ${PWD}/voice-pipes/models/nemotron-streaming:/out `
+#       -v $env:USERPROFILE/hf-cache/nemotron-streaming:/in:ro `
+#       voice-pipes/nemo-export:1 `
+#       --nemo-file /in/nemotron-speech-streaming-en-0.6b.nemo `
+#       --out-dir   /out
+#
+# The image is CPU-only; NeMo's `restore_from` is forced onto CPU via
+# CUDA_VISIBLE_DEVICES="". Export itself does not need a GPU.
+
+FROM python:3.10-slim-bookworm
+
+# System deps NeMo pulls in via wheels (libsndfile for soundfile,
+# git for some setup.py paths, build-essential as a fallback for source
+# wheels on slim).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        git \
+        build-essential \
+        libsndfile1 \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    # Force CPU-only — NeMo's restore_from default would otherwise try
+    # to allocate CUDA and fail in a container without GPU.
+    CUDA_VISIBLE_DEVICES="" \
+    # Constraints applied to BOTH the top-level resolve AND PEP 517
+    # build-isolation envs. Critical: without this, NeMo pulls an old
+    # pyarrow that compiles from source, and pyarrow's isolated build
+    # env then resolves numpy 1.16 (which fails to compile against
+    # Python 3.10's _Py_HashDouble signature).
+    PIP_CONSTRAINT=/tmp/constraints.txt
+
+# Constraints for both top-level and PEP 517 isolated builds.
+RUN printf '%s\n' \
+        'numpy>=1.23,<2.0' \
+        'pyarrow>=14.0.0,<17.0.0' \
+        'cython>=0.29.36,<3.1' \
+        'setuptools>=65,<75' \
+        'wheel' \
+        'datasets>=2.18,<3.0' \
+        'huggingface_hub>=0.23,<0.25' \
+        'fsspec>=2024.2.0,<2024.7.0' \
+    > /tmp/constraints.txt
+
+# CPU-only torch wheels (much smaller than the default CUDA build).
+RUN pip install --upgrade pip wheel \
+ && pip install \
+        --index-url https://download.pytorch.org/whl/cpu \
+        'torch==2.4.1+cpu' \
+        'torchaudio==2.4.1+cpu'
+
+# Pinned core deps (mirrors README-export-nemotron.md §2).
+#
+# - numpy: floor of 1.23 is critical. Without it, pyarrow's build
+#   isolation (transitively pulled by NeMo via lhotse) can resolve an
+#   ancient numpy 1.16 that fails to compile against Python 3.10's
+#   _Py_HashDouble signature.
+# - pyarrow: pre-installed from a manylinux wheel so NeMo's resolver
+#   does not try to build it (and numpy) from source.
+RUN pip install \
+        'numpy>=1.23,<2.0' \
+        'pyarrow>=14.0.0,<17.0.0' \
+        'onnx==1.17.0' \
+        'onnxruntime==1.19.2' \
+        'sentencepiece==0.2.0'
+
+# NeMo last — it's heavy and will resolve the rest of its tree.
+RUN pip install 'nemo_toolkit[asr]==2.0.0'
+
+WORKDIR /work
+COPY export_nemotron_streaming.py /work/export_nemotron_streaming.py
+
+# Unprivileged user. The /out bind mount must be writable by this
+# uid: on Linux add `--user $(id -u):$(id -g)` to the `docker run` above (or
+# chown the output directory to 10001); Docker Desktop needs nothing.
+RUN groupadd --system --gid 10001 vp \
+    && useradd --system --uid 10001 --gid vp --home-dir /work --shell /usr/sbin/nologin vp \
+    && chown -R vp:vp /work
+ENV HOME=/work
+USER vp
+
+# By default the entrypoint is the export script. Override at `docker run`
+# time with `--entrypoint bash` if you want a shell.
+ENTRYPOINT ["python", "/work/export_nemotron_streaming.py"]
+CMD ["--help"]

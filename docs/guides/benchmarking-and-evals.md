@@ -91,7 +91,7 @@ Completed or failed experiments can be **partially re-run** using the
 Each variant needs a TOML pipeline config. This controls which STT, LLM, and
 TTS providers are used, along with VAD settings, turn detection, and barge-in.
 
-Example (`examples/test-live-gemma4.toml`):
+Example (`examples/dev/test-live-gemma4.toml`):
 
 ```toml
 [pipeline]
@@ -132,7 +132,7 @@ When comparing cloud vs local, create a second config pointing at a different
 provider:
 
 ```toml
-# examples/bench-openai.toml  (only the differences)
+# examples/bench/bench-openai.toml  (only the differences)
 [transport]
 port = 8801                       # Different port
 
@@ -227,9 +227,9 @@ Runs one variant only. Useful for baseline measurements or regression testing.
 
 # Custom variants
 .\run-benchmark-multi.ps1 `
-    -VariantA_Config examples/test-live-gemma4.toml `
+    -VariantA_Config examples/dev/test-live-gemma4.toml `
     -VariantA_Name "Gemma 4 E2B" `
-    -VariantB_Config examples/bench-openai.toml `
+    -VariantB_Config examples/bench/bench-openai.toml `
     -VariantB_Name "OpenAI GPT-4o-mini" `
     -VariantB_WorkerConfig worker-bench-openai.toml `
     -AudioFiles hello.wav,test_speech.wav `
@@ -247,10 +247,10 @@ and the other does not.
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `-VariantA_Config` | `examples/test-live-gemma4.toml` | Pipeline TOML for variant A |
+| `-VariantA_Config` | `examples/dev/test-live-gemma4.toml` | Pipeline TOML for variant A |
 | `-VariantA_Name` | `"Gemma 4 Default"` | Display name |
 | `-VariantA_WorkerConfig` | `worker-bench-a.toml` | Worker TOML for variant A |
-| `-VariantB_Config` | `examples/bench-gemma4-concise.toml` | Pipeline TOML for variant B |
+| `-VariantB_Config` | `examples/bench/bench-gemma4-concise.toml` | Pipeline TOML for variant B |
 | `-VariantB_Name` | `"Gemma 4 Concise"` | Display name |
 | `-VariantB_WorkerConfig` | `worker-bench-b.toml` | Worker TOML for variant B |
 | `-SkipWorkers` | (switch) | Skip starting/stopping workers |
@@ -442,14 +442,14 @@ curl -X POST http://localhost:9090/api/v1/benchmark/experiments \
       {
         "id": "gemma-local",
         "name": "Gemma 4 E2B (local)",
-        "config_path": "examples/test-live-gemma4.toml",
+        "config_path": "examples/dev/test-live-gemma4.toml",
         "config_hash": "",
         "tags": ["variant:default"]
       },
       {
         "id": "openai-cloud",
         "name": "OpenAI GPT-4o-mini",
-        "config_path": "examples/bench-openai.toml",
+        "config_path": "examples/bench/bench-openai.toml",
         "config_hash": "",
         "tags": ["variant:openai"]
       }

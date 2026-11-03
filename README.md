@@ -226,7 +226,7 @@ Start at **[docs/README.md](docs/README.md)** or jump directly to your workflow:
 | [`voice-pipes-sdk/`](voice-pipes-sdk/) | SemVer-stable (`1.0`) plugin SDK and trait boundary for all stage providers |
 | [`voice-pipes-cli/`](voice-pipes-cli/) | The `voice-pipes` command-line binary and interactive setup wizard |
 | [`voice-pipes-onnx/`](voice-pipes-onnx/) · [`voice-pipes-net/`](voice-pipes-net/) | Shared ONNX Runtime session pooling (CPU/CUDA) and network/TLS client policy |
-| `voice-pipes-{stt,tts,llm,s2s,vad,turn}-*` | 20 modular provider plugin crates built strictly against `voice-pipes-sdk` |
+| [`plugins/`](plugins/) | 20 modular stage provider crates (`plugins/{stt,tts,llm,s2s,turn,vad}/*`) built strictly against `voice-pipes-sdk` |
 | [`voice-pipes-bench/`](voice-pipes-bench/) | Automated A/B latency, RTF, WER, and synthetic-caller benchmarking suite |
 | [`voice-pipes-gym/`](voice-pipes-gym/) | In-memory reinforcement learning environment and regression harness for voice agents |
 | [`voice-pipes-admin/`](voice-pipes-admin/) | Admin console, live karaoke playground, and session inspector (React 18 + FastAPI) |

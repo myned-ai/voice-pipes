@@ -37,7 +37,7 @@ fi
 # ---------------------------------------------------------------------------
 # Allow-list: top-level paths that ship. Anything not listed never leaves.
 # ---------------------------------------------------------------------------
-ALLOW_RE='^(LICENSE|NOTICE|CLA\.md|COMMERCIAL\.md|README\.md|CONTRIBUTING\.md|CODE_OF_CONDUCT\.md|SECURITY\.md|CHANGELOG\.md|AGENTS\.md|CLAUDE\.md|llms\.txt|Cargo\.toml|Cargo\.lock|clippy\.toml|deny\.toml|dist-workspace\.toml|\.gitignore|\.dockerignore|book\.toml|launch-stack\.sh|launch-stack\.ps1|rebuild-stack\.ps1)$|^(\.github|docs|examples|scripts|skills|supply-chain|voice-pipes(-[a-z0-9-]+)?)/'
+ALLOW_RE='^(LICENSE|NOTICE|CLA\.md|COMMERCIAL\.md|README\.md|CONTRIBUTING\.md|CODE_OF_CONDUCT\.md|SECURITY\.md|CHANGELOG\.md|AGENTS\.md|CLAUDE\.md|llms\.txt|Cargo\.toml|Cargo\.lock|clippy\.toml|deny\.toml|dist-workspace\.toml|\.gitignore|\.dockerignore|book\.toml|launch-stack\.sh|launch-stack\.ps1|rebuild-stack\.ps1)$|^(\.github|docs|examples|plugins|scripts|skills|supply-chain|voice-pipes(-[a-z0-9-]+)?)/'
 
 # ---------------------------------------------------------------------------
 # Deny-list: tracked paths under the allow-list that are internal anyway.

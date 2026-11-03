@@ -22,7 +22,7 @@ COPY Cargo.toml Cargo.lock ./
 # keeps each file's directory, and a pattern a crate does not use (most have
 # no build.rs) matches nothing. Only compile inputs are copied, so editing
 # docs, configs or tests does not invalidate the build layer.
-COPY --parents voice-pipes*/Cargo.toml voice-pipes*/build.rs voice-pipes*/src voice-pipes*/proto ./
+COPY --parents voice-pipes*/Cargo.toml voice-pipes*/build.rs voice-pipes*/src voice-pipes*/proto plugins/*/*/Cargo.toml plugins/*/*/build.rs plugins/*/*/src plugins/*/*/proto ./
 # Compile-time embedded assets outside a crate's src (include_str!): the
 # wizard's model registry. Copied file by file so editing runtime configs
 # (worker TOMLs) does not invalidate the build layer.
@@ -91,7 +91,7 @@ USER vp
 # `voice_pipes_stt_google`), so every one that logs is named here -- the binary's
 # own (where a fatal start-up error goes), the pool, the bench extension and
 # every plugin. A test holds this list to the workspace.
-ENV RUST_LOG=voice_pipes=info,voice_pipes_cli=info,voice_pipes_onnx=info,voice_pipes_bench=info,voice_pipes_stt_parakeet=info,voice_pipes_stt_moonshine=info,voice_pipes_tts_piper=info,voice_pipes_vad_silero=info,voice_pipes_stt_nemotron=info,voice_pipes_stt_nemotron35=info,voice_pipes_stt_google=info,voice_pipes_tts_kokoro=info,voice_pipes_tts_pocket=info,voice_pipes_tts_openai=info,voice_pipes_stt_assemblyai=info,voice_pipes_tts_elevenlabs=info,voice_pipes_tts_gemini=info,voice_pipes_llm_openai_compat=info,voice_pipes_llm_gguf=info,voice_pipes_s2s_openai=info,voice_pipes_s2s_gemini=info,voice_pipes_s2s_elevenlabs=info,voice_pipes_turn_smart=info,voice_pipes_turn_vap=info,ort=warn,h2=warn,hyper=warn,rustls=warn
+ENV RUST_LOG=voice_pipes=info,voice_pipes_cli=info,voice_pipes_onnx=info,voice_pipes_bench=info,voice_pipes_gym=info,voice_pipes_stt_parakeet=info,voice_pipes_stt_moonshine=info,voice_pipes_tts_piper=info,voice_pipes_vad_silero=info,voice_pipes_stt_nemotron=info,voice_pipes_stt_nemotron35=info,voice_pipes_stt_google=info,voice_pipes_tts_kokoro=info,voice_pipes_tts_pocket=info,voice_pipes_tts_openai=info,voice_pipes_stt_assemblyai=info,voice_pipes_tts_elevenlabs=info,voice_pipes_tts_gemini=info,voice_pipes_llm_openai_compat=info,voice_pipes_llm_gguf=info,voice_pipes_s2s_openai=info,voice_pipes_s2s_gemini=info,voice_pipes_s2s_elevenlabs=info,voice_pipes_turn_smart=info,voice_pipes_turn_vap=info,ort=warn,h2=warn,hyper=warn,rustls=warn
 
 # Liveness from the binary itself (the image has no HTTP client): a
 # worker's transport `/healthz`. The orchestrator, same image on 9090,

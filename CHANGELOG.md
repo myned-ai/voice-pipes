@@ -28,6 +28,19 @@ earlier release.
 
 ### Changed
 
+- Workspace layout: moved all 20 provider plugin crates from the repository root
+  into stage-grouped directories under `plugins/<stage>/<name>` (`plugins/stt/*`,
+  `plugins/tts/*`, `plugins/llm/*`, `plugins/s2s/*`, `plugins/turn/*`,
+  `plugins/vad/*`) while keeping the 7 core/shared crates (`voice-pipes`,
+  `voice-pipes-sdk`, `voice-pipes-cli`, `voice-pipes-onnx`, `voice-pipes-net`,
+  `voice-pipes-bench`, `voice-pipes-gym`) and `voice-pipes-admin` at the root.
+  Every plugin retains its Cargo package name (`voice-pipes-<stage>-<name>`),
+  so Cargo features, crate imports, `-p` flags, and `RUST_LOG` targets are
+  unchanged. Consolidated helper scripts into the root `scripts/` directory,
+  grouped benchmark/dev example configs into `voice-pipes/examples/bench/` and
+  `voice-pipes/examples/dev/`, and removed the stale nested
+  `voice-pipes/Cargo.lock` (see `docs/explanation/decisions/workspace-layout.md`).
+
 - `tts.ttfb_ms`: deprecated as an overloaded commit-anchored wait. It is now
   strictly TTS's own wait (`tts_wait_ms` integer-ms alias) and is never overwritten
   by the transport runner with commit-to-first-audio. Use `commit_to_first_audio_ms`

@@ -21,7 +21,7 @@ __pycache__/
 *.pt
 *.bin
 # Reference feature matrices a plugin's tests are held to: ~100 KB each, committed on purpose.
-!/voice-pipes-stt-nemotron35/tests/data/*.bin
+!/plugins/stt/nemotron35/tests/data/*.bin
 *.wav
 
 # Runtime output dirs (session captures, audit taps). Anchored to the two
