@@ -90,7 +90,8 @@ impl GymRewardBreakdown {
             _ => 0.0,
         };
 
-        let total_reward = task_reward + slot_reward + turn_reward - latency_penalty - barge_in_penalty;
+        let total_reward =
+            task_reward + slot_reward + turn_reward - latency_penalty - barge_in_penalty;
 
         Self {
             task_reward,
@@ -114,8 +115,8 @@ mod tests {
         let reward = GymRewardBreakdown::compute(
             &weights,
             &eval,
-            1.0,  // perfect slot accuracy
-            0.5,  // good conversational flow
+            1.0,         // perfect slot accuracy
+            0.5,         // good conversational flow
             Some(380.0), // 380ms TTFA (under 500ms budget)
             Some(120),   // 120ms barge-in reaction (under 200ms budget)
         );

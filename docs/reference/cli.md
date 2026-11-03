@@ -239,10 +239,10 @@ Options:
 ```text
 Interactive real-time S2S voice loop client
 
-Usage: voice-pipes interactive [OPTIONS] --provider <PROVIDER>
+Usage: voice-pipes interactive [OPTIONS]
 
 Options:
-      --provider <PROVIDER>            Speech-to-speech provider, by name or alias (gemini, openai, elevenlabs, or any other this binary registers)
+      --provider <PROVIDER>            Speech-to-speech provider, by name or alias (gemini, openai, elevenlabs, or any other this binary registers). If omitted, falls back to [realtime_provider].provider from the configuration file
       --silence-ms <SILENCE_MS>        Silence duration (ms) to detect end of utterance
       --no-echo-gating                 Disable Echo Gating (audio-out gates audio-in is disabled). Default is `true` (gating enabled). Use this flag if testing with headphones and you want voice-based interruptions (server-side VAD barge-in)
       --log-format <LOG_FORMAT>        Log format. Without it, `[pipeline] log_format` in the config decides, and compact lines when that is unset [possible values: compact, json]

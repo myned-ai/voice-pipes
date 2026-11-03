@@ -79,7 +79,7 @@ fn summary_merges_repetitions_across_scenarios() {
             turns: None,
             barge_in: None,
             synthetic_caller: None,
-        gym: None,
+            gym: None,
         },
         ScenarioResult {
             scenario_id: "s2".into(),
@@ -107,7 +107,7 @@ fn summary_merges_repetitions_across_scenarios() {
             turns: None,
             barge_in: None,
             synthetic_caller: None,
-        gym: None,
+            gym: None,
         },
     ];
 
@@ -155,7 +155,7 @@ fn summary_falls_back_to_scenario_avg_when_no_samples() {
             turns: None,
             barge_in: None,
             synthetic_caller: None,
-        gym: None,
+            gym: None,
         },
         ScenarioResult {
             scenario_id: "s2".into(),
@@ -183,7 +183,7 @@ fn summary_falls_back_to_scenario_avg_when_no_samples() {
             turns: None,
             barge_in: None,
             synthetic_caller: None,
-        gym: None,
+            gym: None,
         },
     ];
 
@@ -223,7 +223,7 @@ fn summary_aggregates_conversation_and_barge_in() {
             turns: Some(vec![turn("t1", 100.0, true), turn("t2", 200.0, true)]),
             barge_in: None,
             synthetic_caller: None,
-        gym: None,
+            gym: None,
         },
         ScenarioResult {
             scenario_id: "barge1".into(),
@@ -245,7 +245,7 @@ fn summary_aggregates_conversation_and_barge_in() {
                 follow_up_completed: true,
             }),
             synthetic_caller: None,
-        gym: None,
+            gym: None,
         },
         ScenarioResult {
             scenario_id: "barge2".into(),
@@ -267,7 +267,7 @@ fn summary_aggregates_conversation_and_barge_in() {
                 follow_up_completed: false,
             }),
             synthetic_caller: None,
-        gym: None,
+            gym: None,
         },
     ];
 
@@ -296,4 +296,3 @@ fn score_populates_wer_and_cer_from_golden_transcript() {
     assert_eq!(scored.wer, Some(0.5));
     assert!(scored.cer.is_some_and(|c| c > 0.0 && c < 0.2));
 }
-

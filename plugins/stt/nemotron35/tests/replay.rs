@@ -28,7 +28,10 @@ async fn replay_a_capture_split_at_the_vad_boundaries() {
         .collect();
     let locale = std::env::var("NEMOTRON35_LOCALE").unwrap_or_else(|_| "en-US".into());
     let model_dir = std::env::var_os("NEMOTRON35_MODEL_DIR").map_or_else(
-        || PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../voice-pipes/models/nemotron-3.5"),
+        || {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../../voice-pipes/models/nemotron-3.5")
+        },
         PathBuf::from,
     );
 

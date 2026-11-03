@@ -59,7 +59,11 @@ impl AcousticAdversary {
         let roll = ((hash >> 32) as u32 % 100) as f32 / 100.0;
 
         if roll < self.config.hesitation_rate {
-            let filler = if hash.is_multiple_of(2) { "um, " } else { "uh, " };
+            let filler = if hash.is_multiple_of(2) {
+                "um, "
+            } else {
+                "uh, "
+            };
             format!("{filler}{text}")
         } else {
             text.to_string()
@@ -73,7 +77,9 @@ impl AcousticAdversary {
         initial_value: &str,
         corrected_value: &str,
     ) -> String {
-        format!("{prefix} {initial_value}... wait, actually make that {corrected_value}, not {initial_value}")
+        format!(
+            "{prefix} {initial_value}... wait, actually make that {corrected_value}, not {initial_value}"
+        )
     }
 }
 

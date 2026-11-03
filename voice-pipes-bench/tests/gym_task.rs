@@ -7,8 +7,8 @@ use voice_pipes_bench::types::{
     TestScenario, TestSuite,
 };
 use voice_pipes_gym::{
-    AcousticAdversary, AdversaryConfig, BankingGoal, BankingTaskEnv, ClinicBookingTaskEnv,
-    ClinicGoal, ClientToolCall, GymRewardBreakdown, GymRewardWeights, OrderGoal,
+    AcousticAdversary, AdversaryConfig, BankingGoal, BankingTaskEnv, ClientToolCall,
+    ClinicBookingTaskEnv, ClinicGoal, GymRewardBreakdown, GymRewardWeights, OrderGoal,
     OrderSupportTaskEnv, TaskEnvironment,
 };
 
@@ -261,8 +261,8 @@ fn test_clinic_booking_gym_task_flow() {
 
 #[test]
 fn test_gym_suite_json_example_parses_validly() {
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("examples/benchmark/gym-suite.json");
+    let path =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/benchmark/gym-suite.json");
     let content = std::fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("failed to read {}: {e}", path.display()));
     let suite: TestSuite = serde_json::from_str(&content)

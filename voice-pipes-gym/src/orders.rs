@@ -6,7 +6,7 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use voice_pipes_sdk::agent::{ClientToolCall, ClientToolSpec};
 
 use crate::env::{TaskEnvironment, TaskEvaluation};

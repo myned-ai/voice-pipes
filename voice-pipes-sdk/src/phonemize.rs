@@ -20,7 +20,9 @@ fn validate_language(lang: &str) -> Result<(), TtsError> {
     if lang.is_empty()
         || lang.len() > 16
         || lang.starts_with('-')
-        || !lang.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '+')
+        || !lang
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '+')
     {
         return Err(TtsError::PhonemizationFailed(format!(
             "invalid phonemizer language identifier: {lang:?}"
@@ -44,7 +46,9 @@ pub fn run_espeak_with_language(text: &str, language: &str) -> Result<String, Tt
 fn kill_process(pid: u32) {
     #[cfg(windows)]
     {
-        let _ = Command::new("taskkill").args(["/F", "/PID", &pid.to_string()]).output();
+        let _ = Command::new("taskkill")
+            .args(["/F", "/PID", &pid.to_string()])
+            .output();
     }
     #[cfg(not(windows))]
     {

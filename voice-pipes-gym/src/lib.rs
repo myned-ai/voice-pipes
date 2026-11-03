@@ -24,7 +24,7 @@ pub mod reward;
 
 pub use adversary::{AcousticAdversary, AdversaryConfig};
 pub use banking::{BankingGoal, BankingTaskEnv};
-pub use clinic::{AppointmentBooking, ClinicGoal, ClinicBookingTaskEnv};
+pub use clinic::{AppointmentBooking, ClinicBookingTaskEnv, ClinicGoal};
 pub use env::{TaskEnvironment, TaskEvaluation};
 pub use orders::{OrderGoal, OrderRecord, OrderSupportTaskEnv};
 pub use reward::{GymRewardBreakdown, GymRewardWeights};

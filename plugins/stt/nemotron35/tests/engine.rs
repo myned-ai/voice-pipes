@@ -31,7 +31,10 @@ struct Reference {
 /// export can be gated before it is released, else the installed one.
 fn model_dir() -> Option<PathBuf> {
     let dir = std::env::var_os("NEMOTRON35_MODEL_DIR").map_or_else(
-        || PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../voice-pipes/models/nemotron-3.5"),
+        || {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../../voice-pipes/models/nemotron-3.5")
+        },
         PathBuf::from,
     );
     dir.join("nemotron_onnx_config.json")
@@ -165,4 +168,3 @@ async fn metric_conformance() {
     .await
     .unwrap();
 }
-

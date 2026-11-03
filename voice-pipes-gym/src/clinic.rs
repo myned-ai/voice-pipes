@@ -6,7 +6,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use voice_pipes_sdk::agent::{ClientToolCall, ClientToolSpec};
 
 use crate::env::{TaskEnvironment, TaskEvaluation};
@@ -203,7 +203,9 @@ impl ClinicBookingTaskEnv {
             .ok_or_else(|| format!("No clinic schedule found for {doctor} on {date}"))?;
 
         if !slots.remove(time) {
-            return Err(format!("Time slot '{time}' is not available for {doctor} on {date}"));
+            return Err(format!(
+                "Time slot '{time}' is not available for {doctor} on {date}"
+            ));
         }
 
         let booking_id = format!("APT-{}", self.next_id);

@@ -2357,10 +2357,7 @@ const LONG_FUNCTIONS: &[(&str, &str)] = &[
         "aggregate_tts_only_outcomes",
     ),
     ("voice-pipes-cli/src/main.rs", "run"),
-    (
-        "plugins/llm/gguf/src/generation.rs",
-        "process_stream_inner",
-    ),
+    ("plugins/llm/gguf/src/generation.rs", "process_stream_inner"),
     ("plugins/llm/gguf/src/schema.rs", "schema"),
     ("plugins/llm/openai-compat/src/schema.rs", "schema"),
     ("plugins/s2s/elevenlabs/src/lib.rs", "parse_event"),
@@ -2369,10 +2366,7 @@ const LONG_FUNCTIONS: &[(&str, &str)] = &[
     ("plugins/s2s/openai/src/lib.rs", "parse_event"),
     ("plugins/stt/assemblyai/src/schema.rs", "schema"),
     ("plugins/stt/google/src/schema.rs", "schema"),
-    (
-        "plugins/stt/nemotron/src/provider.rs",
-        "transcribe_stream",
-    ),
+    ("plugins/stt/nemotron/src/provider.rs", "transcribe_stream"),
     (
         "plugins/stt/nemotron35/src/provider.rs",
         "transcribe_stream",

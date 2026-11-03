@@ -205,7 +205,14 @@ impl PocketHttpTts {
                 "pocket-tts: server returned no audio".into(),
             ));
         }
-        self.emit_timing(text, total_samples, compute_elapsed, voice, delivery_wait, retries);
+        self.emit_timing(
+            text,
+            total_samples,
+            compute_elapsed,
+            voice,
+            delivery_wait,
+            retries,
+        );
         Ok(StreamEnd::Done)
     }
 

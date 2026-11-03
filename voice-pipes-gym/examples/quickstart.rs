@@ -13,8 +13,8 @@
 use std::time::Instant;
 
 use voice_pipes_gym::{
-    AcousticAdversary, AdversaryConfig, BankingGoal, BankingTaskEnv, ClinicBookingTaskEnv,
-    ClinicGoal, ClientToolCall, GymRewardBreakdown, GymRewardWeights, OrderGoal,
+    AcousticAdversary, AdversaryConfig, BankingGoal, BankingTaskEnv, ClientToolCall,
+    ClinicBookingTaskEnv, ClinicGoal, GymRewardBreakdown, GymRewardWeights, OrderGoal,
     OrderSupportTaskEnv, TaskEnvironment,
 };
 
@@ -68,7 +68,10 @@ fn main() {
         expected_amount: 250.0,
     };
     let evaluation = banking_env.verify_goal(&goal);
-    println!("Goal Evaluation: success={}, score={:.2}", evaluation.success, evaluation.score);
+    println!(
+        "Goal Evaluation: success={}, score={:.2}",
+        evaluation.success, evaluation.score
+    );
     println!("Detail: {}", evaluation.message);
 
     // Composite Multi-Modal RL Reward Calculation
@@ -111,7 +114,10 @@ fn main() {
         expected_address: "789 Pine Road, Springfield".to_string(),
     };
     let order_eval = order_env.verify_goal(&order_goal);
-    println!("Order Goal Status: {} - {}\n", order_eval.success, order_eval.message);
+    println!(
+        "Order Goal Status: {} - {}\n",
+        order_eval.success, order_eval.message
+    );
 
     // ── 3. Clinic Booking Environment ────────────────────────────
     println!("--- Domain 3: Healthcare Appointment Booking ---");
@@ -134,14 +140,18 @@ fn main() {
         time: "10:00".to_string(),
     };
     let clinic_eval = clinic_env.verify_goal(&clinic_goal);
-    println!("Clinic Goal Status: {} - {}\n", clinic_eval.success, clinic_eval.message);
+    println!(
+        "Clinic Goal Status: {} - {}\n",
+        clinic_eval.success, clinic_eval.message
+    );
 
     // ── 4. Full Glass-to-Glass Audio Simulation & AFAP Throughput ──
     println!("--- 4. Full Glass-to-Glass Audio Simulation & AFAP Mode ---");
     let audio_start = Instant::now();
 
     // The Acoustic Adversary constructs a real-world messy phone exchange:
-    let messy_speech = adversary.make_self_correction("send", "$100 to checking", "$250 to savings");
+    let messy_speech =
+        adversary.make_self_correction("send", "$100 to checking", "$250 to savings");
     println!("Acoustic Adversary Prompt: \"{messy_speech}\"");
 
     // Simulating 6.0 seconds of caller audio (300 chunks of 20ms @ 16kHz mono PCM = 96,000 samples)
@@ -170,10 +180,16 @@ fn main() {
     let afap_elapsed = audio_start.elapsed();
 
     println!("Glass-to-Glass Execution Completed:");
-    println!("  - Simulated Speech Audio: {:.1} seconds", simulated_speech_duration_s);
+    println!(
+        "  - Simulated Speech Audio: {:.1} seconds",
+        simulated_speech_duration_s
+    );
     println!("  - Actual In-Memory Time:  {:?}", afap_elapsed);
     println!("  - Real-Time Factor (RTF): < 0.02 (Over 40x faster than real-time)");
-    println!("  - Task Verified:          {} (Goal successfully satisfied)", eval.success);
+    println!(
+        "  - Task Verified:          {} (Goal successfully satisfied)",
+        eval.success
+    );
     println!("  - Scaling Projection:     10,000 full calls run in ~25 minutes on 1 GPU\n");
 
     println!("=== Quickstart Completed Successfully ===");

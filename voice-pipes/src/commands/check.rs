@@ -342,9 +342,7 @@ async fn check_stt(cfg: &PipelineConfig, fixture: &Fixture) -> Row {
     let text = res.text.trim().to_string();
 
     let expects_speech = !fixture.text.is_empty();
-    if expects_speech
-        && let Some(metrics) = &res.inference_metrics
-    {
+    if expects_speech && let Some(metrics) = &res.inference_metrics {
         if metrics.effective_latency_ms == Some(0) {
             return Row {
                 stage: "stt",
@@ -555,7 +553,8 @@ async fn check_llm(cfg: &PipelineConfig) -> Row {
             stage: "llm",
             provider: name,
             verdict: Verdict::Fail,
-            detail: "measurement.zero_with_work: LLM generation elapsed time reported as 0 ms".into(),
+            detail: "measurement.zero_with_work: LLM generation elapsed time reported as 0 ms"
+                .into(),
         };
     }
     Row {

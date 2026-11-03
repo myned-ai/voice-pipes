@@ -1,4 +1,0 @@
-[build]
-# Enable AVX2 + FMA for faster quantized inference on modern x86 CPUs.
-# Your i9-10980HK supports these. Remove if targeting older CPUs without AVX2.
-rustflags = ["-C", "target-feature=+avx2,+fma"]

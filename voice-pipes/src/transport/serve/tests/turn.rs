@@ -112,8 +112,8 @@ fn realtime_turn_record_carries_playback_health() {
 
 #[tokio::test]
 async fn emit_turn_metrics_preserves_tts_ttfb_and_updates_commit_to_first_audio() {
-    use crate::pipeline::extras::{LlmExtras, TtsExtras};
     use crate::pipeline::TurnComponentMetrics;
+    use crate::pipeline::extras::{LlmExtras, TtsExtras};
     let (out_tx, mut out_rx) = mpsc::channel(8);
     let (pe_tx, _pe_rx) = tokio::sync::broadcast::channel(8);
 
@@ -186,7 +186,9 @@ async fn emit_turn_metrics_preserves_tts_ttfb_and_updates_commit_to_first_audio(
 
     let tts = snap.component_by_kind("tts").expect("tts component");
     assert_eq!(
-        tts.extras.get("ttfb_ms").and_then(serde_json::Value::as_u64),
+        tts.extras
+            .get("ttfb_ms")
+            .and_then(serde_json::Value::as_u64),
         Some(180),
         "P2.2: runner must preserve TTS's own ttfb_ms instead of overwriting with commit-to-first-audio"
     );
@@ -205,7 +207,10 @@ async fn emit_turn_metrics_preserves_tts_ttfb_and_updates_commit_to_first_audio(
         .get("output_wait_ms")
         .and_then(serde_json::Value::as_f64)
         .expect("output_wait_ms");
-    assert!((out_wait - 17.6).abs() < 0.01, "expected 17.6, got {out_wait}");
+    assert!(
+        (out_wait - 17.6).abs() < 0.01,
+        "expected 17.6, got {out_wait}"
+    );
 
     let msg = out_rx.recv().await.expect("TurnMetrics message");
     match msg {
@@ -215,4 +220,3 @@ async fn emit_turn_metrics_preserves_tts_ttfb_and_updates_commit_to_first_audio(
         other => panic!("expected TurnMetrics, got {other:?}"),
     }
 }
-

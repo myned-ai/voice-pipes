@@ -275,7 +275,14 @@ impl ElevenLabsTts {
     }
 
     /// Emit a `tts_detail` audit event.
-    fn emit_timing(&self, text: &str, sample_count: usize, elapsed: Duration, voice: &str, delivery_wait: Duration) {
+    fn emit_timing(
+        &self,
+        text: &str,
+        sample_count: usize,
+        elapsed: Duration,
+        voice: &str,
+        delivery_wait: Duration,
+    ) {
         if let Some(ref tx) = self.audit_tx {
             let _ = tx.try_send(voice_pipes_sdk::tts::detail_event(
                 "tts:elevenlabs",

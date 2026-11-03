@@ -631,7 +631,9 @@ async fn metric_conformance() {
     let run = |tx: tokio::sync::mpsc::Sender<voice_pipes_sdk::TextFragment>,
                _cancel: tokio_util::sync::CancellationToken| async move {
         // First emit empty role frame
-        tx.send(voice_pipes_sdk::TextFragment::new("")).await.unwrap();
+        tx.send(voice_pipes_sdk::TextFragment::new(""))
+            .await
+            .unwrap();
 
         let delay = std::time::Duration::from_millis(25);
         tokio::time::sleep(delay).await;
@@ -655,4 +657,3 @@ async fn metric_conformance() {
     .unwrap();
     assert_eq!(ttft, 25.0);
 }
-

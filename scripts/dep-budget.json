@@ -3,9 +3,9 @@
   "counts": {
     "bare engine": 164,
     "engine batteries": 212,
-    "CLI, hosted providers only": 184,
-    "CLI defaults": 316,
-    "CLI, CPU image": 348,
-    "CLI, GPU image": 351
+    "CLI, hosted providers only": 185,
+    "CLI defaults": 317,
+    "CLI, CPU image": 349,
+    "CLI, GPU image": 352
   }
 }

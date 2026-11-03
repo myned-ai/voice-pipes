@@ -499,7 +499,10 @@ fn truncate_history_preserves_structured_json_and_appends_system_note() {
     assert_eq!(h[1].role, "assistant");
     assert_eq!(h[1].content, "{\"reply\":\"Hello world, how are you?\"}");
     assert_eq!(h[2].role, "system");
-    assert_eq!(h[2].content, "[interrupted by user after: {\"reply\":\"Hello]");
+    assert_eq!(
+        h[2].content,
+        "[interrupted by user after: {\"reply\":\"Hello]"
+    );
 }
 
 #[test]

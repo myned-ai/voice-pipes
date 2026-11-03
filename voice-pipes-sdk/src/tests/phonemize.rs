@@ -63,6 +63,8 @@ fn invalid_language_codes_are_rejected() {
     assert!(run_espeak_with_language("hello", "-v").is_err());
     assert!(run_espeak_with_language("hello", "--path=/evil").is_err());
     assert!(run_espeak_with_language("hello", "en; rm -rf /").is_err());
-    assert!(run_espeak_with_language("hello", "a_very_long_language_code_that_exceeds_limit").is_err());
+    assert!(
+        run_espeak_with_language("hello", "a_very_long_language_code_that_exceeds_limit").is_err()
+    );
     assert!(run_espeak_with_language("hello", "").is_err());
 }

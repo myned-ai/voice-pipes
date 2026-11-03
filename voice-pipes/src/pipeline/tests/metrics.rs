@@ -283,7 +283,10 @@ fn cold_start_and_empty_extras_are_skipped_from_json() {
 #[test]
 fn all_registered_descriptor_fields_have_non_empty_anchors_and_owner() {
     let descriptors = all_canonical_descriptors();
-    assert!(!descriptors.is_empty(), "all_canonical_descriptors must not be empty");
+    assert!(
+        !descriptors.is_empty(),
+        "all_canonical_descriptors must not be empty"
+    );
 
     let mut missing = Vec::new();
     for d in &descriptors {

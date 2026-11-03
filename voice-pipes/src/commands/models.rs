@@ -111,7 +111,9 @@ fn enter_engine_dir() -> Result<()> {
         && Path::new("voice-pipes/config/wizard_models.json").exists()
     {
         std::env::set_current_dir("voice-pipes")?;
-        println!("ℹ️  Using voice-pipes/ (model paths are relative to it; run the CLI from there).");
+        println!(
+            "ℹ️  Using voice-pipes/ (model paths are relative to it; run the CLI from there)."
+        );
     }
     Ok(())
 }

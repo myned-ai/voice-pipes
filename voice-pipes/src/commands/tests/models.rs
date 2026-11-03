@@ -39,5 +39,8 @@ fn an_unknown_model_lists_the_known_ones() {
         .expect_err("unknown")
         .to_string();
     assert!(err.contains("no-such-model"), "{err}");
-    assert!(err.contains("parakeet") && err.contains("smollm2-360m"), "{err}");
+    assert!(
+        err.contains("parakeet") && err.contains("smollm2-360m"),
+        "{err}"
+    );
 }

@@ -422,4 +422,3 @@ fn metric_conformance() {
     );
     assert!(res.is_ok(), "{res:?}");
 }
-

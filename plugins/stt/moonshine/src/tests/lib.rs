@@ -187,4 +187,3 @@ async fn metric_conformance() {
     .await
     .unwrap();
 }
-

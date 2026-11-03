@@ -621,9 +621,15 @@ async fn pipeline_metrics_conformance_stages_sum_and_no_anomalies() {
     let tts_span = snapshot.component_by_kind("tts").expect("tts component");
     let llm_span = snapshot.component_by_kind("llm").expect("llm component");
 
-    let llm_wait = llm_span.extras["llm_wait_ms"].as_f64().expect("llm_wait_ms");
-    let tts_wait = tts_span.extras["tts_wait_ms"].as_f64().expect("tts_wait_ms");
-    let output_wait = tts_span.extras["output_wait_ms"].as_f64().expect("output_wait_ms");
+    let llm_wait = llm_span.extras["llm_wait_ms"]
+        .as_f64()
+        .expect("llm_wait_ms");
+    let tts_wait = tts_span.extras["tts_wait_ms"]
+        .as_f64()
+        .expect("tts_wait_ms");
+    let output_wait = tts_span.extras["output_wait_ms"]
+        .as_f64()
+        .expect("output_wait_ms");
     let commit_fa = tts_span.extras["commit_to_first_audio_ms"]
         .as_f64()
         .expect("commit_to_first_audio_ms");

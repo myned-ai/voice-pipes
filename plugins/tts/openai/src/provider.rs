@@ -256,7 +256,14 @@ impl OpenAiTts {
     }
 
     /// Emit a `tts_detail` audit event.
-    fn emit_timing(&self, text: &str, sample_count: usize, elapsed: Duration, voice: &str, delivery_wait: Duration) {
+    fn emit_timing(
+        &self,
+        text: &str,
+        sample_count: usize,
+        elapsed: Duration,
+        voice: &str,
+        delivery_wait: Duration,
+    ) {
         if let Some(ref tx) = self.audit_tx {
             // Prefer the model the sidecar reported (resolved at setup via
             // model_identity) over the locally-configured name. The version

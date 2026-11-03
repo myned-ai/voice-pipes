@@ -74,10 +74,12 @@ fn all_example_configs_parse_validly() {
             || (matches!(parent_dir, "config" | "orchestrate")
                 && file_name.starts_with("worker")
                 && !file_name.starts_with("worker-realtime-"));
-        let is_orchestrator = file_name == "orchestrator.toml" && matches!(parent_dir, "config" | "orchestrate");
+        let is_orchestrator =
+            file_name == "orchestrator.toml" && matches!(parent_dir, "config" | "orchestrate");
 
         if is_orchestrator {
-            if let Err(e) = toml::from_str::<voice_pipes::api::types::OrchestratorConfig>(&content) {
+            if let Err(e) = toml::from_str::<voice_pipes::api::types::OrchestratorConfig>(&content)
+            {
                 parse_errors.push(format!(
                     "Orchestrator config {} failed to parse: {e}",
                     file.display()
@@ -85,7 +87,10 @@ fn all_example_configs_parse_validly() {
             }
         } else if is_worker {
             if let Err(e) = toml::from_str::<voice_pipes::api::types::WorkerConfig>(&content) {
-                parse_errors.push(format!("Worker config {} failed to parse: {e}", file.display()));
+                parse_errors.push(format!(
+                    "Worker config {} failed to parse: {e}",
+                    file.display()
+                ));
             }
         } else {
             // PipelineConfig
@@ -307,7 +312,8 @@ fn test_examples_runtime_readiness_and_skip_report() {
             .and_then(|n| n.to_str())
             .unwrap_or("");
 
-        if file_name == "orchestrator.toml" || file_name.ends_with(".worker.toml")
+        if file_name == "orchestrator.toml"
+            || file_name.ends_with(".worker.toml")
             || (matches!(parent_dir, "config" | "orchestrate") && file_name.starts_with("worker"))
         {
             continue; // Skip orchestrator/worker configs from pipeline component report
@@ -365,8 +371,11 @@ fn test_examples_runtime_readiness_and_skip_report() {
                 if !cfg!(feature = "stt-google") {
                     skip_reasons.push("Feature 'stt-google' not compiled in build".to_string());
                 }
-                if std::env::var("GOOGLE_APPLICATION_CREDENTIALS").map_or(true, |k| k.trim().is_empty()) {
-                    skip_reasons.push("Missing credentials: GOOGLE_APPLICATION_CREDENTIALS".to_string());
+                if std::env::var("GOOGLE_APPLICATION_CREDENTIALS")
+                    .map_or(true, |k| k.trim().is_empty())
+                {
+                    skip_reasons
+                        .push("Missing credentials: GOOGLE_APPLICATION_CREDENTIALS".to_string());
                 }
             }
             if stt.provider == "moonshine" && !cfg!(feature = "stt-moonshine") {
@@ -432,7 +441,11 @@ fn test_examples_runtime_readiness_and_skip_report() {
         let is_ready = skip_reasons.is_empty();
         if is_ready {
             ready_count += 1;
-            rows.push((rel_path, "READY".to_string(), "All models on disk and credentials configured".to_string()));
+            rows.push((
+                rel_path,
+                "READY".to_string(),
+                "All models on disk and credentials configured".to_string(),
+            ));
         } else {
             skipped_count += 1;
             rows.push((rel_path, "SKIPPED".to_string(), skip_reasons.join("; ")));
@@ -443,7 +456,10 @@ fn test_examples_runtime_readiness_and_skip_report() {
     println!("\n{}", "=".repeat(105));
     println!(" VOICE PIPES EXAMPLES: RELEASE READINESS & SKIP DIAGNOSTICS REPORT");
     println!("{}", "=".repeat(105));
-    println!("{:<45} | {:<7} | {}", "Example Configuration", "Status", "Diagnostics / Reason");
+    println!(
+        "{:<45} | {:<7} | {}",
+        "Example Configuration", "Status", "Diagnostics / Reason"
+    );
     println!("{}", "-".repeat(105));
     for (name, status, reason) in &rows {
         println!("{:<45} | {:<7} | {}", name, status, reason);
@@ -460,4 +476,3 @@ fn test_examples_runtime_readiness_and_skip_report() {
     // Ensure we evaluated all pipelines and ready ones are non-zero
     assert!(!rows.is_empty(), "Must evaluate example configurations");
 }
-

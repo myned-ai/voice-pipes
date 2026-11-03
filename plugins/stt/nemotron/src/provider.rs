@@ -271,14 +271,21 @@ impl SttProvider for NemotronStt {
         // The engine owns the sessions; the guard returns them to the pool on
         // drop (loop exit, early `?`, or a panic unwind in the blocking task).
         // The engine moves in/out of `spawn_blocking` on every recv batch.
-        let mut engine_guard =
-            match checkout_engine(&self.pool, &metadata, blank_id, max_tokens, request.slot_wait).await {
-                Ok(e) => e,
-                Err(e) => {
-                    self.core.record_error(&e);
-                    return Err(e);
-                }
-            };
+        let mut engine_guard = match checkout_engine(
+            &self.pool,
+            &metadata,
+            blank_id,
+            max_tokens,
+            request.slot_wait,
+        )
+        .await
+        {
+            Ok(e) => e,
+            Err(e) => {
+                self.core.record_error(&e);
+                return Err(e);
+            }
+        };
 
         let mut segment_index: u32 = 0;
         let mut all_tokens: Vec<u32> = Vec::new();

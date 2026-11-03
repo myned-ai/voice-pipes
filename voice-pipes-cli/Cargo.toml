@@ -70,6 +70,7 @@ session-sqlite = ["voice-pipes/session-sqlite"]
 
 # NVIDIA Parakeet TDT, the default recogniser.
 stt-parakeet = ["dep:voice-pipes-stt-parakeet"]
+# NVIDIA Nemotron 3.5 ASR (40 locales, cache-aware streaming) as a voice-pipes plugin.
 stt-nemotron35 = ["dep:voice-pipes-stt-nemotron35"]
 # Useful Sensors Moonshine (English), local ONNX.
 stt-moonshine = ["dep:voice-pipes-stt-moonshine"]
@@ -129,7 +130,9 @@ turn-vap = ["dep:voice-pipes-turn-vap"]
 
 # Google Gemini Live.
 s2s-gemini = ["realtime", "dep:voice-pipes-s2s-gemini"]
+# OpenAI Realtime speech-to-speech as a voice-pipes plugin, on the SDK only.
 s2s-openai = ["realtime", "dep:voice-pipes-s2s-openai"]
+# ElevenLabs Agents speech-to-speech as a voice-pipes plugin, on the SDK only.
 s2s-elevenlabs = ["realtime", "dep:voice-pipes-s2s-elevenlabs"]
 
 [dependencies]

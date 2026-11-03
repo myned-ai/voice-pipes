@@ -429,4 +429,3 @@ async fn metric_conformance() {
     .await;
     assert!(res.is_ok(), "{res:?}");
 }
-

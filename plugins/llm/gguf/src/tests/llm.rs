@@ -485,7 +485,9 @@ async fn time_to_first_token_includes_the_prompt_ingest() {
         .await
         .unwrap();
     let first = rx.recv().await.expect("a fragment");
-    let ttft = first.first_token_ms.expect("the first fragment carries TTFT");
+    let ttft = first
+        .first_token_ms
+        .expect("the first fragment carries TTFT");
     assert!(
         ttft >= ingest.as_secs_f64() * 1000.0,
         "TTFT {ttft:.1} ms leaves out the {} ms prompt ingest",
@@ -776,7 +778,10 @@ fn the_wizard_entries_write_configs_the_factory_accepts() {
     assert_eq!(keys, ["smollm2-360m", "smollm2-1.7b", "smollm2-135m"]);
     assert!(choices.windows(2).all(|w| w[0].menu_rank < w[1].menu_rank));
     assert_eq!(
-        choices[0].render_defaults("type", "llm").model_path.as_deref(),
+        choices[0]
+            .render_defaults("type", "llm")
+            .model_path
+            .as_deref(),
         Some("models/smollm2-360m/SmolLM2-360M-Instruct-Q4_K_M.gguf")
     );
     for choice in &choices {
@@ -962,4 +967,3 @@ async fn metric_conformance() {
     .unwrap();
     assert_eq!(ttft, 25.0);
 }
-

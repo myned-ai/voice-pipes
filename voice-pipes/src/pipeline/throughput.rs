@@ -406,7 +406,9 @@ impl ComponentMetricDescriptor {
                     .diagnostic()
                     .anchors("synthesis_start", "synthesis_end")
                     .owner("engine")
-                    .includes("Whole-utterance source production RTF (including inter-sentence gaps)"),
+                    .includes(
+                        "Whole-utterance source production RTF (including inter-sentence gaps)",
+                    ),
                 // Budget is 10 % of the turn's audio -- relative to another
                 // field, so the report engine judges it; here it
                 // is display-only.
@@ -425,15 +427,13 @@ impl ComponentMetricDescriptor {
                     .anchors("first_audio_chunk", "first_sent_audio")
                     .owner("engine")
                     .includes("Time from first raw audio chunk to first packet sent to transport"),
-                MetricFieldDescriptor::new(
-                    "commit_to_first_audio_ms",
-                    "Commit to first audio",
-                    Ms,
-                )
-                .diagnostic()
-                .anchors("turn_commit", "first_sent_audio")
-                .owner("engine")
-                .includes("Total post-commit wait (llm_wait_ms + tts_wait_ms + output_wait_ms)"),
+                MetricFieldDescriptor::new("commit_to_first_audio_ms", "Commit to first audio", Ms)
+                    .diagnostic()
+                    .anchors("turn_commit", "first_sent_audio")
+                    .owner("engine")
+                    .includes(
+                        "Total post-commit wait (llm_wait_ms + tts_wait_ms + output_wait_ms)",
+                    ),
             ],
         }
     }

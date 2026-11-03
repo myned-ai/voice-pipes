@@ -1112,7 +1112,10 @@ fn next_step_names_the_platform_launcher_unless_a_launcher_ran_it() {
     assert_eq!(super::next_step(true, true), None);
     assert_eq!(super::next_step(true, false), None);
     let windows = super::next_step(false, true).expect("a next step");
-    assert!(windows.contains("..\\launch-stack.ps1 -SkipWizard"), "{windows}");
+    assert!(
+        windows.contains("..\\launch-stack.ps1 -SkipWizard"),
+        "{windows}"
+    );
     let unix = super::next_step(false, false).expect("a next step");
     assert!(unix.contains("../launch-stack.sh --skip-wizard"), "{unix}");
 }

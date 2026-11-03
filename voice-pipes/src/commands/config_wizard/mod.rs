@@ -58,7 +58,9 @@ pub async fn run_config_wizard() -> Result<()> {
 
     let Some(written) = write_outputs(&plan, Path::new("."), &prompt)? else {
         println!("\n⚠️  Kept existing configuration. Your new wizard choices were discarded.");
-        println!("💡 Tip: To start with existing configuration in the future without running the wizard, use: launch-stack -SkipWizard");
+        println!(
+            "💡 Tip: To start with existing configuration in the future without running the wizard, use: launch-stack -SkipWizard"
+        );
         return Ok(());
     };
 

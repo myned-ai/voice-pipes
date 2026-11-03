@@ -180,7 +180,10 @@ fn precision_defaults_to_int8_and_fp32_names_the_other_export() {
     assert_eq!(o.precision, Precision::Int8);
     assert_eq!(o.language, None);
     assert_eq!(Precision::Int8.encoder_file(), "encoder-model.int8.onnx");
-    assert_eq!(Precision::Int8.decoder_file(), "decoder_joint-model.int8.onnx");
+    assert_eq!(
+        Precision::Int8.decoder_file(),
+        "decoder_joint-model.int8.onnx"
+    );
 
     let o = ParakeetOptions::read(&cfg_with(&[
         ("precision", "fp32".into()),
@@ -212,7 +215,11 @@ fn greek_results_use_the_greek_question_mark() {
     let mut text = String::from("τι κάνεις?");
     let mut words = vec![
         WordInfo::new("τι", std::time::Duration::ZERO, std::time::Duration::ZERO),
-        WordInfo::new("κάνεις?", std::time::Duration::ZERO, std::time::Duration::ZERO),
+        WordInfo::new(
+            "κάνεις?",
+            std::time::Duration::ZERO,
+            std::time::Duration::ZERO,
+        ),
     ];
     localise(&mut text, &mut words, "el-GR");
     assert_eq!(text, "τι κάνεις;");
@@ -266,4 +273,3 @@ async fn metric_conformance() {
     .await
     .unwrap();
 }
-

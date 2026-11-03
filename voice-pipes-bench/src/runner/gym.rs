@@ -4,8 +4,8 @@
 
 use super::*;
 use voice_pipes_gym::{
-    AcousticAdversary, BankingGoal, BankingTaskEnv, ClinicBookingTaskEnv, ClinicGoal,
-    ClientToolCall, GymRewardBreakdown, OrderGoal, OrderSupportTaskEnv, TaskEnvironment,
+    AcousticAdversary, BankingGoal, BankingTaskEnv, ClientToolCall, ClinicBookingTaskEnv,
+    ClinicGoal, GymRewardBreakdown, OrderGoal, OrderSupportTaskEnv, TaskEnvironment,
     TaskEvaluation,
 };
 
@@ -77,7 +77,9 @@ fn evaluate_task_goal(task: &GymTaskConfig, env: &dyn TaskEnvironment) -> TaskEv
                     if let Some(order_env) = env.as_any().downcast_ref::<OrderSupportTaskEnv>() {
                         order_env.verify_goal(&goal)
                     } else {
-                        TaskEvaluation::failure("Environment downcast to OrderSupportTaskEnv failed")
+                        TaskEvaluation::failure(
+                            "Environment downcast to OrderSupportTaskEnv failed",
+                        )
                     }
                 }
                 Err(e) => TaskEvaluation::failure(format!("Invalid OrderGoal definition: {e}")),

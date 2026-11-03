@@ -43,7 +43,10 @@ fn a_worker_config_from_a_newer_build_is_refused_with_the_reason() {
     let err = parse_worker_pipeline_config("worker-x", Some(&raw)).expect_err("unknown field");
     assert!(err.contains("worker-x"), "{err}");
     assert!(err.contains("field_from_a_newer_build"), "{err}");
-    assert!(err.contains("Rebuild and restart the orchestrator"), "{err}");
+    assert!(
+        err.contains("Rebuild and restart the orchestrator"),
+        "{err}"
+    );
 
     let cfg = serde_json::to_value(default_config()).expect("config as JSON");
     assert!(

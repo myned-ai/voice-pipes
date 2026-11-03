@@ -17,7 +17,10 @@ async fn a_port_served_on_another_loopback_address_is_skipped() {
     let port = other.local_addr().unwrap().port();
 
     let (_listener, bound) = try_bind("127.0.0.1", port, "test").await.unwrap();
-    assert_ne!(bound, port, "bound beside another process serving [::1]:{port}");
+    assert_ne!(
+        bound, port,
+        "bound beside another process serving [::1]:{port}"
+    );
     drop(other);
 }
 
