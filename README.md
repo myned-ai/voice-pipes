@@ -256,4 +256,4 @@ To inquire about commercial licensing, enterprise SLAs, or custom deployments:
 - **Email:** [info@myned.ai](mailto:info@myned.ai)
 - **Website:** [https://myned.ai](https://myned.ai)
 
-Copyright © 2026 **Myned AI Ltd**. Third-party attributions, including the vendored Microsoft VibeVoice package, are listed in [NOTICE](NOTICE).
+Copyright © 2026 **Myned AI Ltd.**. Third-party attributions, including the vendored Microsoft VibeVoice package, are listed in [NOTICE](NOTICE).

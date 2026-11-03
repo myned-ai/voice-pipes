@@ -88,7 +88,7 @@ env.reset();
 
 ## The Three Native Task Environments
 
-Each environment implements the [`TaskEnvironment`](file:///c:/projects/myned/vp/voice-pipes-gym/src/env.rs) trait, providing client-side tool specifications via `tools()`, execution via `execute()`, and deterministic rollback via `reset()`.
+Each environment implements the [`TaskEnvironment`](../../voice-pipes-gym/src/env.rs) trait, providing client-side tool specifications via `tools()`, execution via `execute()`, and deterministic rollback via `reset()`.
 
 | Domain | Crate Module | Tools Exposed | Acoustic Challenge | Goal Verification |
 |---|---|---|---|---|
@@ -113,7 +113,7 @@ Each environment implements the [`TaskEnvironment`](file:///c:/projects/myned/vp
 
 ## Acoustic Adversary
 
-Spoken dialogue is rarely pristine. Callers hesitate, mispronounce, change their minds mid-sentence, and interrupt. The [`AcousticAdversary`](file:///c:/projects/myned/vp/voice-pipes-gym/src/adversary.rs) models these dynamics deterministically via an initial seed:
+Spoken dialogue is rarely pristine. Callers hesitate, mispronounce, change their minds mid-sentence, and interrupt. The [`AcousticAdversary`](../../voice-pipes-gym/src/adversary.rs) models these dynamics deterministically via an initial seed:
 
 ```rust
 let adversary = AcousticAdversary::new(AdversaryConfig {
@@ -271,7 +271,7 @@ $$\mathcal{L}_{\text{GRPO}}(\theta) = - \frac{1}{K} \sum_{i=1}^K \min\left( \fra
 
 ### 3. Reference Python Training Script
 
-A runnable reference training loop is included in [`scripts/train_gym_grpo.py`](file:///c:/projects/myned/vp/scripts/train_gym_grpo.py):
+A runnable reference training loop is included in [`scripts/train_gym_grpo.py`](../../scripts/train_gym_grpo.py):
 
 ```sh
 python scripts/train_gym_grpo.py
@@ -283,7 +283,7 @@ This script connects the sampling loop, WebSocket AFAP audio ingestion, Voice Pi
 
 ## Running Benchmarks with Voice Pipes Gym
 
-The pre-configured test suite [`voice-pipes-bench/examples/benchmark/gym-suite.json`](file:///c:/projects/myned/vp/voice-pipes-bench/examples/benchmark/gym-suite.json) defines automated evaluations across all three domains.
+The pre-configured test suite [`voice-pipes-bench/examples/benchmark/gym-suite.json`](../../voice-pipes-bench/examples/benchmark/gym-suite.json) defines automated evaluations across all three domains.
 
 ### 1. Launch a Local Pipeline Worker
 

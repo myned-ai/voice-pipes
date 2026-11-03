@@ -22,4 +22,4 @@ Before posting a question or bug report, Voice Pipes includes built-in diagnosti
 | **Sharing a custom plugin (`voice-pipes-sdk`) or voice agent** | [GitHub Discussions — Show and Tell](https://github.com/myned-ai/voice-pipes/discussions/categories/show-and-tell) |
 | **Reproducible bugs or concrete feature/provider requests** | [GitHub Issues](https://github.com/myned-ai/voice-pipes/issues/new/choose) |
 | **Security vulnerabilities** | **Do not open a public issue.** Follow [SECURITY.md](../SECURITY.md) (`security@myned.ai`). |
-| **Commercial licensing (> $5M USD revenue), SLAs, or enterprise support** | See [COMMERCIAL.md](../COMMERCIAL.md) or email [licensing@myned.ai](mailto:licensing@myned.ai). |
+| **Commercial licensing (> $5M USD revenue), SLAs, or enterprise support** | See [COMMERCIAL.md](../COMMERCIAL.md) or email [info@myned.ai](mailto:info@myned.ai). |

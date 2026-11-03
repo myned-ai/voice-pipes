@@ -1,6 +1,6 @@
 # Contributor License Agreement (CLA)
 
-Thank you for your interest in contributing to **Voice Pipes**, a project maintained by **Myned AI Ltd** ("Myned", "we", "us", or "our").
+Thank you for your interest in contributing to **Voice Pipes**, a project maintained by **Myned AI Ltd.** ("Myned", "we", "us", or "our").
 
 To clarify the intellectual property rights granted with Contributions from any person or entity, Myned requires all contributors to agree to this Contributor License Agreement ("Agreement"). This Agreement is for your protection as a Contributor as well as the protection of Myned and its users; it does not change your rights to use your own Contributions for any other purpose.
 
@@ -13,11 +13,11 @@ To clarify the intellectual property rights granted with Contributions from any 
 
 ## 2. Grant of Copyright License
 
-Subject to the terms and conditions of this Agreement, You hereby grant to Myned AI Ltd and to recipients of software distributed by Myned a perpetual, worldwide, non-exclusive, no-charge, royalty-free, irrevocable copyright license to reproduce, prepare derivative works of, publicly display, publicly perform, transfer, and distribute Your Contributions and such derivative works, **and to sublicense the foregoing rights through multiple tiers of sublicensees under any license terms chosen by Myned (including, without limitation, open-source licenses, source-available licenses such as BSL 1.1, and proprietary commercial licenses)**.
+Subject to the terms and conditions of this Agreement, You hereby grant to Myned AI Ltd. and to recipients of software distributed by Myned a perpetual, worldwide, non-exclusive, no-charge, royalty-free, irrevocable copyright license to reproduce, prepare derivative works of, publicly display, publicly perform, transfer, and distribute Your Contributions and such derivative works, **and to sublicense the foregoing rights through multiple tiers of sublicensees under any license terms chosen by Myned (including, without limitation, open-source licenses, source-available licenses such as BSL 1.1, and proprietary commercial licenses)**.
 
 ## 3. Grant of Patent License
 
-Subject to the terms and conditions of this Agreement, You hereby grant to Myned AI Ltd and to recipients of software distributed by Myned a perpetual, worldwide, non-exclusive, no-charge, royalty-free, irrevocable (except as stated in this section) patent license to make, have made, use, offer to sell, sell, import, and otherwise transfer the Work, where such license applies only to those patent claims licensable by You that are necessarily infringed by Your Contribution(s) alone or by combination of Your Contribution(s) with the Work to which such Contribution(s) were submitted.
+Subject to the terms and conditions of this Agreement, You hereby grant to Myned AI Ltd. and to recipients of software distributed by Myned a perpetual, worldwide, non-exclusive, no-charge, royalty-free, irrevocable (except as stated in this section) patent license to make, have made, use, offer to sell, sell, import, and otherwise transfer the Work, where such license applies only to those patent claims licensable by You that are necessarily infringed by Your Contribution(s) alone or by combination of Your Contribution(s) with the Work to which such Contribution(s) were submitted.
 
 If any entity institutes patent litigation against You or any other entity (including a cross-claim or counterclaim in a lawsuit) alleging that Your Contribution, or the Work to which You have contributed, constitutes direct or contributory patent infringement, then any patent licenses granted to that entity under this Agreement for that Contribution or Work shall terminate as of the date such litigation is filed.
 

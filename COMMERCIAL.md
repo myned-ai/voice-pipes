@@ -1,6 +1,6 @@
 # Commercial Licensing & Enterprise FAQ
 
-**Voice Pipes** is source-available under the [Business Source License 1.1 (BSL 1.1)](LICENSE), developed and maintained by **Myned AI Ltd**.
+**Voice Pipes** is source-available under the [Business Source License 1.1 (BSL 1.1)](LICENSE), developed and maintained by **Myned AI Ltd.**.
 
 Our goal is to keep Voice Pipes completely free and open for individual developers, researchers, startups, and small-to-midsize businesses, while ensuring sustainable development when large enterprises or cloud service providers monetize the runtime at scale.
 
@@ -19,7 +19,7 @@ In addition, **non-production use** (evaluation, local development, testing, ben
 
 ## 2. Who Needs a Commercial License?
 
-You must obtain a Commercial License from **Myned AI Ltd** if:
+You must obtain a Commercial License from **Myned AI Ltd.** if:
 
 - Your organization (including parent companies, subsidiaries, and affiliates) has **more than \$5,000,000 USD** in annual turnover and you wish to run Voice Pipes in production; **OR**
 - You wish to embed, host, or resell Voice Pipes as a **managed cloud service, PaaS, or commercial voice API/platform** for third-party customers.
@@ -28,7 +28,7 @@ You must obtain a Commercial License from **Myned AI Ltd** if:
 
 ## 3. What Does a Commercial License Include?
 
-A commercial agreement with Myned AI Ltd provides:
+A commercial agreement with Myned AI Ltd. provides:
 
 - **Unrestricted Production & Revenue Rights:** Removes the \$5M annual turnover ceiling for your organization and its affiliates.
 - **Managed Hosting / SaaS Rights (Optional):** Custom licensing tiers for cloud providers, BPOs, and platforms offering hosted voice infrastructure to third parties.
