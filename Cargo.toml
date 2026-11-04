@@ -90,7 +90,7 @@ opentelemetry_sdk = "0.27"
 # install that resolves afresh (`cargo install` without `--locked`) would not
 # compile.
 ort = { version = "=2.0.0-rc.12", default-features = false, features = ["std", "ndarray", "tracing", "download-binaries", "tls-rustls", "copy-dylibs", "api-24"] }
-parking_lot = "0.12"
+parking_lot = "0.13"
 proc-macro2 = "1"
 prost = "0.13"
 prost-types = "0.13"
