@@ -234,26 +234,3 @@ Start at **[docs/README.md](docs/README.md)** or jump directly to your workflow:
 
 ---
 
-## Contributing
-
-Bug reports, new provider plugins, documentation improvements, and pull requests are welcome! Please review [CONTRIBUTING.md](CONTRIBUTING.md), our [Contributor License Agreement (CLA)](CLA.md), the [Development Setup Guide](docs/contributing/development-setup.md), and the [Roadmap](docs/roadmap.md). Security issues should be reported per [SECURITY.md](SECURITY.md).
-
----
-
-## Licensing
-
-Voice Pipes is source-available under the [Business Source License 1.1 (BSL 1.1)](LICENSE).
-
-- **Free for everyone** for evaluation, testing, research, and non-commercial use.
-- **Free for production use** for companies with total annual revenue under **\$5,000,000 USD** (provided it is not offered as a competing hosted/managed service).
-- Automatically converts to **Apache 2.0** three years after each release.
-
-### Commercial Licenses & Cloud Hosting
-
-If your company generates more than \$5M in annual turnover, or if you wish to offer Voice Pipes as a managed cloud service, you need a commercial license. See [COMMERCIAL.md](COMMERCIAL.md) for details.
-
-To inquire about commercial licensing, enterprise SLAs, or custom deployments:
-- **Email:** [info@myned.ai](mailto:info@myned.ai)
-- **Website:** [https://myned.ai](https://myned.ai)
-
-Copyright © 2026 **Myned AI Ltd.**. Third-party attributions, including the vendored Microsoft VibeVoice package, are listed in [NOTICE](NOTICE).
