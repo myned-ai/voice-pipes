@@ -93,7 +93,7 @@ ort = { version = "=2.0.0-rc.12", default-features = false, features = ["std", "
 parking_lot = "0.12"
 proc-macro2 = "1"
 prost = "0.13"
-prost-types = "0.13"
+prost-types = "0.14"
 protoc-bin-vendored = "3"
 reqwest = { version = "0.12", default-features = false }
 rtrb = "0.3"
