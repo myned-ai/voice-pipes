@@ -7,8 +7,8 @@ name = "custom-classic"
 enabled = true
 
 [stt]
-provider = "parakeet-tdt"
-model_dir = "models/parakeet-tdt"
+provider = "assemblyai"
+model_name = "u3-rt-pro"
 
 [[text_processor]]
 type = "openai-compat"
@@ -27,12 +27,8 @@ mode = "auto"
 model = "models/silero_vad.onnx"
 
 [turn_detection]
-mode = "smart"
-silence_timeout_ms = 2000
-smart_model_path = "models/smart-turn-v3.2-cpu.onnx"
-smart_threshold = 0.5
-smart_window_secs = 8
-smart_min_audio_ms = 500
+mode = "layered"
+silence_timeout_ms = 450
 
 [barge_in]
 enabled = true

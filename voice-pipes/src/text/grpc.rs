@@ -205,6 +205,7 @@ impl TextProcessor for GrpcTextProcessor {
                         .with_is_end_of_response(fragment.is_end_of_response);
                     tf.first_token_ms = fragment.first_token_ms;
                     tf.token_count = fragment.token_count;
+                    tf.spoken_text = fragment.spoken_text;
                     if tx.send(tf).await.is_err() {
                         break; // receiver dropped
                     }

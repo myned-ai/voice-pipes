@@ -140,8 +140,21 @@ export interface SttResult {
   latency_ms?: number;
 }
 
+export type TtsDirective =
+  | { kind: 'inline_tag' | 'tag_passthrough'; raw: string }
+  | { kind: 'ipa_phoneme'; raw?: string; word: string; ipa: string }
+  | { kind: 'lexicon'; from: string; to: string };
+
+export interface StrippedDirective {
+  raw: string;
+  reason: string;
+}
+
 export interface LlmOutput {
   text: string;
+  spoken_text?: string;
+  tts_directives?: TtsDirective[];
+  stripped_directives?: StrippedDirective[];
 }
 
 export interface LlmTiming {

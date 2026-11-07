@@ -12,47 +12,7 @@ use crate::tts::{SynthesisRequest, TtsProvider, WordBoundary};
 
 use super::types::AudioChunk;
 
-/// True for characters TTS cannot speak: emoji / pictographs and their
-/// plumbing (variation selectors, zero-width joiner, keycap combiner,
-/// tag characters used by flag sequences). Symbols with a spoken reading
-/// ("$", "%", "+") are deliberately kept.
-fn is_unspeakable_symbol(c: char) -> bool {
-    matches!(
-        u32::from(c),
-        0x1F000..=0x1FAFF // pictographs, emoticons, transport, supplemental
-            | 0x2600..=0x27BF // misc symbols + dingbats (☀ ❤ ✅)
-            | 0x2B00..=0x2BFF // misc symbols and arrows (⭐ ⬆ ⬛)
-            | 0xFE00..=0xFE0F // variation selectors
-            | 0x200D // zero-width joiner
-            | 0x20E3 // combining enclosing keycap
-            | 0xE0020..=0xE007F // tag characters
-    )
-}
 
-/// Strip emoticons/pictographs from LLM text before synthesis so TTS
-/// providers don't read them out ("smiling face with...") or garble
-/// them. Runs of spaces left behind by a removal are collapsed and the
-/// result is trimmed; an emoji-only fragment therefore becomes empty
-/// and is skipped by the caller like any other empty fragment.
-pub(crate) fn strip_unspeakable(text: &str) -> String {
-    if !text.chars().any(is_unspeakable_symbol) {
-        return text.to_string();
-    }
-    let mut out = String::with_capacity(text.len());
-    let mut prev_space = false;
-    for c in text.chars() {
-        if is_unspeakable_symbol(c) {
-            continue;
-        }
-        let is_space = c == ' ';
-        if is_space && prev_space {
-            continue;
-        }
-        prev_space = is_space;
-        out.push(c);
-    }
-    out.trim().to_string()
-}
 
 /// Helper to determine the number of audio samples per fixed-size chunk,
 /// based on the target sample rate and the `OutputChunkingConfig` settings.
@@ -442,6 +402,17 @@ async fn flush_fragment_buffer(
     audio_tx.send(chunk).await.is_ok()
 }
 
+struct PrefetchedFragment {
+    fragment: TextFragment,
+    spoken_text: String,
+    directives: Vec<voice_pipes_sdk::TtsDirectiveRecord>,
+    stripped: Vec<voice_pipes_sdk::StrippedDirectiveRecord>,
+    t0: std::time::Instant,
+    synth_handle: tokio::task::JoinHandle<Result<(), crate::tts::TtsError>>,
+    frame_rx: mpsc::Receiver<AudioFrame>,
+    word_rx: Option<mpsc::Receiver<WordBoundary>>,
+}
+
 /// TTS task: receives text fragments, synthesizes each into audio
 /// via the streaming interface, and sends audio chunks downstream.
 /// When `output_rate` is set and differs from the TTS native rate,
@@ -460,10 +431,18 @@ pub async fn tts_task(
     audit: Option<crate::audit::StreamingAuditSink>,
     event_tx: mpsc::Sender<ServerMessage>,
     error_reported: Arc<AtomicBool>,
+    sanitize_cfg: Option<voice_pipes_sdk::SanitizeConfig>,
 ) {
     let tts_rate = tts.sample_rate();
     let tts_name = tts.name().to_string();
     let target_rate = output_rate.unwrap_or(tts_rate);
+    let sanitize_cfg = sanitize_cfg.unwrap_or_else(|| {
+        voice_pipes_sdk::SanitizeConfig::from_tts(
+            None,
+            &tts_name,
+            tts.supported_inline_tags(),
+        )
+    });
     let needs_resample = tts_rate != target_rate;
     // A rate the resampler refuses (a provider reporting zero) could not be
     // converted fragment by fragment either: fail the task up front.
@@ -531,17 +510,7 @@ pub async fn tts_task(
     // `frag_rx`.  When the next fragment arrives we kick off its synthesis
     // immediately, overlapping the API round-trip with audio delivery --
     // critical for non-streaming TTS providers (e.g. Gemini).
-    #[expect(
-        clippy::type_complexity,
-        reason = "one-shot prefetch tuple; a named type would obscure the locality"
-    )]
-    let mut prefetched: Option<(
-        TextFragment,
-        std::time::Instant,
-        tokio::task::JoinHandle<Result<(), crate::tts::TtsError>>,
-        mpsc::Receiver<AudioFrame>,
-        Option<mpsc::Receiver<WordBoundary>>,
-    )> = None;
+    let mut prefetched: Option<PrefetchedFragment> = None;
     // Fragment received during prefetch that we could not synthesize
     // inline (e.g. empty / end-sentinel).  Consumed next iteration.
     let mut deferred_frag: Option<TextFragment> = None;
@@ -553,19 +522,30 @@ pub async fn tts_task(
 
     loop {
         // ── Step 1: obtain the next fragment + its synthesis state ──
-        let (fragment, frag_t0, synth_handle, mut frame_rx);
+        let (
+            fragment,
+            frag_spoken_text,
+            frag_directives,
+            frag_stripped,
+            frag_t0,
+            synth_handle,
+            mut frame_rx,
+        );
         let mut word_rx: Option<mpsc::Receiver<WordBoundary>>;
 
         if let Some(pf) = prefetched.take() {
             tracing::debug!(
-                chars = pf.0.text.chars().count(),
+                chars = pf.fragment.text.chars().count(),
                 "TTS: using prefetched synthesis"
             );
-            fragment = pf.0;
-            frag_t0 = pf.1;
-            synth_handle = pf.2;
-            frame_rx = pf.3;
-            word_rx = pf.4;
+            fragment = pf.fragment;
+            frag_spoken_text = pf.spoken_text;
+            frag_directives = pf.directives;
+            frag_stripped = pf.stripped;
+            frag_t0 = pf.t0;
+            synth_handle = pf.synth_handle;
+            frame_rx = pf.frame_rx;
+            word_rx = pf.word_rx;
         } else {
             // Get the raw fragment -- from the deferred slot or the channel.
             let mut raw = if let Some(df) = deferred_frag.take() {
@@ -587,12 +567,24 @@ pub async fn tts_task(
 
             let is_end = raw.is_end_of_response;
 
-            // Speak text only: drop emoticons the LLM sprinkled in. The
-            // caption (and the transcript on the LLM side) keeps whatever
-            // text remains, so spoken and displayed words stay aligned.
-            raw.text = strip_unspeakable(&raw.text);
+            // Dual-track sanitization: separate display text from spoken text,
+            // evaluate inline directives, and apply pronunciation lexicon.
+            let dual = if let Some(ref spoken) = raw.spoken_text {
+                voice_pipes_sdk::DualTrackText {
+                    display: raw.text.clone(),
+                    spoken: spoken.clone(),
+                    directives: Vec::new(),
+                    stripped: Vec::new(),
+                }
+            } else {
+                voice_pipes_sdk::sanitize_dual_track(&raw.text, &sanitize_cfg)
+            };
+            raw.text = dual.display;
+            let spoken_text = dual.spoken;
+            let tts_directives = dual.directives;
+            let stripped_directives = dual.stripped;
 
-            if raw.text.trim().is_empty() {
+            if spoken_text.trim().is_empty() {
                 // Still send the end-of-utterance sentinel for empty final fragments
                 // so the runner can collect pipeline metrics and emit TurnMetrics.
                 if is_end {
@@ -632,7 +624,7 @@ pub async fn tts_task(
                 Arc::clone(&tts),
                 Arc::clone(&tts_session),
                 has_stateful_session,
-                raw.text.clone(),
+                spoken_text.clone(),
                 raw.hints.clone(),
                 synth_max_retries,
                 cancel.clone(),
@@ -642,6 +634,9 @@ pub async fn tts_task(
             word_rx = wrx;
             frag_t0 = std::time::Instant::now();
             fragment = raw;
+            frag_spoken_text = spoken_text;
+            frag_directives = tts_directives;
+            frag_stripped = stripped_directives;
         }
 
         let is_end = fragment.is_end_of_response;
@@ -674,6 +669,9 @@ pub async fn tts_task(
             is_final: is_end,
             total_fragment_duration_ms: None,
             word_timings: None,
+            spoken_text: Some(frag_spoken_text.clone()),
+            tts_directives: frag_directives.clone(),
+            stripped_directives: frag_stripped.clone(),
         });
 
         let mut rechunk_buffer: Vec<i16> = Vec::new();
@@ -783,8 +781,19 @@ pub async fn tts_task(
                         frag_rx_closed = true;
                     }
                     if let Some(mut nf) = next {
-                        nf.text = strip_unspeakable(&nf.text);
-                        if nf.text.trim().is_empty() {
+                        let dual = if let Some(ref spoken) = nf.spoken_text {
+                            voice_pipes_sdk::DualTrackText {
+                                display: nf.text.clone(),
+                                spoken: spoken.clone(),
+                                directives: Vec::new(),
+                                stripped: Vec::new(),
+                            }
+                        } else {
+                            voice_pipes_sdk::sanitize_dual_track(&nf.text, &sanitize_cfg)
+                        };
+                        nf.text = dual.display;
+                        let n_spoken = dual.spoken;
+                        if n_spoken.trim().is_empty() {
                             // Empty fragment (possibly end-sentinel) -- defer.
                             deferred_frag = Some(nf);
                         } else {
@@ -792,12 +801,21 @@ pub async fn tts_task(
                                 Arc::clone(&tts),
                                 Arc::clone(&tts_session),
                                 has_stateful_session,
-                                nf.text.clone(),
+                                n_spoken.clone(),
                                 nf.hints.clone(),
                                 synth_max_retries,
                                 cancel.clone(),
                             );
-                            prefetched = Some((nf, std::time::Instant::now(), nhandle, nrx, nwrx));
+                            prefetched = Some(PrefetchedFragment {
+                                fragment: nf,
+                                spoken_text: n_spoken,
+                                directives: dual.directives,
+                                stripped: dual.stripped,
+                                t0: std::time::Instant::now(),
+                                synth_handle: nhandle,
+                                frame_rx: nrx,
+                                word_rx: nwrx,
+                            });
                             tracing::debug!("TTS: prefetch started for next fragment");
                         }
                     }
@@ -904,6 +922,9 @@ pub async fn tts_task(
                 is_final: is_end,
                 total_fragment_duration_ms: Some(total_fragment_duration_ms),
                 word_timings: wt,
+                spoken_text: Some(frag_spoken_text.clone()),
+                tts_directives: frag_directives.clone(),
+                stripped_directives: frag_stripped.clone(),
             };
 
             // If we generated no audio (or if pending_caption is somehow still present)
@@ -933,6 +954,7 @@ pub async fn tts_task(
                 utterance_id,
                 fragment_idx,
                 text: fragment.text.clone(),
+                spoken_text: Some(frag_spoken_text.clone()),
                 audio: crate::audio::AudioFrame {
                     samples: fragment_samples,
                     sample_rate: target_rate,
@@ -960,7 +982,7 @@ pub async fn tts_task(
                 synth_handle.abort();
             }
             if let Some(pf) = prefetched.take() {
-                pf.2.abort(); // also abort prefetched synthesis
+                pf.synth_handle.abort(); // also abort prefetched synthesis
             }
             while frag_rx.try_recv().is_ok() {}
             return;

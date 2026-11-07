@@ -72,6 +72,10 @@ impl Drop for WsSession {
 
 /// An already-decoded client message (decoded in the read pump task).
 #[derive(Debug)]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "internal transport decoding enum"
+)]
 enum DecodedClientMessage {
     Message(ClientMessage),
     Close,

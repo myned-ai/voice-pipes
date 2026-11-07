@@ -112,6 +112,15 @@ pub struct CaptionMeta {
     /// Word-level timing boundaries, if available from the TTS provider.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub word_timings: Option<Vec<WordTiming>>,
+    /// Spoken text sent to the TTS synthesizer (after sanitization, tag filtering, and lexicon).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub spoken_text: Option<String>,
+    /// Applied inline directives and pronunciation lexicon entries.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tts_directives: Vec<voice_pipes_sdk::TtsDirectiveRecord>,
+    /// Directives stripped because unsupported by the provider or not in passthrough allowlist.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stripped_directives: Vec<voice_pipes_sdk::StrippedDirectiveRecord>,
 }
 
 /// A chunk of PCM audio flowing through the streaming pipeline.
@@ -182,6 +191,40 @@ pub struct AudioLedgerEntry {
     /// Word-level timing boundaries within this fragment, if available.
     /// Offsets are relative to the *fragment* audio start.
     pub word_timings: Option<Vec<WordTiming>>,
+    /// The sanitized spoken text sent to the synthesizer.
+    pub spoken_text: Option<String>,
+}
+
+/// Return the prefix of `text` containing up to `count` whitespace-delimited words.
+/// UTF-8 safe and never slices inside a code point.
+fn nth_word_prefix(text: &str, count: usize) -> &str {
+    if count == 0 {
+        return "";
+    }
+    let mut words_seen = 0;
+    let mut in_word = false;
+    let mut end_byte = 0;
+    for (idx, ch) in text.char_indices() {
+        if ch.is_whitespace() {
+            if in_word {
+                in_word = false;
+                if words_seen >= count {
+                    return text.get(..end_byte).unwrap_or(text);
+                }
+            }
+        } else {
+            if !in_word {
+                in_word = true;
+                words_seen += 1;
+            }
+            end_byte = idx + ch.len_utf8();
+        }
+    }
+    if words_seen <= count {
+        text
+    } else {
+        text.get(..end_byte).unwrap_or(text)
+    }
 }
 
 /// Return the prefix of `text` corresponding to `frac` (0.0..=1.0) of its
@@ -231,6 +274,7 @@ impl AudioLedger {
     pub fn push(
         &mut self,
         text: String,
+        spoken_text: Option<String>,
         text_offset: usize,
         fragment_idx: u32,
         sample_count: u64,
@@ -246,6 +290,7 @@ impl AudioLedger {
         self.total_duration_ms += duration_ms;
         self.entries.push(AudioLedgerEntry {
             text,
+            spoken_text,
             text_offset,
             fragment_idx,
             sample_count,
@@ -288,11 +333,16 @@ impl AudioLedger {
                     let mut last_included = 0usize;
                     // Search position advances to handle repeated words.
                     let mut search_from = 0usize;
+                    let mut heard_count = 0usize;
+                    let total_words = wt.len();
                     for w in wt {
                         if (w.offset_ms as u64) <= offset_within {
+                            heard_count += 1;
                             // Word playback started -> user heard at least
                             // the beginning of this word.
-                            if let Some(pos) = entry.text[search_from..].find(&w.word) {
+                            if let Some(pos) =
+                                entry.text.get(search_from..).and_then(|s| s.find(&w.word))
+                            {
                                 let abs_pos = search_from + pos;
                                 last_included = abs_pos + w.word.len();
                                 search_from = last_included;
@@ -301,11 +351,16 @@ impl AudioLedger {
                             break;
                         }
                     }
-                    if last_included > 0 {
-                        result.push_str(&entry.text[..last_included]);
+                    if heard_count >= total_words && total_words > 0 {
+                        result.push_str(&entry.text);
                     } else {
-                        // Edge case: offset is before the first word.
-                        // Include nothing from this fragment.
+                        let word_prefix = nth_word_prefix(&entry.text, heard_count);
+                        let slice_len = last_included.max(word_prefix.len());
+                        if slice_len > 0
+                            && let Some(prefix) = entry.text.get(..slice_len)
+                        {
+                            result.push_str(prefix);
+                        }
                     }
                 } else {
                     // No word timings -- approximate by the fraction of this

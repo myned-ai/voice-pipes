@@ -32,6 +32,7 @@ const LLM_RETRY_MAX_RATE_LIMIT_WAIT: std::time::Duration = std::time::Duration::
 #[derive(Default)]
 struct FragmentTally {
     text: Option<String>,
+    spoken_text: Option<String>,
     idx: u32,
     text_offset: usize,
     samples: u64,
@@ -45,6 +46,7 @@ impl FragmentTally {
     /// Begin counting the fragment `caption` announces.
     fn start(&mut self, caption: &super::types::CaptionMeta, sample_rate: u32) {
         self.text = Some(caption.text.clone());
+        self.spoken_text.clone_from(&caption.spoken_text);
         self.idx = caption.fragment_idx;
         self.text_offset = self.next_offset;
         self.next_offset += caption.text.len();
@@ -58,6 +60,7 @@ impl FragmentTally {
         if let Some(text) = self.text.take() {
             ledger.lock().push(
                 text,
+                self.spoken_text.take(),
                 self.text_offset,
                 self.idx,
                 self.samples,
@@ -96,6 +99,7 @@ pub async fn process_utterance(
     // out of cold-start tracking (e.g. live mode).
     tts_cold_start: Arc<AtomicBool>,
     spec_manager: Option<Arc<SpeculativeSessionManager>>,
+    sanitize_cfg: Option<voice_pipes_sdk::SanitizeConfig>,
 ) -> TurnMetricsSnapshot {
     let process_start = std::time::Instant::now();
     let (frag_tx, mut frag_rx) = mpsc::channel::<TextFragment>(16);
@@ -280,6 +284,7 @@ pub async fn process_utterance(
                 tts_session.unwrap_or_else(|| Arc::new(tokio::sync::Mutex::new(None)));
             let cancel_tts = cancel.clone();
             let error_reported = Arc::new(AtomicBool::new(false));
+            let sanitize_arg = sanitize_cfg.clone();
             tts_handle = tokio::spawn(tts_task(
                 tts_frag_rx,
                 tts_audio_tx,
@@ -292,6 +297,7 @@ pub async fn process_utterance(
                 audit.clone(),
                 tts_event_tx,
                 error_reported,
+                sanitize_arg,
             ));
         } else {
             bridge_handle = tokio::spawn(async {});
@@ -354,6 +360,13 @@ pub async fn process_utterance(
         let audit_bridge = audit.clone();
         let cancel_bridge = cancel.clone();
         let bridge_pe_tx = pe_tx.clone();
+        let sanitize_cfg_bridge = sanitize_cfg.clone().unwrap_or_else(|| {
+            voice_pipes_sdk::SanitizeConfig::from_tts(
+                None,
+                tts.name(),
+                tts.supported_inline_tags(),
+            )
+        });
         bridge_handle = tokio::spawn(async move {
             let mut accumulated = String::new();
             let llm_start = std::time::Instant::now();
@@ -411,9 +424,13 @@ pub async fn process_utterance(
             let token_estimate = accumulated.split_whitespace().count() as u32;
             let _ = llm_done_tx.send((llm_generation, token_estimate, real_token_count));
             if let Some(ref a) = audit_bridge {
+                let dual = voice_pipes_sdk::sanitize_dual_track(&accumulated, &sanitize_cfg_bridge);
                 a.record(crate::audit::AuditEvent::LlmOutput {
                     utterance_id,
                     text: accumulated.clone(),
+                    spoken_text: Some(dual.spoken),
+                    tts_directives: dual.directives,
+                    stripped_directives: dual.stripped,
                     latency: llm_generation,
                     is_partial: cancel_bridge.is_cancelled(),
                 });
@@ -463,6 +480,7 @@ pub async fn process_utterance(
             audit.clone(),
             tts_event_tx,
             error_reported,
+            sanitize_cfg,
         ));
     }
 

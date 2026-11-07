@@ -35,6 +35,9 @@ async fn streaming_audit_writes_utterance_files() {
     sink.record(AuditEvent::LlmOutput {
         utterance_id: 1,
         text: "Hi there!".into(),
+        spoken_text: Some("Hi there!".into()),
+        tts_directives: Vec::new(),
+        stripped_directives: Vec::new(),
         latency: Duration::from_millis(300),
         is_partial: false,
     });
@@ -43,6 +46,7 @@ async fn streaming_audit_writes_utterance_files() {
         utterance_id: 1,
         fragment_idx: 0,
         text: "Hi there!".into(),
+        spoken_text: Some("Hi there!".into()),
         audio: AudioFrame {
             samples: vec![500; 2205],
             sample_rate: 22050,

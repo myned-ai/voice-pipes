@@ -496,6 +496,13 @@ pub trait TtsProvider: Send + Sync {
         false
     }
 
+    /// Inline control tag prefixes or tokens (e.g. `"<break"`, `"[laughs]"`, `"/ipa/"`)
+    /// that this TTS engine natively understands and that must not be stripped
+    /// from `spoken_text`. Default: `&[]` (strip all markup).
+    fn supported_inline_tags(&self) -> &'static [&'static str] {
+        &[]
+    }
+
     /// Open a session-scoped handle for providers that need a persistent
     /// upstream connection (conversational-awareness TTS, realtime S2S, etc.).
     ///

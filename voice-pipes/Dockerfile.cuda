@@ -45,7 +45,7 @@ COPY Cargo.toml Cargo.lock ./
 # keeps each file's directory, and a pattern a crate does not use (most have
 # no build.rs) matches nothing. Only compile inputs are copied, so editing
 # docs, configs or tests does not invalidate the build layer.
-COPY --parents voice-pipes*/Cargo.toml voice-pipes*/build.rs voice-pipes*/src voice-pipes*/proto plugins/*/*/Cargo.toml plugins/*/*/build.rs plugins/*/*/src plugins/*/*/proto ./
+COPY --parents voice-pipes*/Cargo.toml voice-pipes*/build.rs voice-pipes*/src voice-pipes*/proto ./
 # Compile-time embedded assets outside a crate's src (include_str!): the
 # wizard's model registry. Copied file by file so editing runtime configs
 # (worker TOMLs) does not invalidate the build layer.

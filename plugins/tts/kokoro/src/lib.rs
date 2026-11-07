@@ -482,6 +482,10 @@ impl TtsProvider for KokoroTts {
         "kokoro"
     }
 
+    fn supported_inline_tags(&self) -> &'static [&'static str] {
+        &["/ipa/"]
+    }
+
     async fn device_info(&self) -> Option<DeviceInfo> {
         let (runs_on, detail) = self.device.report();
         Some(DeviceInfo::config(runs_on, detail))

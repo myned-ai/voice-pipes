@@ -28,6 +28,7 @@ message TextFragment {
   bool is_end_of_response = 2;
   optional double first_token_ms = 3;
   optional uint32 token_count = 4;
+  optional string spoken_text = 6;
 }
 
 message TextProcessorInfo {

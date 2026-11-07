@@ -62,6 +62,12 @@ curl -L -o models/voices-v1.0.bin  https://github.com/thewh1teagle/kokoro-onnx/r
 | Word timestamps | No |
 | Pooling | `pool_size` |
 
+## Inline Phoneme Notation & Lexicon
+
+Kokoro natively supports inline International Phonetic Alphabet (IPA) phonemes using `[word](/ipa_phonemes/)` syntax (e.g. `[Kokoro](/kˈoʊ.kə.ɹoʊ/)`).
+- The dual-track sanitizer preserves phoneme notation in `spoken_text` for synthesis while rendering plain display text (`Kokoro`) in user captions and conversation memory.
+- You can also configure `[tts.lexicon]` in `pipeline.toml` to substitute words before phonemisation (e.g. `"SQL" = "sequel"`).
+
 ## Limitations
 
 - English voices in the v1.0 pack; language coverage follows the model.

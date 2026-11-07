@@ -255,7 +255,9 @@ impl crate::text::TextProcessor for TruncationRecordingProcessor {
         Ok(input.to_string())
     }
     fn truncate_history(&self, played_text: &str) -> Option<String> {
-        self.truncated_with.lock().push(played_text.to_string());
+        self.truncated_with
+            .lock()
+            .push(played_text.to_string());
         Some("Unheard assistant response".to_string())
     }
 }
@@ -290,14 +292,7 @@ async fn playback_report_with_zero_ms_truncates_unheard_llm_history() {
     let mut bed = AgentTestBed::new(vec![Box::new(proc)]);
     bed.fake_turn(2, TurnState::Speaking);
     let mut ledger = crate::pipeline::AudioLedger::default();
-    ledger.push(
-        "Unheard assistant response".into(),
-        1200,
-        0,
-        19_200,
-        16_000,
-        None,
-    );
+    ledger.push("Unheard assistant response".into(), None, 1200, 0, 19_200, 16_000, None);
     bed.audio_ledgers
         .insert(2, Arc::new(parking_lot::Mutex::new(ledger)));
 
@@ -308,3 +303,4 @@ async fn playback_report_with_zero_ms_truncates_unheard_llm_history() {
     assert_eq!(*truncated_with.lock(), vec![String::new()]);
     assert_eq!(bed.control_trace(), vec!["text_truncated:''"]);
 }
+

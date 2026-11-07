@@ -460,6 +460,11 @@ async fn run_session_inner(
     let (metrics_tx, mut metrics_rx) = mpsc::channel::<pipeline::TurnMetricsSnapshot>(4);
     let stt_name = negotiated.stt_provider.clone().unwrap_or_default();
     let tts_name = negotiated.tts_provider.clone().unwrap_or_default();
+    let session_sanitize_cfg = Some(voice_pipes_sdk::SanitizeConfig::from_tts(
+        state.config.tts.as_ref(),
+        &tts_name,
+        tts_root.supported_inline_tags(),
+    ));
 
     // Per-utterance audio ledgers -- kept so a late PlaybackReport can
     // look up the text<->audio mapping for precise history truncation.
@@ -794,6 +799,7 @@ async fn run_session_inner(
                     barge_in_sent_at: &mut barge_in_sent_at,
                     tts_session: Arc::clone(&tts_session),
                     spec_manager: spec_manager.clone(),
+                    sanitize_cfg: session_sanitize_cfg.clone(),
                     observations: observations.clone(),
                     client_tools: &session_client_tools,
                     client_calls: &mut client_calls,

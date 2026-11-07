@@ -12,10 +12,10 @@ use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
-use crate::AudioFrame;
 use crate::stt::{AudioChunk, InferenceMetrics, SttError, TranscriptionResult};
 use crate::text::{TextFragment, TextProcessorError};
 use crate::tts::TtsError;
+use crate::AudioFrame;
 
 /// Problems detected during provider metric conformance verification.
 #[derive(Debug, thiserror::Error, PartialEq)]
@@ -39,9 +39,7 @@ pub enum MetricConformanceError {
         value: f64,
     },
     /// A deliberately injected delay did not appear in the measured breakdown.
-    #[error(
-        "injected delay was not reflected in '{metric}': expected at least {expected:?}, got {actual:?}"
-    )]
+    #[error("injected delay was not reflected in '{metric}': expected at least {expected:?}, got {actual:?}")]
     DelayNotReflected {
         /// Name of the breakdown metric.
         metric: String,
@@ -51,9 +49,7 @@ pub enum MetricConformanceError {
         actual: Duration,
     },
     /// Delivery backpressure wait was erroneously counted as active synthesis compute time.
-    #[error(
-        "consumer backpressure ({delivery_wait:?}) contaminated active compute time ({compute:?}): compute must exclude backpressure"
-    )]
+    #[error("consumer backpressure ({delivery_wait:?}) contaminated active compute time ({compute:?}): compute must exclude backpressure")]
     BackpressureContamination {
         /// Active compute time.
         compute: Duration,
@@ -67,9 +63,7 @@ pub enum MetricConformanceError {
     #[error("first_token_ms missing on non-empty completion")]
     MissingTtft,
     /// Token count discrepancy between emitted tokens and provider telemetry.
-    #[error(
-        "token_count mismatch: counted {actual} non-empty tokens, provider reported {reported:?}"
-    )]
+    #[error("token_count mismatch: counted {actual} non-empty tokens, provider reported {reported:?}")]
     TokenCountMismatch {
         /// Reported count.
         reported: Option<u32>,
@@ -124,9 +118,7 @@ where
         ))
     })
     .await
-    .map_err(|_err| {
-        MetricConformanceError::ProviderError("timeout waiting for STT final".into())
-    })??;
+    .map_err(|_err| MetricConformanceError::ProviderError("timeout waiting for STT final".into()))??;
 
     drop(audio_tx);
     let _ = task.await;
@@ -346,7 +338,8 @@ mod tests {
             tokio::time::sleep(delay).await;
 
             let audio_secs = chunk.samples.len() as f64 / 16_000.0;
-            let metrics = InferenceMetrics::measured(audio_secs, delay, 1).with_delay_floor_ms(50);
+            let metrics =
+                InferenceMetrics::measured(audio_secs, delay, 1).with_delay_floor_ms(50);
             result_tx
                 .send(TranscriptionResult {
                     text: "hello world".into(),
@@ -360,9 +353,13 @@ mod tests {
             Ok(())
         };
 
-        let res =
-            assert_stt_metrics_conformance(run, vec![0; 16_000], 16_000, Duration::from_millis(50))
-                .await;
+        let res = assert_stt_metrics_conformance(
+            run,
+            vec![0; 16_000],
+            16_000,
+            Duration::from_millis(50),
+        )
+        .await;
 
         assert!(res.is_ok(), "{res:?}");
     }
@@ -386,9 +383,13 @@ mod tests {
             Ok(())
         };
 
-        let res =
-            assert_stt_metrics_conformance(run, vec![0; 1600], 16_000, Duration::from_millis(10))
-                .await;
+        let res = assert_stt_metrics_conformance(
+            run,
+            vec![0; 1600],
+            16_000,
+            Duration::from_millis(10),
+        )
+        .await;
 
         assert_eq!(res, Err(MetricConformanceError::MissingMetrics));
     }
@@ -400,7 +401,8 @@ mod tests {
                    _cancel: CancellationToken| async move {
             let chunk = audio_rx.recv().await.unwrap();
             let audio_secs = chunk.samples.len() as f64 / 16_000.0;
-            let mut metrics = InferenceMetrics::measured(audio_secs, Duration::from_millis(50), 1);
+            let mut metrics =
+                InferenceMetrics::measured(audio_secs, Duration::from_millis(50), 1);
             metrics.effective_latency_ms = Some(0); // Hardcoded 0!
             result_tx
                 .send(TranscriptionResult {
@@ -415,9 +417,13 @@ mod tests {
             Ok(())
         };
 
-        let res =
-            assert_stt_metrics_conformance(run, vec![0; 1600], 16_000, Duration::from_millis(10))
-                .await;
+        let res = assert_stt_metrics_conformance(
+            run,
+            vec![0; 1600],
+            16_000,
+            Duration::from_millis(10),
+        )
+        .await;
 
         assert_eq!(
             res,
@@ -449,7 +455,9 @@ mod tests {
 
     #[tokio::test]
     async fn tts_conformance_rejects_empty_audio() {
-        let run = |_tx: mpsc::Sender<AudioFrame>, _cancel: CancellationToken| async move { Ok(()) };
+        let run = |_tx: mpsc::Sender<AudioFrame>, _cancel: CancellationToken| async move {
+            Ok(())
+        };
 
         let res = assert_tts_metrics_conformance(run, Duration::from_millis(10)).await;
         assert_eq!(
@@ -465,6 +473,7 @@ mod tests {
         let run = |tx: mpsc::Sender<TextFragment>, _cancel: CancellationToken| async move {
             tx.send(TextFragment {
                 text: String::new(),
+                spoken_text: None,
                 is_end_of_response: false,
                 hints: None,
                 first_token_ms: None,
@@ -477,6 +486,7 @@ mod tests {
 
             tx.send(TextFragment {
                 text: "Hello".into(),
+                spoken_text: None,
                 is_end_of_response: false,
                 hints: None,
                 first_token_ms: Some(40.0),
@@ -487,6 +497,7 @@ mod tests {
 
             tx.send(TextFragment {
                 text: " world".into(),
+                spoken_text: None,
                 is_end_of_response: true,
                 hints: None,
                 first_token_ms: None,
@@ -507,6 +518,7 @@ mod tests {
         let run = |tx: mpsc::Sender<TextFragment>, _cancel: CancellationToken| async move {
             tx.send(TextFragment {
                 text: String::new(),
+                spoken_text: None,
                 is_end_of_response: false,
                 hints: None,
                 first_token_ms: Some(0.1),
@@ -526,6 +538,7 @@ mod tests {
         let run = |tx: mpsc::Sender<TextFragment>, _cancel: CancellationToken| async move {
             tx.send(TextFragment {
                 text: "Hello".into(),
+                spoken_text: None,
                 is_end_of_response: true,
                 hints: None,
                 first_token_ms: Some(2.0),

@@ -363,9 +363,10 @@ impl LlmProcessor {
             let t_generate = Instant::now();
             let first_logits =
                 Self::apply_repeat_penalty(&first_logits, &output_tokens, repeat_penalty)?;
-            let mut next_token = logits_processor
-                .sample(&first_logits)
-                .map_err(|e| TextProcessorError::new("llm", format!("sampling failed: {e}")))?;
+            let mut next_token =
+                logits_processor
+                    .sample(&first_logits)
+                    .map_err(|e| TextProcessorError::new("llm", format!("sampling failed: {e}")))?;
 
             let mut first_token_ms: Option<f64> = None;
             // Same value as `first_token_ms`, but consumed (`take`) on the first
@@ -378,6 +379,7 @@ impl LlmProcessor {
             // stop generating instead of grinding to `max_tokens` while
             // holding the backend lock.
             let mut consumer_stopped = false;
+            let mut think_filter = voice_pipes_sdk::ThinkTagFilter::new();
 
             for (pos, i) in (prompt_tokens.len()..).zip(0..max_tokens) {
                 if cancel.is_cancelled() {
@@ -390,12 +392,6 @@ impl LlmProcessor {
                 }
                 output_tokens.push(next_token);
 
-                if first_token_ms.is_none() {
-                    let t = t_request.elapsed().as_secs_f64() * 1000.0;
-                    first_token_ms = Some(t);
-                    pending_first_token_ms = Some(t);
-                }
-
                 // Feed this token to the incremental decoder. It returns the
                 // newly-completed text, or nothing while a multi-byte character
                 // is still spanning tokens (byte-level BPE tokens are not
@@ -404,16 +400,19 @@ impl LlmProcessor {
                     TextProcessorError::new("llm", format!("token decode failed: {e}"))
                 })? {
                     let token_text = Self::clean_output(template.as_ref(), &piece);
-                    sentence_buffer.push_str(&token_text);
+                    let filtered = think_filter.push(&token_text);
+                    if !filtered.is_empty() {
+                        if first_token_ms.is_none() {
+                            let t = t_request.elapsed().as_secs_f64() * 1000.0;
+                            first_token_ms = Some(t);
+                            pending_first_token_ms = Some(t);
+                        }
+                        sentence_buffer.push_str(&filtered);
+                    }
                 }
 
                 // Emit complete sentences as they form.
-                while let Some((sentence, rest)) = split_first_sentence(
-                    &sentence_buffer,
-                    text_chunking.min_soft_split_chars,
-                    text_chunking.min_soft_split_words,
-                    false,
-                ) {
+                while let Some((sentence, rest)) = split_first_sentence(&sentence_buffer, text_chunking.min_soft_split_chars, text_chunking.min_soft_split_words, false) {
                     if !sentence.trim().is_empty() {
                         if first_sentence_chars.is_none() {
                             first_sentence_chars = Some(sentence.trim_end().len());
@@ -438,11 +437,13 @@ impl LlmProcessor {
                     break;
                 }
 
-                let logits = backend
-                    .forward(&[next_token], pos)
-                    .map_err(|e| TextProcessorError::new("llm", e.message))?;
+                let logits =
+                    backend
+                        .forward(&[next_token], pos)
+                        .map_err(|e| TextProcessorError::new("llm", e.message))?;
 
-                let logits = Self::apply_repeat_penalty(&logits, &output_tokens, repeat_penalty)?;
+                let logits =
+                    Self::apply_repeat_penalty(&logits, &output_tokens, repeat_penalty)?;
 
                 next_token = logits_processor
                     .sample(&logits)
@@ -470,12 +471,14 @@ impl LlmProcessor {
                 cache_reset_ms = format!("{cache_reset_ms:.1}"),
                 prompt_ingest_ms = format!("{prompt_ingest_ms:.1}"),
                 prompt_tokens = ingest_count,
-                total_ms = format!(
-                    "{:.1}",
-                    tokenize_ms + cache_reset_ms + prompt_ingest_ms + generate_ms
-                ),
+                total_ms = format!("{:.1}", tokenize_ms + cache_reset_ms + prompt_ingest_ms + generate_ms),
                 "LLM generation complete"
             );
+
+            let trailing = think_filter.flush();
+            if !trailing.is_empty() {
+                sentence_buffer.push_str(&trailing);
+            }
 
             // Flush remaining buffer.
             let final_text = sentence_buffer.trim().to_string();
@@ -519,9 +522,7 @@ impl LlmProcessor {
                     &cancel,
                     TextFragment::new(final_text)
                         .with_is_end_of_response(true)
-                        .with_token_count(Some(
-                            u32::try_from(output_tokens.len()).unwrap_or(u32::MAX),
-                        ))
+                        .with_token_count(Some(u32::try_from(output_tokens.len()).unwrap_or(u32::MAX)))
                         // If the entire response fit before any sentence boundary,
                         // forward the captured TTFT on the final flush so it's not lost.
                         .with_first_token_ms(pending_first_token_ms.take()),
@@ -575,8 +576,19 @@ mod tests {
 
     #[test]
     fn llm_detail_first_token_ms_is_null_when_absent() {
-        let payload =
-            build_llm_detail_payload(0.2, 145.6, 24, 1.1, 0, None, None, 0.0, "cpu", false, 0.0);
+        let payload = build_llm_detail_payload(
+            0.2,
+            145.6,
+            24,
+            1.1,
+            0,
+            None,
+            None,
+            0.0,
+            "cpu",
+            false,
+            0.0,
+        );
         assert!(
             payload["first_token_ms"].is_null(),
             "missing first_token_ms must serialize as null, got {}",

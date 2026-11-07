@@ -414,6 +414,10 @@ pub async fn run_live(
         let cancel_proc = cancel.clone();
         let utt_audit = streaming_audit.clone();
         let output_chunking = cfg.output_chunking();
+        let live_sanitize_cfg = cfg
+            .tts
+            .as_ref()
+            .map(|t| voice_pipes_sdk::SanitizeConfig::from_tts(Some(t), &t.provider, &[]));
         let utt_id = utterance.utterance_id;
         // Discard event-channel messages in live mode (no transport to forward to).
         let (event_tx, _event_rx) = tokio::sync::mpsc::channel(8);
@@ -436,6 +440,7 @@ pub async fn run_live(
                 // by starting from `false` so every turn reports `cold_start = false`.
                 std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
                 None,
+                live_sanitize_cfg,
             )
             .await;
         });

@@ -53,6 +53,13 @@ says so.
 | Pooling | `pool_size` |
 | Languages | per voice |
 
+## Markdown Sanitization & Directives
+
+Piper only synthesizes plain phonemic text; it does not parse SSML or inline Markdown.
+- With Voice Pipes' dual-track sanitizer (`sanitize_markdown = true`, enabled by default), Markdown syntax (`**bold**`, `` `code` ``, `#`, etc.) is cleanly stripped before feeding Piper, preventing raw asterisks and backticks from being read aloud.
+- Unsupported inline tags (e.g. `<break>` or emotion markers) are safely removed from the audio stream and recorded in turn diagnostics, so Piper never attempts to pronounce raw XML tags.
+- Pronunciation substitutions configured in `[tts.lexicon]` (e.g. `"SQL" = "sequel"`) apply directly to Piper speech without altering display transcripts.
+
 ## Limitations
 
 - Voice quality is serviceable, not expressive; [Kokoro](kokoro.md) is the

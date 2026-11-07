@@ -541,6 +541,7 @@ async fn test_speculative_speedup_proof() {
             ledger_clone,
             Arc::new(AtomicBool::new(false)),
             None,
+            None,
         )
         .await;
     });
@@ -612,6 +613,7 @@ async fn test_speculative_speedup_proof() {
             ledger_spec_text_clone,
             Arc::new(AtomicBool::new(false)),
             Some(manager_spec_text_clone),
+            None,
         )
         .await;
     });
@@ -683,6 +685,7 @@ async fn test_speculative_speedup_proof() {
             ledger_spec_audio_clone,
             Arc::new(AtomicBool::new(false)),
             Some(manager_spec_audio_clone),
+            None,
         )
         .await;
     });

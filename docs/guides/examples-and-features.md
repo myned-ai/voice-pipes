@@ -29,8 +29,9 @@ Find the feature you want to explore and use the matching example configuration:
 | **Distributed gRPC Split-Mode** | [`examples/grpc/pipeline-remote-tts.toml`](../../voice-pipes/examples/grpc/pipeline-remote-tts.toml) | gRPC component server on host/network | Start worker + start pipeline |
 | **Anticipatory Turn Detection (VAP)** | [`examples/features/turn-vap.toml`](../../voice-pipes/examples/features/turn-vap.toml) | VAP ONNX model | `voice-pipes --config examples/features/turn-vap.toml live` |
 | **Speculative Turn Execution** | [`examples/features/speculative-execution.toml`](../../voice-pipes/examples/features/speculative-execution.toml) | Local or fast cloud LLM | `voice-pipes --config examples/features/speculative-execution.toml live` |
+| **TTS Pronunciation Lexicon & Markdown Sanitizer** | [`examples/features/tts-lexicon-and-tags.toml`](../../voice-pipes/examples/features/tts-lexicon-and-tags.toml) | Piper or Kokoro model | `voice-pipes --config examples/features/tts-lexicon-and-tags.toml live` |
 | **Multi-Worker Fleet Orchestration** | [`examples/orchestrate/orchestrator.toml`](../../voice-pipes/examples/orchestrate/orchestrator.toml) | Orchestrator + 1..N workers | Start orchestrator, then start workers |
-| **Automated A/B Benchmarking** | [`examples/bench/bench-piper.toml`](../../voice-pipes/examples/bench/bench-piper.toml) vs [`examples/bench/bench-pocket-http.toml`](../../voice-pipes/examples/bench/bench-pocket-http.toml) | Orchestrator + 2 workers | `pwsh scripts/run-benchmark-multi.ps1` |
+| **Automated A/B Benchmarking** | [`examples/bench-piper.toml`](../../voice-pipes/examples/bench-piper.toml) vs [`bench-pocket-http.toml`](../../voice-pipes/examples/bench-pocket-http.toml) | Orchestrator + 2 workers | `pwsh scripts/run-benchmark-multi.ps1` |
 
 ---
 
@@ -181,9 +182,9 @@ voice-pipes --config examples/minimal.toml check
 ### Recipe 9: Automated A/B Benchmarking & Pipeline Comparison
 * **What it proves:** Replays identical audio scenarios across two different pipeline variants to evaluate TTFB, TTFT, caller wait p90, and Word Error Rate with statistical aggregation and visual diffs.
 * **Configurations:**
-  - Variant A: [`examples/bench/bench-piper.toml`](../../voice-pipes/examples/bench/bench-piper.toml) (Piper TTS)
-  - Variant B: [`examples/bench/bench-pocket-http.toml`](../../voice-pipes/examples/bench/bench-pocket-http.toml) (Pocket-TTS)
-  - Or LLM comparison: [`examples/bench/bench-gemma4-concise.toml`](../../voice-pipes/examples/bench/bench-gemma4-concise.toml) vs [`examples/bench/bench-openai.toml`](../../voice-pipes/examples/bench/bench-openai.toml)
+  - Variant A: [`examples/bench-piper.toml`](../../voice-pipes/examples/bench-piper.toml) (Piper TTS)
+  - Variant B: [`examples/bench-pocket-http.toml`](../../voice-pipes/examples/bench-pocket-http.toml) (Pocket-TTS)
+  - Or LLM comparison: [`examples/bench-gemma4-concise.toml`](../../voice-pipes/examples/bench-gemma4-concise.toml) vs [`examples/bench-openai.toml`](../../voice-pipes/examples/bench-openai.toml)
 * **Run comparison:**
   ```powershell
   # Compare two local or cloud workers:

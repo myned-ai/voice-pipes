@@ -91,6 +91,13 @@ This section displays the actual spoken/typed content and provides media playbac
 
 ### Footer & Metadata
 * **LLM Prompt Box**: Expandable section showing the exact LLM input if it differs from the transcribed STT text (e.g. system prompts or injected context).
+* **TTS Input Inspector**: Expandable violet box rendered when spoken text differs from display text (Markdown stripped, whole-word lexicon substitutions, or inline tags applied/stripped).
+    * **Trigger criteria**: Present when `llm_output.spoken_text != llm_output.text`, or `tts_directives` / `stripped_directives` arrays are non-empty.
+    * **Label**: `TTS input · {N} directive(s) · {M} lexicon`, plus an amber `· {K} stripped ⚠` badge if directives were dropped.
+    * **Expanded inspector**:
+        * Displays the exact `spoken_text` sent to the TTS provider.
+        * Displays applied directive chips: `<break time="..."/>`, `Kokoro → /ipa/`, or `SQL → sequel`.
+        * Displays amber warning rows for stripped directives with provider reasons (e.g. `[whispers] — not in passthrough_tags for provider 'piper'`).
 * **Bottom Metrics Bar**: 
     * `{tokens_per_sec} tok/s`
     * `{rtf}x RTF` (Real-Time Factor for TTS audio).
@@ -104,6 +111,7 @@ This section displays the actual spoken/typed content and provides media playbac
 Collapsible cards that dump raw session telemetry for debugging.
 * **LLM Timing Breakdown**: Stacked bar chart showing `Cache reset` vs `Prompt ingest` vs `Generation`, alongside token counts.
 * **TTS Timing Breakdown**: Displays RTF, Chars, Audio Duration, Sample Rate, and Voice ID.
+* **TTS Input & Directive Audit**: Serialized in `{utt:03}_llm_output.json` (and `{utt:03}_tts_frag_{idx:03}_spoken.txt`), recording `spoken_text`, `tts_directives`, and `stripped_directives` for full pronunciation and SSML auditability.
 * **Generic JSON Cards**: Renders raw `pipeline_events.jsonl` payloads.
 
 ---

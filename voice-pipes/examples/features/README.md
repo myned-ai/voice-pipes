@@ -9,7 +9,7 @@ This directory (`voice-pipes/examples/features/`) together with sibling folders 
 | Feature | Pipeline Mode | Cargo Feature(s) | Example Config |
 | :--- | :--- | :--- | :--- |
 | **VAP Turn Detection** (`mode = "vap"`, stereo floor prediction + lead-time `expected_end_in`) | Cascade (`STT -> LLM -> TTS`), `serve` & `live` | `turn-vap` | [`examples/features/turn-vap.toml`](turn-vap.toml) |
-| **Smart Turn Detection** (`mode = "smart"`, Pipecat Whisper 8 s acoustic endpointer) | Cascade (`STT -> LLM -> TTS`), `serve` & `live` | `turn-smart` | [`examples/dev/test-live-parakeet-smart.toml`](../dev/test-live-parakeet-smart.toml) |
+| **Smart Turn Detection** (`mode = "smart"`, Pipecat Whisper 8 s acoustic endpointer) | Cascade (`STT -> LLM -> TTS`), `serve` & `live` | `turn-smart` | [`examples/test-live-parakeet-smart.toml`](../test-live-parakeet-smart.toml) |
 | **Turn-Detection Corpus Recording & Offline Scoring** (`record_session_audio = true`) | Cascade (`serve` & `live`) + `voice-pipes-bench` | `turn-smart`, `turn-vap` | [`examples/live/english-turn-corpus.toml`](../live/english-turn-corpus.toml) |
 | **Speculative Execution** (`[speculative]` partial LLM prefill + speculative TTS) | Cascade (`STT -> LLM -> TTS`), `serve` | *(built-in)* | [`examples/features/speculative-execution.toml`](speculative-execution.toml) |
 | **Adaptive Network Quality & Custom Grading** (`[adaptive_quality]`, `[grading]`) | Cascade & Realtime S2S, `serve` | *(built-in)* | [`examples/features/adaptive-quality.toml`](adaptive-quality.toml) |
@@ -18,6 +18,7 @@ This directory (`voice-pipes/examples/features/`) together with sibling folders 
 | **Avatar Annotators & Client-Side Tools** (`[[audio_post_processor]] mode = "annotate"`, `[[client_tool]]`) | Cascade & Realtime S2S, `serve` | *(built-in)* / `realtime` | [`examples/avatar/avatar-cascade-clienttools.toml`](../avatar/avatar-cascade-clienttools.toml), [`examples/avatar/avatar-realtime-clienttools.toml`](../avatar/avatar-realtime-clienttools.toml) |
 | **Distributed gRPC Stage Offloading** (`remote-grpc` TTS/STT worker split) | Cascade, `serve` | *(built-in)* | [`examples/grpc/pipeline-remote-tts.toml`](../grpc/pipeline-remote-tts.toml), [`examples/grpc/worker-tts.toml`](../grpc/worker-tts.toml) |
 | **Fleet Orchestration** (Orchestrator + multi-worker registration) | All modes (`orchestrate` + `serve`) | *(built-in)* | [`examples/orchestrate/orchestrator.toml`](../orchestrate/orchestrator.toml), [`examples/orchestrate/worker.toml`](../orchestrate/worker.toml) |
+| **TTS Pronunciation Lexicon & Markdown Sanitizer** (`[tts.lexicon]`, `sanitize_markdown`, `passthrough_tags`) | Cascade (`STT -> LLM -> TTS`), `live` & `serve` | *(built-in)* | [`examples/features/tts-lexicon-and-tags.toml`](tts-lexicon-and-tags.toml) |
 
 ---
 
@@ -45,7 +46,7 @@ cargo run --release -p voice-pipes-cli --features turn-vap -- \
 ```sh
 cd voice-pipes
 cargo run --release -p voice-pipes-cli --features turn-smart -- \
-  --config examples/dev/test-live-parakeet-smart.toml live
+  --config examples/test-live-parakeet-smart.toml live
 ```
 
 ### 3. Speculative Execution (`speculative-execution.toml`)

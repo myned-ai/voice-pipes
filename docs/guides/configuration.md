@@ -145,6 +145,32 @@ Note this applies to `serve` only. `live` and `batch` cannot do anything
 without speech input, so they still fall back to a default STT provider when
 the block is absent.
 
+#### Pronunciation lexicon and Markdown sanitization
+
+Voice Pipes employs a dual-track text sanitizer (`display_text` vs `spoken_text`) to solve two fundamental speech synthesis issues: Markdown syntax leakage and phonetic mispronunciation.
+
+```toml
+[tts]
+provider = "kokoro"
+model = "models/kokoro-v1.0.onnx"
+voices = "models/voices-v1.0.bin"
+voice = "af_heart"
+sanitize_markdown = true            # default: true
+
+# Preserve specific SSML / emotion directives for TTS, stripping them from UI captions
+passthrough_tags = ["<break", "[whispers]"]
+
+# Whole-word pronunciation substitutions (applied to spoken audio only)
+[tts.lexicon]
+"SQL" = "sequel"
+"Myned" = "Mined"
+"nginx" = "engine x"
+```
+
+- **Clean LLM History & Captures:** The conversation history fed back to the LLM and user UI captions retain canonical display text (`"Connect to the **SQL** database"`). Only the synthesized audio hears `"sequel"`, preventing model drift and phonetic spelling pollution.
+- **Markdown Stripping:** Headings (`#`), bold/italic (`**text**`), inline code (`` `code` ``), bullet lists, and raw URLs are converted into natural spoken phrasing before hitting TTS, so engines never vocalize raw markdown punctuation.
+- **Provider-Aware Inline Directives:** Inline tags supported by your TTS provider (such as Kokoro phonemes `[Kokoro](/kˈoʊ.kə.ɹoʊ/)` or ElevenLabs SSML `<break time="1.5s"/>`) pass through to synthesis while remaining invisible in user transcripts. Unsupported tags are safely stripped.
+
 ### `[realtime_provider]` (speech-to-speech)
 
 ```toml

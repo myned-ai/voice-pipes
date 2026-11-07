@@ -370,6 +370,12 @@ impl OpenAiCompatProcessor {
             "OpenAI-compat streaming complete"
         );
 
+        let trailing = turn.think_filter.flush();
+        if !trailing.is_empty() {
+            turn.sentence_buffer.push_str(&trailing);
+            turn.full_response.push_str(&trailing);
+        }
+
         let final_text = turn.sentence_buffer.trim().to_string();
         if turn.first_sentence_chars.is_none() && !final_text.is_empty() {
             turn.first_sentence_chars = Some(final_text.len());
@@ -536,6 +542,7 @@ struct StreamTurn {
     /// wall-clock from its entry.
     pending_first_token_ms: Option<f64>,
     first_sentence_chars: Option<usize>,
+    think_filter: voice_pipes_sdk::ThinkTagFilter,
     /// Set once a choice reports `finish_reason` or the response cap is
     /// hit. The chunk after that may still carry usage; anything else after
     /// it ends the read, so a server that keeps streaming past its own end
@@ -554,6 +561,7 @@ impl StreamTurn {
             first_token_ms: None,
             pending_first_token_ms: None,
             first_sentence_chars: None,
+            think_filter: voice_pipes_sdk::ThinkTagFilter::new(),
             finished: false,
         }
     }
@@ -632,7 +640,16 @@ impl StreamTurn {
         content: &str,
         tx: &mpsc::Sender<TextFragment>,
     ) {
-        if self.full_response.len() + content.len() > MAX_RESPONSE_BYTES {
+        let filtered = self.think_filter.push(content);
+        if !filtered.is_empty() && self.first_token_ms.is_none() {
+            let t = self.t0.elapsed().as_secs_f64() * 1000.0;
+            self.first_token_ms = Some(t);
+            self.pending_first_token_ms = Some(t);
+        }
+        if filtered.is_empty() {
+            return;
+        }
+        if self.full_response.len() + filtered.len() > MAX_RESPONSE_BYTES {
             tracing::warn!(
                 retained = self.full_response.len(),
                 "OpenAI-compat response past the size cap; ending the turn"
@@ -640,16 +657,8 @@ impl StreamTurn {
             self.finished = true;
             return;
         }
-        // L3: Stamp TTFT only on non-empty content so an initial role-only
-        // chunk (`delta: { role: "assistant", content: "" }`) does not stamp
-        // TTFT before any token has been generated.
-        if !content.is_empty() && self.first_token_ms.is_none() {
-            let t = self.t0.elapsed().as_secs_f64() * 1000.0;
-            self.first_token_ms = Some(t);
-            self.pending_first_token_ms = Some(t);
-        }
-        self.sentence_buffer.push_str(content);
-        self.full_response.push_str(content);
+        self.sentence_buffer.push_str(&filtered);
+        self.full_response.push_str(&filtered);
         let chunking = &processor.text_chunking;
         while let Some((sentence, rest)) = split_first_sentence(
             &self.sentence_buffer,

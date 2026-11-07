@@ -85,6 +85,24 @@ fn check_tts(cfg: &PipelineConfig, errors: &mut Vec<ConfigError>) {
                 &credentials::process_env,
             ))),
         }
+
+        for key in tts.lexicon.keys() {
+            if key.trim().is_empty() {
+                errors.push(ConfigError::new(
+                    "tts.lexicon",
+                    "tts.lexicon key cannot be empty or whitespace-only",
+                ));
+            }
+        }
+
+        for tag in &tts.passthrough_tags {
+            if tag.trim().is_empty() {
+                errors.push(ConfigError::new(
+                    "tts.passthrough_tags",
+                    "tts.passthrough_tags entry cannot be empty or whitespace-only",
+                ));
+            }
+        }
     }
 }
 

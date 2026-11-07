@@ -121,7 +121,7 @@ async fn test_vad_eou_samples_retained() {
 /// it like any other empty fragment.
 #[test]
 fn strip_unspeakable_removes_emoji_keeps_speech() {
-    use crate::pipeline::tts::strip_unspeakable;
+    use voice_pipes_sdk::strip_unspeakable;
 
     assert_eq!(strip_unspeakable("Great! 😊"), "Great!");
     assert_eq!(strip_unspeakable("Hi 😊 there"), "Hi there");
@@ -308,10 +308,7 @@ async fn vad_hangover_is_included_in_endpointing_ms() {
 
     #[async_trait]
     impl SttProvider for FinalOnLastChunkStt {
-        async fn transcribe(
-            &self,
-            _audio: &crate::audio::AudioFrame,
-        ) -> Result<TranscriptionResult, SttError> {
+        async fn transcribe(&self, _audio: &crate::audio::AudioFrame) -> Result<TranscriptionResult, SttError> {
             Ok(TranscriptionResult::new("hangover test", true))
         }
 
@@ -359,16 +356,7 @@ async fn vad_hangover_is_included_in_endpointing_ms() {
     let stt: Arc<dyn SttProvider> = Arc::new(FinalOnLastChunkStt);
     let td = Arc::new(crate::stt::turn::SilenceTimeoutDetector::new(0));
     let _stt_handle = tokio::spawn(stt_task(
-        filtered_rx,
-        utt_tx,
-        None,
-        stt,
-        td,
-        None,
-        None,
-        0,
-        None,
-        None,
+        filtered_rx, utt_tx, None, stt, td, None, None, 0, None, None,
     ));
 
     // 4 speech frames (80 ms) confirm onset.
@@ -405,15 +393,11 @@ async fn vad_hangover_is_included_in_endpointing_ms() {
         .await
         .expect("timed out waiting for utterance")
         .expect("utterance channel closed");
-    let endpointing = utt
-        .endpointing_latency
-        .expect("endpointing_latency must be set");
+    let endpointing = utt.endpointing_latency.expect("endpointing_latency must be set");
     assert!(
         endpointing >= std::time::Duration::from_millis(480),
         "endpointing_latency must include the ~500 ms VAD hangover, got {endpointing:?}"
     );
-    assert!(
-        utt.committed_at.is_some(),
-        "committed_at must be stamped on commit"
-    );
+    assert!(utt.committed_at.is_some(), "committed_at must be stamped on commit");
 }
+

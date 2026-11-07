@@ -112,6 +112,9 @@ All sections reject unknown keys except the open option maps noted.
 | `voices` | string | — | Voice pack path (Kokoro) |
 | `api_key` | string | — | |
 | `endpoint` | string | — | |
+| `sanitize_markdown` | bool | `true` | Dual-track sanitizer: strips Markdown formatting (`**bold**`, `*italic*`, `` `code` ``, `#`, `-`, URLs) from spoken audio while keeping them in display transcripts and LLM history |
+| `passthrough_tags` | list of strings | `[]` | Explicit allowlist of inline directives/tags (e.g. `["<break", "<emotion", "[whispers]"]` or `["*"]`) passed to the TTS engine in `spoken_text` and stripped from display transcripts |
+| `[tts.lexicon]` | table | `{}` | Whole-word pronunciation substitutions applied to `spoken_text` only (e.g. `"SQL" = "sequel"`); display transcripts retain original spelling |
 | `[tts.options]` | table | `{}` | Provider-specific; nested, open |
 
 ## `[[text_processor]]`
