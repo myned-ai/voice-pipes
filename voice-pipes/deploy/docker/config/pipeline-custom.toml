@@ -5,6 +5,9 @@ name = "custom-classic"
 
 [pipeline.audit]
 enabled = true
+captures_dir = "captures"
+record_session_audio = true
+session_audio_max_seconds = 1800
 
 [stt]
 provider = "assemblyai"
