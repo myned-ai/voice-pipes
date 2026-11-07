@@ -145,3 +145,46 @@ fn lexicon_respects_word_boundaries_and_skips_tags() {
         ]
     );
 }
+
+#[test]
+fn bare_urls_verbalized_naturally_in_spoken_track() {
+    let cfg = SanitizeConfig {
+        sanitize_markdown: true,
+        passthrough_tags: vec![],
+        provider_name: "kokoro".into(),
+        lexicon: BTreeMap::new(),
+    };
+
+    // 1. Google URL ending with sentence punctuation
+    let input1 = "The URL for Google is https://www.google.com.";
+    let res1 = sanitize_dual_track(input1, &cfg);
+    assert_eq!(res1.display, "The URL for Google is https://www.google.com.");
+    assert_eq!(res1.spoken, "The URL for Google is google dot com.");
+
+    // 2. Short GitHub repository path
+    let input2 = "Check https://github.com/myned-ai/voice-pipes for code.";
+    let res2 = sanitize_dual_track(input2, &cfg);
+    assert_eq!(res2.display, "Check https://github.com/myned-ai/voice-pipes for code.");
+    assert_eq!(res2.spoken, "Check github dot com slash myned-ai slash voice-pipes for code.");
+
+    // 3. Localhost with port
+    let input3 = "Connect to http://localhost:8080/api now.";
+    let res3 = sanitize_dual_track(input3, &cfg);
+    assert_eq!(res3.display, "Connect to http://localhost:8080/api now.");
+    assert_eq!(res3.spoken, "Connect to localhost port 8080 slash api now.");
+
+    // 4. Long URL with query string drops the messy query/hash
+    let input4 = "See https://docs.google.com/document/d/1X98yZ30491823091283091283/edit?usp=sharing.";
+    let res4 = sanitize_dual_track(input4, &cfg);
+    assert_eq!(
+        res4.display,
+        "See https://docs.google.com/document/d/1X98yZ30491823091283091283/edit?usp=sharing."
+    );
+    assert_eq!(res4.spoken, "See docs dot google dot com.");
+
+    // 5. Markdown autolink syntax <https://...>
+    let input5 = "Autolink <https://www.google.com> here.";
+    let res5 = sanitize_dual_track(input5, &cfg);
+    assert_eq!(res5.display, "Autolink <https://www.google.com> here.");
+    assert_eq!(res5.spoken, "Autolink google dot com here.");
+}

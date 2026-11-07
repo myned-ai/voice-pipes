@@ -498,9 +498,119 @@ fn parse_xml_tag(text: &str) -> Option<&str> {
     }
     let close = text.find('>')?;
     let tag_inner = text.get(1..close)?.trim();
+    // Markdown autolinks like <https://...> or <http://...> are not XML/SSML tags.
+    if tag_inner.starts_with("http://") || tag_inner.starts_with("https://") {
+        return None;
+    }
     let is_valid = tag_inner.starts_with('/')
         || tag_inner.chars().next().is_some_and(|c| c.is_ascii_alphabetic());
     is_valid.then(|| text.get(..=close)).flatten()
+}
+
+fn split_leading_punctuation(token: &str) -> (&str, &str) {
+    let mut start = 0;
+    for (idx, c) in token.char_indices() {
+        if matches!(c, '(' | '[' | '{' | '<' | '"' | '\'' | '`') {
+            start = idx + c.len_utf8();
+        } else {
+            break;
+        }
+    }
+    let prefix = token.get(..start).unwrap_or_default();
+    let rest = token.get(start..).unwrap_or(token);
+    (prefix, rest)
+}
+
+fn split_trailing_punctuation(token: &str) -> (&str, &str) {
+    let mut end = token.len();
+    for (idx, c) in token.char_indices().rev() {
+        if matches!(c, '.' | ',' | '!' | '?' | ';' | ':' | ')' | ']' | '}' | '>' | '"' | '\'' | '`') {
+            end = idx;
+        } else {
+            break;
+        }
+    }
+    let core = token.get(..end).unwrap_or(token);
+    let punct = token.get(end..).unwrap_or_default();
+    (core, punct)
+}
+
+fn is_url_token(token: &str) -> bool {
+    let (_, rest) = split_leading_punctuation(token);
+    rest.starts_with("http://") || rest.starts_with("https://")
+}
+
+fn looks_like_hash_or_id(s: &str) -> bool {
+    let digit_count = s.chars().filter(char::is_ascii_digit).count();
+    s.len() >= 12 && digit_count >= 4
+}
+
+fn verbalize_url(raw_url: &str) -> String {
+    let (prefix, rest) = split_leading_punctuation(raw_url);
+    let (url_core, suffix) = split_trailing_punctuation(rest);
+
+    let without_scheme = if let Some(stripped) = url_core.strip_prefix("https://") {
+        stripped
+    } else if let Some(stripped) = url_core.strip_prefix("http://") {
+        stripped
+    } else {
+        url_core
+    };
+
+    let without_www = without_scheme.strip_prefix("www.").unwrap_or(without_scheme);
+
+    let host_end = without_www
+        .find(['/', '?', '#'])
+        .unwrap_or(without_www.len());
+
+    let host_part = without_www.get(..host_end).unwrap_or(without_www);
+    let rest_path = without_www.get(host_end..).unwrap_or_default();
+
+    let (domain_only, port_only) = if let Some(last_colon) = host_part.rfind(':')
+        && host_part
+            .get(last_colon + 1..)
+            .is_some_and(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()))
+    {
+        (
+            host_part.get(..last_colon).unwrap_or(host_part),
+            host_part.get(last_colon + 1..),
+        )
+    } else {
+        (host_part, None)
+    };
+
+    let domain_dots: Vec<&str> = domain_only.split('.').filter(|s| !s.is_empty()).collect();
+    let mut verbalized_host = domain_dots.join(" dot ");
+
+    if let Some(port) = port_only {
+        verbalized_host.push_str(" port ");
+        verbalized_host.push_str(port);
+    }
+
+    let path_only = rest_path
+        .split_once('?')
+        .map(|(p, _)| p)
+        .or_else(|| rest_path.split_once('#').map(|(p, _)| p))
+        .unwrap_or(rest_path);
+
+    let segments: Vec<&str> = path_only.split('/').filter(|s| !s.is_empty()).collect();
+
+    let mut verbalized_path = String::new();
+    let is_simple_path = !segments.is_empty()
+        && segments.len() <= 2
+        && segments.iter().all(|s| s.len() <= 24 && !looks_like_hash_or_id(s));
+
+    if is_simple_path {
+        for seg in segments {
+            verbalized_path.push_str(" slash ");
+            verbalized_path.push_str(seg);
+        }
+    }
+
+    let prosody_punct = suffix.trim_matches(['>', ')', ']', '}', '"', '\'', '`']);
+    let clean_prefix = prefix.trim_matches(['<', '(', '[', '{', '"', '\'', '`']);
+
+    format!("{clean_prefix}{verbalized_host}{verbalized_path}{prosody_punct}")
 }
 
 fn strip_markdown_and_urls(text: &str) -> String {
@@ -549,17 +659,18 @@ fn strip_markdown_and_urls(text: &str) -> String {
         out.push(c);
     }
 
-    // Strip bare URLs (http:// or https://)
+    // Verbalize bare URLs (http:// or https://) for natural speech
     let words: Vec<&str> = out.split_whitespace().collect();
-    let mut filtered_words = Vec::with_capacity(words.len());
+    let mut processed_words = Vec::with_capacity(words.len());
     for w in words {
-        if w.starts_with("http://") || w.starts_with("https://") {
-            continue;
+        if is_url_token(w) {
+            processed_words.push(verbalize_url(w));
+        } else {
+            processed_words.push(w.to_string());
         }
-        filtered_words.push(w);
     }
 
-    filtered_words.join(" ")
+    processed_words.join(" ")
 }
 
 fn apply_lexicon(
