@@ -240,7 +240,7 @@ if (-not (Resolve-PortConflicts -ComposeFile "voice-pipes/deploy/docker/docker-c
     Exit 1
 }
 
-docker compose -f voice-pipes/deploy/docker/docker-compose.yml up --build -d orchestrator $worker @sidecars
+docker compose -f voice-pipes/deploy/docker/docker-compose.yml up --build -d --remove-orphans orchestrator $worker @sidecars
 
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Error: Failed to start backend fleet containers."
