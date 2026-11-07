@@ -52,14 +52,12 @@ python scripts/download_nemotron35.py
 
 The script verifies every file's SHA-256 and fetches the shared weights once
 (the second name is a hard link). No token and no NeMo environment is
-needed. Two pinned sources: the default fetches the community export from
-Hugging Face file by file; `--source github` fetches this project's own
-export as one archive from its release (`models-nemotron35-onnx-r2`,
-`SHA256SUMS` inside), made with the tooling under
-`scripts/nemotron35/` — while the repository is private that
-needs a token in `GITHUB_TOKEN` or a logged-in `gh`. The two exports carry
-byte-identical encoder weights and decode identically. The wizard offers
-the provider and points at the directory but does not download it.
+needed. Two pinned sources: the default fetches this project's export from
+Hugging Face (`myned-ai/nemotron-3.5-asr-streaming-0.6b-onnx`) file by file;
+`--source community` fetches the community export
+(`codavidgarcia/nemotron-3.5-asr-streaming-0.6b-onnx`). The two exports carry
+byte-identical encoder weights and decode identically. The setup wizard
+offers the provider and downloads it automatically when selected.
 
 ### Language
 
@@ -161,12 +159,12 @@ the CPU and the device report says so.
 ## Upstream
 
 NVIDIA NeMo; model card `nvidia/nemotron-3.5-asr-streaming-0.6b`
-(OpenMDW-1.1, ungated). This project's export (release
-`models-nemotron35-onnx-r2`) is made from that checkpoint with the
+(OpenMDW-1.1, ungated). This project's export (hosted on Hugging Face at
+`myned-ai/nemotron-3.5-asr-streaming-0.6b-onnx`) is made from that checkpoint with the
 community tooling of `codavidgarcia/nemotron-3.5-asr-streaming-onnx`
 (Apache-2.0), vendored under `scripts/nemotron35/`; the
 community's own export `codavidgarcia/nemotron-3.5-asr-streaming-0.6b-onnx`
-is the download script's Hugging Face source and the reference the plugin's
+is available via `--source community` and is the reference the plugin's
 token tests are held to. The English-only
 predecessor, `nemotron-speech-streaming-en-0.6b`, is the built-in
 [Nemotron streaming](nemotron.md) provider.

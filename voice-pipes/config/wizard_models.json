@@ -71,5 +71,21 @@
     "files": [
       { "name": "silero_vad.onnx", "url": "https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/silero_vad.onnx" }
     ]
+  },
+  "nemotron-3.5": {
+    "default_path": "models/nemotron-3.5",
+    "layout": "dir",
+    "files": [
+      { "name": "nemotron_onnx_config.json", "url": "https://huggingface.co/myned-ai/nemotron-3.5-asr-streaming-0.6b-onnx/resolve/main/nemotron_onnx_config.json" },
+      { "name": "tokens.txt", "url": "https://huggingface.co/myned-ai/nemotron-3.5-asr-streaming-0.6b-onnx/resolve/main/tokens.txt" },
+      { "name": "decoder.onnx", "url": "https://huggingface.co/myned-ai/nemotron-3.5-asr-streaming-0.6b-onnx/resolve/main/decoder.onnx" },
+      { "name": "joiner.onnx", "url": "https://huggingface.co/myned-ai/nemotron-3.5-asr-streaming-0.6b-onnx/resolve/main/joiner.onnx" },
+      { "name": "encoder_320ms_first_fp16.onnx", "url": "https://huggingface.co/myned-ai/nemotron-3.5-asr-streaming-0.6b-onnx/resolve/main/encoder_320ms_first_fp16.onnx" },
+      { "name": "encoder_320ms_first_fp16.onnx.data", "url": "https://huggingface.co/myned-ai/nemotron-3.5-asr-streaming-0.6b-onnx/resolve/main/encoder_320ms_first_fp16.onnx.data" },
+      { "name": "encoder_320ms_fp16.onnx", "url": "https://huggingface.co/myned-ai/nemotron-3.5-asr-streaming-0.6b-onnx/resolve/main/encoder_320ms_fp16.onnx" },
+      { "name": "encoder_320ms_fp16.onnx.data", "url": "https://huggingface.co/myned-ai/nemotron-3.5-asr-streaming-0.6b-onnx/resolve/main/encoder_320ms_fp16.onnx.data" },
+      { "name": "LICENSE-OpenMDW-1.1", "url": "https://huggingface.co/myned-ai/nemotron-3.5-asr-streaming-0.6b-onnx/resolve/main/LICENSE-OpenMDW-1.1" },
+      { "name": "NOTICE", "url": "https://huggingface.co/myned-ai/nemotron-3.5-asr-streaming-0.6b-onnx/resolve/main/NOTICE" }
+    ]
   }
 }

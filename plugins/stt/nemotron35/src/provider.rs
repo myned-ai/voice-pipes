@@ -648,13 +648,14 @@ pub fn factory() -> Box<dyn SttFactory> {
 }
 
 /// The setup wizard's entry: where the export lives and which locale a
-/// session assumes when it names none. The wizard cannot fetch the
-/// export, so the note says how.
+/// session assumes when it names none.
 pub fn wizard_choices() -> Vec<voice_pipes_sdk::WizardChoice> {
     vec![
         WizardChoice::new(
             "Nemotron 3.5 (Local ONNX plugin, 40 languages incl. Croatian)",
-            WizardDeploy::LocalManual,
+            WizardDeploy::Registry {
+                key: "nemotron-3.5".into(),
+            },
         )
         .with_feature(Some("stt-nemotron35".into()))
         .with_fields(vec![
@@ -670,9 +671,8 @@ pub fn wizard_choices() -> Vec<voice_pipes_sdk::WizardChoice> {
             ),
         ])
         .with_notes(vec![
-            "Nemotron 3.5 needs its ONNX export (about 1.3 GB) in the model directory.".into(),
-            "Fetch it with `python scripts/download_nemotron35.py` if the directory is empty."
-                .into(),
+            "Nemotron 3.5 runs locally via ONNX Runtime (10 files, ~1.3 GB download from Hugging Face).".into(),
+            "Can also be pre-fetched with `python scripts/download_nemotron35.py`.".into(),
             "For English only, the English Nemotron is the more accurate choice.".into(),
         ])
         .with_menu_rank(20),
