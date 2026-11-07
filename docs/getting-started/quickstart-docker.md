@@ -47,9 +47,14 @@ When it is up:
 | Orchestrator API | http://localhost:9090 |
 | Worker WebSocket | ws://localhost:8800/ws |
 
-The console asks for a sign-in token on first load. The launcher generates
-one into `voice-pipes-admin/.env` (`ADMIN_UI_TOKEN`) and prints it; paste it
-into the form. It also generates the three engine tokens
+The console asks for a sign-in token on first load. The launcher automatically
+generates one into `voice-pipes-admin/.env` (`ADMIN_UI_TOKEN`). Retrieve it to
+sign in:
+
+- **Windows PowerShell:** `Get-Content voice-pipes-admin\.env`
+- **Linux / macOS:** `cat voice-pipes-admin/.env`
+
+Paste the `ADMIN_UI_TOKEN` value into the sign-in form. It also generates the three engine tokens
 (`VP_CLIENT_TOKEN`, `VP_ADMIN_TOKEN`, `VP_INTERNAL_TOKEN`) into
 `voice-pipes/.env`; the shipped configs refuse to start without them. See
 [Admin console › Authentication](../guides/admin-console.md#authentication)

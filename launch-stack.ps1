@@ -277,6 +277,7 @@ Write-Host ""
 Write-Host "Voice Pipes Fleet started successfully!" -ForegroundColor Green
 Write-Host "  Admin UI available at:  http://localhost:3000" -ForegroundColor Cyan
 Write-Host "  Sign-in token: ADMIN_UI_TOKEN in $adminEnvPath (not printed; it would stay in this terminal's scrollback)" -ForegroundColor Cyan
+Write-Host "  View token:    Get-Content $adminEnvPath" -ForegroundColor DarkGray
 Write-Host "  Orchestrator API at:    http://localhost:9090" -ForegroundColor Cyan
 Write-Host "  Worker WebSocket at:    ws://localhost:8800/ws" -ForegroundColor Cyan
 Write-Host ""
