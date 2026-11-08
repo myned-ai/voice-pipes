@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Mic, Keyboard, MessageSquare, ChevronDown, AlertCircle } from 'lucide-react';
+import { Mic, Keyboard, MessageSquare, ChevronDown, AlertCircle, Volume2 } from 'lucide-react';
 import { useTheme } from '../../../contexts/ThemeContext';
 import type { Utterance, LlmTiming, TtsTiming, SttTiming, OrchTurn, ReportAnomaly } from './types';
 import { TurnCardHeader } from './TurnCardHeader';
@@ -164,6 +164,13 @@ export const TurnCard = ({ utt, sessionId, llmTiming, ttsTiming, sttTiming, orch
               summary={summary}
             />
           </div>
+          {hasSpokenDiff && spokenText && (
+            <div className={`pl-7 text-xs flex items-center gap-1.5 ${isDark ? 'text-purple-300/90' : 'text-purple-700'}`}>
+              <Volume2 size={12} className="shrink-0" />
+              <span className="font-medium">Spoken:</span>
+              <span className="italic select-text">&ldquo;{spokenText}&rdquo;</span>
+            </div>
+          )}
           {aiAudioEntries.length > 0 && (
             <div className="pl-7 flex flex-col gap-1">
               {heardNote && (

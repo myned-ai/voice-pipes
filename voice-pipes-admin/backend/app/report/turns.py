@@ -347,7 +347,9 @@ def _flatten_turn(utt: dict, t0_iso: str | None, first_utt_id, providers: dict) 
 
     stt_text = (utt.get("stt") or {}).get("text") or utt.get("user_text") or utt.get("final_transcript") or ""
     llm_in = utt.get("llm_input") or ""
-    llm_out_text = (utt.get("llm_output") or {}).get("text") or utt.get("retained_text") or utt.get("agent_text") or ""
+    llm_out = utt.get("llm_output") or {}
+    llm_out_text = llm_out.get("text") or utt.get("retained_text") or utt.get("agent_text") or ""
+    spoken_text = llm_out.get("spoken_text") or utt.get("spoken_text") or None
 
     stt_mode = (providers.get("stt") or {}).get("mode") or "unknown"
     # The configured silence wait, when the capture recorded it. Cascade only:
@@ -570,6 +572,7 @@ def _flatten_turn(utt: dict, t0_iso: str | None, first_utt_id, providers: dict) 
         "e2e_anchor_source": e2e_anchor_source,
         "user_transcript": stt_text or None,
         "agent_transcript": llm_out_text or None,
+        "spoken_text": spoken_text or None,
     }
     # Speech under this id that was thrown away before this turn committed.
     # Absent when nothing was: a key that is always there reads as a field to

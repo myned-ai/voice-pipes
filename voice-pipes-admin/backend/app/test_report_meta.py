@@ -81,6 +81,37 @@ class ReportMetaTests(unittest.TestCase):
             self.assertIn(name, sev)
             self.assertEqual(sev[name]["weight"], weight, f"{name} weight drifted")
 
+    def test_spoken_text_in_turn_and_rendered_when_different(self):
+        utts = [
+            {
+                "utterance_id": 1,
+                "stt": {"text": "What is the URL for Google?"},
+                "llm_output": {
+                    "text": "The URL for Google is https://www.google.com.",
+                    "spoken_text": "The URL for Google is google dot com.",
+                },
+                "tts_timing": {"chars": 45, "synthesis_ms": 100},
+            }
+        ]
+        r = _build_report_for_llm(
+            session_id="test-spoken",
+            metadata={},
+            utterances=utts,
+            session_metrics=None,
+            providers={"llm": {}, "stt": {}, "tts": {}},
+            targets=_resolve_targets({}, None),
+            events=None,
+            health_model="v2",
+        )
+        self.assertEqual(len(r["turns"]), 1)
+        turn = r["turns"][0]
+        self.assertEqual(turn["agent_transcript"], "The URL for Google is https://www.google.com.")
+        self.assertEqual(turn["spoken_text"], "The URL for Google is google dot com.")
+
+        md = _render_report_markdown(r)
+        self.assertIn("The URL for Google is https://www.google.com.", md)
+        self.assertIn("*(spoken: The URL for Google is google dot com.)*", md)
+
     def test_markdown_fair_verdict_has_distinct_icon(self):
         # Regression: `fair` (a v2 level) used to render with the unknown glyph.
         r = _report()

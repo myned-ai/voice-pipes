@@ -458,6 +458,9 @@ def _transcript_block(turn: dict) -> str:
         f"  - User: {turn.get('user_transcript') or '(no user transcript)'}\n",
         f"  - Agent: {agent}\n",
     ]
+    spoken = turn.get("spoken_text")
+    if spoken and spoken != turn.get("agent_transcript"):
+        lines.append(f"    *(spoken: {spoken})*\n")
     for tc in turn.get("tool_calls") or []:
         rt = tc.get("roundtrip_ms")
         rt_label = f" in {rt:.0f}ms" if isinstance(rt, (int, float)) else ""

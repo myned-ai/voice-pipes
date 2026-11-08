@@ -84,4 +84,19 @@ describe('TurnCard TTS input inspector', () => {
 
     expect(screen.queryByText(/TTS input/)).toBeNull();
   });
+
+  it('renders inline spoken text when spoken_text differs from display text', () => {
+    const utt: Utterance = {
+      utterance_id: 4,
+      llm_output: {
+        text: 'The URL for Google is https://www.google.com.',
+        spoken_text: 'The URL for Google is google dot com.',
+      },
+    };
+
+    render(<TurnCard utt={utt} sessionId="test-session" />);
+
+    expect(screen.getByText('Spoken:')).toBeInTheDocument();
+    expect(screen.getByText(/google dot com\./)).toBeInTheDocument();
+  });
 });
