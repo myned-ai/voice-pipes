@@ -13,7 +13,7 @@ against a cache of what came before, so interims arrive while the user
 speaks and latency does not grow with utterance length — and the locale is
 an input to the encoder, chosen per session.
 
-The setup wizard lists this as **Nemotron 3.5 Streaming (Local ONNX, 40 languages incl. Croatian, 320ms latency)**
+The setup wizard lists this as **Nemotron 3.5 Streaming (Local ONNX, 40 languages, 320ms latency)**
 and automatically downloads the model weights (~1.3 GB) from Hugging Face on first run.
 
 It is the first recogniser in the repository built as a **plugin crate**:

@@ -652,7 +652,7 @@ pub fn factory() -> Box<dyn SttFactory> {
 pub fn wizard_choices() -> Vec<voice_pipes_sdk::WizardChoice> {
     vec![
         WizardChoice::new(
-            "Nemotron 3.5 Streaming (Local ONNX, 40 languages incl. Croatian, 320ms latency)",
+            "Nemotron 3.5 Streaming (Local ONNX, 40 languages, 320ms latency)",
             WizardDeploy::Registry {
                 key: "nemotron-3.5".into(),
             },
@@ -671,7 +671,7 @@ pub fn wizard_choices() -> Vec<voice_pipes_sdk::WizardChoice> {
             ),
         ])
         .with_notes(vec![
-            "Nemotron 3.5 streams natively in 320 ms chunks across 40 languages (incl. English and Croatian).".into(),
+            "Nemotron 3.5 streams natively in 320 ms chunks across 40 languages.".into(),
             "Downloads automatically from Hugging Face (~1.3 GB) on first run if the directory is empty.".into(),
             "Can also be pre-fetched with `python scripts/download_nemotron35.py`.".into(),
         ])

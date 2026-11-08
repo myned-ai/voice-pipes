@@ -1,6 +1,6 @@
 # Nemotron English streaming (STT, local, legacy manual export)
 
-**Status:** legacy export — more accurate for English only, but requires manual NeMo export. For auto-download and multilingual support (including English and Croatian), use [Nemotron 3.5 Streaming](nemotron-3.5.md).
+**Status:** legacy export — more accurate for English only, but requires manual NeMo export. For auto-download and multilingual support (40 languages), use [Nemotron 3.5 Streaming](nemotron-3.5.md).
 **Last verified:** 2026-11-08
 **Owner:** Docs
 
