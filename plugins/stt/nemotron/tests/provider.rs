@@ -31,7 +31,7 @@ fn nemotron_dir() -> PathBuf {
         || {
             PathBuf::from(concat!(
                 env!("CARGO_MANIFEST_DIR"),
-                "/../../../voice-pipes/models/nemotron-streaming/7-10-7"
+                "/../voice-pipes/models/nemotron-streaming/7-10-7"
             ))
         },
         PathBuf::from,
@@ -45,7 +45,7 @@ fn have_nemotron() -> bool {
 /// A recorded fixture: mono 16-bit PCM.
 fn fixture(name: &str) -> AudioFrame {
     let path = format!(
-        "{}/../../../voice-pipes/fixtures/{name}.wav",
+        "{}/../voice-pipes/fixtures/{name}.wav",
         env!("CARGO_MANIFEST_DIR")
     );
     let mut reader = hound::WavReader::open(&path).expect("fixture wav");
@@ -306,15 +306,9 @@ fn the_wizard_entry_points_at_the_export_directory() {
     assert_eq!(factory.name(), "nemotron-streaming");
     assert!(factory.matches("nemotron"));
     let choices = voice_pipes_stt_nemotron::wizard_choices();
-    assert_eq!(choices.len(), 1);
-    assert_eq!(
-        choices[0].deploy,
-        voice_pipes_sdk::WizardDeploy::LocalManual
-    );
-    let rendered = choices[0].render_defaults("provider", "nemotron");
-    assert_eq!(
-        rendered.toml,
-        "provider = \"nemotron\"\nmodel_dir = \"models/nemotron-streaming/7-10-7\"\n"
+    assert!(
+        choices.is_empty(),
+        "legacy un-exported model offers no wizard entry (Nemotron 3.5 is the wizard entry)"
     );
 }
 

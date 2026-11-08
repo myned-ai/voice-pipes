@@ -1,7 +1,7 @@
-# Nemotron 3.5 (STT, local, plugin)
+# Nemotron 3.5 Streaming (STT, local, streaming)
 
 **Status:** active
-**Last verified:** 2026-09-23
+**Last verified:** 2026-11-08
 **Owner:** Docs
 
 ## What it is
@@ -12,6 +12,9 @@ through ONNX Runtime. It streams natively — each 320 ms chunk is encoded
 against a cache of what came before, so interims arrive while the user
 speaks and latency does not grow with utterance length — and the locale is
 an input to the encoder, chosen per session.
+
+The setup wizard lists this as **Nemotron 3.5 Streaming (Local ONNX, 40 languages incl. Croatian, 320ms latency)**
+and automatically downloads the model weights (~1.3 GB) from Hugging Face on first run.
 
 It is the first recogniser in the repository built as a **plugin crate**:
 `voice-pipes-stt-nemotron35` depends on `voice-pipes-sdk` and the shared
@@ -47,17 +50,19 @@ external weights (1.2 GB each, byte-identical), `LICENSE-OpenMDW-1.1` and
 `NOTICE`:
 
 ```sh
-python scripts/download_nemotron35.py
+python voice-pipes/scripts/download_nemotron35.py
 ```
 
 The script verifies every file's SHA-256 and fetches the shared weights once
 (the second name is a hard link). No token and no NeMo environment is
-needed. Two pinned sources: the default fetches this project's export from
-Hugging Face (`myned-ai/nemotron-3.5-asr-streaming-0.6b-onnx`) file by file;
-`--source community` fetches the community export
-(`codavidgarcia/nemotron-3.5-asr-streaming-0.6b-onnx`). The two exports carry
-byte-identical encoder weights and decode identically. The setup wizard
-offers the provider and downloads it automatically when selected.
+needed. Two pinned sources: the default fetches the community export from
+Hugging Face file by file; `--source github` fetches this project's own
+export as one archive from its release (`models-nemotron35-onnx-r2`,
+`SHA256SUMS` inside), made with the tooling under
+`voice-pipes/scripts/nemotron35/` — while the repository is private that
+needs a token in `GITHUB_TOKEN` or a logged-in `gh`. The two exports carry
+byte-identical encoder weights and decode identically. The setup wizard offers
+the provider and downloads it automatically from Hugging Face when selected.
 
 ### Language
 
@@ -159,12 +164,12 @@ the CPU and the device report says so.
 ## Upstream
 
 NVIDIA NeMo; model card `nvidia/nemotron-3.5-asr-streaming-0.6b`
-(OpenMDW-1.1, ungated). This project's export (hosted on Hugging Face at
-`myned-ai/nemotron-3.5-asr-streaming-0.6b-onnx`) is made from that checkpoint with the
+(OpenMDW-1.1, ungated). This project's export (release
+`models-nemotron35-onnx-r2`) is made from that checkpoint with the
 community tooling of `codavidgarcia/nemotron-3.5-asr-streaming-onnx`
-(Apache-2.0), vendored under `scripts/nemotron35/`; the
+(Apache-2.0), vendored under `voice-pipes/scripts/nemotron35/`; the
 community's own export `codavidgarcia/nemotron-3.5-asr-streaming-0.6b-onnx`
-is available via `--source community` and is the reference the plugin's
+is the download script's Hugging Face source and the reference the plugin's
 token tests are held to. The English-only
 predecessor, `nemotron-speech-streaming-en-0.6b`, is the built-in
 [Nemotron streaming](nemotron.md) provider.
