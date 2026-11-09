@@ -83,6 +83,7 @@ fn register_every_stub() {
     register_wizard_stub_tts_once();
     register_wizard_stub_sidecar_once();
     register_wizard_stub_model_sidecar_once();
+    #[cfg(feature = "realtime")]
     register_wizard_stub_s2s_once();
     register_wizard_stub_llm_once();
     // Last, so the menu order test sees rank win over registration order.
