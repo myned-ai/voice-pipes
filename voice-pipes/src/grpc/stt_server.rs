@@ -136,10 +136,10 @@ impl proto::stt_service_server::SttService for SttServiceImpl {
                 Ok(None) => return Ok(()),
                 Err(e) => {
                     tracing::warn!(error = %e, "STT inbound audio stream error on initial chunk");
-                    return Err(crate::stt::SttError::new(
-                        provider.name(),
-                        format!("failed to receive initial audio chunk: {e}"),
-                    ));
+                    return Err(crate::stt::SttError::NetworkError(format!(
+                        "{}: failed to receive initial audio chunk: {e}",
+                        provider.name()
+                    )));
                 }
             }
 
