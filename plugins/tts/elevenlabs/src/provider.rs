@@ -367,6 +367,18 @@ impl TtsProvider for ElevenLabsTts {
         "elevenlabs"
     }
 
+    fn supported_inline_tags(&self) -> &'static [&'static str] {
+        &[
+            "<break",
+            "<phoneme",
+            "</phoneme>",
+            "[laughs]",
+            "[whispers]",
+            "[sighs]",
+            "[laughter]",
+        ]
+    }
+
     fn as_component(&self) -> Option<std::sync::Arc<dyn Component>> {
         Some(std::sync::Arc::new(CoreComponent::new(
             std::sync::Arc::clone(&self.core),

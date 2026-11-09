@@ -53,7 +53,13 @@ docker run --rm -d --name pocket-tts -p 127.0.0.1:8000:8000 \
 
 The Docker launcher starts it as the `pocket-tts` compose service when you
 pick it in the wizard. There is no model file under `models/`; the sidecar
-caches weights under its own Hugging Face cache.
+caches package installations and weights under `models/.cache/pocket-tts/`.
+
+The compose service includes a container readiness `healthcheck` probing
+`http://127.0.0.1:8000/health`. On startup, its entrypoint runs a warm-up synthesis
+to download and resident the weights in memory; the fleet launcher scripts
+(`launch-stack.ps1` and `launch-stack.sh`) poll this probe and wait until the sidecar
+reports `healthy` before declaring backend readiness.
 
 ## Environment
 

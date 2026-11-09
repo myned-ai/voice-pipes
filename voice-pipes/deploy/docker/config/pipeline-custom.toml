@@ -7,20 +7,25 @@ name = "custom-classic"
 enabled = true
 
 [stt]
-provider = "parakeet-tdt"
-model_dir = "models/parakeet-tdt"
+provider = "nemotron-3.5"
+model_dir = "models/nemotron-3.5"
+language = "en-US"
 
 [[text_processor]]
 type = "openai-compat"
-base_url = "http://host.docker.internal:8081/v1"
-model = "gemma4-e2b"
-system_prompt = "You are a helpful voice assistant. Be concise."
-max_tokens = 256
-temperature = 0.7
+base_url = "http://llama-server:8081/v1"
+model = "gemma-4-E2B-it"
+api_key = ""
+system_prompt = "You are a friendly voice assistant. Keep responses to one or two short sentences."
+max_tokens = 1024
+temperature = 1.0
+top_p = 0.95
+extra_body = { chat_template_kwargs = { enable_thinking = false } }
 
 [tts]
-provider = "piper"
-model = "models/en_US-lessac-medium.onnx"
+provider = "kokoro"
+model = "models/kokoro-v1.0.onnx"
+voices = "models/voices-v1.0.bin"
 
 [vad]
 mode = "auto"
@@ -28,7 +33,7 @@ model = "models/silero_vad.onnx"
 
 [turn_detection]
 mode = "smart"
-silence_timeout_ms = 2000
+silence_timeout_ms = 700
 smart_model_path = "models/smart-turn-v3.2-cpu.onnx"
 smart_threshold = 0.5
 smart_window_secs = 8

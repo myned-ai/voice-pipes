@@ -4,6 +4,7 @@ fn push_frag(ledger: &mut AudioLedger, text: &str, duration_ms: u64, wt: Option<
     // sample_rate 1000 => sample_count == duration_ms (1 sample/ms)
     ledger.push(
         text.to_string(),
+        None,
         0,
         ledger.entries.len() as u32,
         duration_ms,
@@ -76,4 +77,51 @@ fn text_at_offset_zero_or_empty_is_none() {
     assert_eq!(ledger.text_at_offset(500), None); // empty ledger
     push_frag(&mut ledger, "hi there", 1000, None);
     assert_eq!(ledger.text_at_offset(0), None);
+}
+
+#[test]
+fn text_at_offset_with_lexicon_replacement_matches_display_word_boundary() {
+    let mut ledger = AudioLedger::default();
+    let display = "I love **SQL** and databases.";
+    let spoken = "I love sequel and databases.";
+    let wt = vec![
+        WordTiming {
+            word: "I".into(),
+            offset_ms: 0,
+            duration_ms: 100,
+        },
+        WordTiming {
+            word: "love".into(),
+            offset_ms: 100,
+            duration_ms: 200,
+        },
+        WordTiming {
+            word: "sequel".into(),
+            offset_ms: 300,
+            duration_ms: 300,
+        },
+        WordTiming {
+            word: "and".into(),
+            offset_ms: 600,
+            duration_ms: 150,
+        },
+        WordTiming {
+            word: "databases.".into(),
+            offset_ms: 750,
+            duration_ms: 400,
+        },
+    ];
+    ledger.push(
+        display.to_string(),
+        Some(spoken.to_string()),
+        0,
+        0,
+        1150,
+        1000,
+        Some(wt),
+    );
+
+    // After word 3 ("sequel", offset 300ms) has started:
+    let heard = ledger.text_at_offset(350).unwrap();
+    assert_eq!(heard, "I love **SQL**");
 }

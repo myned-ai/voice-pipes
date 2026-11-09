@@ -180,11 +180,8 @@ fn main() {
     let afap_elapsed = audio_start.elapsed();
 
     println!("Glass-to-Glass Execution Completed:");
-    println!(
-        "  - Simulated Speech Audio: {:.1} seconds",
-        simulated_speech_duration_s
-    );
-    println!("  - Actual In-Memory Time:  {:?}", afap_elapsed);
+    println!("  - Simulated Speech Audio: {simulated_speech_duration_s:.1} seconds");
+    println!("  - Actual In-Memory Time:  {afap_elapsed:?}");
     println!("  - Real-Time Factor (RTF): < 0.02 (Over 40x faster than real-time)");
     println!(
         "  - Task Verified:          {} (Goal successfully satisfied)",

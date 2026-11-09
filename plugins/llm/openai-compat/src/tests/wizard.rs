@@ -24,6 +24,15 @@ fn the_host_server_entry_writes_what_the_built_in_did() {
     assert!(rendered.secrets.is_empty());
 }
 
+/// The server-on-host entry warns the operator that the server must be running.
+#[test]
+fn the_host_server_entry_warns_operator_to_run_server() {
+    let choice = by_label("on host");
+    assert!(!choice.stage_default);
+    assert!(!choice.notes.is_empty());
+    assert!(choice.notes[0].contains("running"));
+}
+
 /// A Gemma preset writes the sidecar's endpoint and the model it serves,
 /// as the built-in did, and names no model path in the TOML: the sidecar
 /// reads the downloaded file's location from its own environment.
@@ -42,6 +51,18 @@ fn a_gemma_preset_writes_what_the_built_in_did() {
          top_p = 0.95\n"
     );
     assert_eq!(rendered.model_path, None);
+}
+
+/// Gemma 4 is a thinking model: its presets disable thinking by default so turns do not stall
+/// on unvocalized thoughts.
+#[test]
+fn gemma_4_presets_disable_thinking_by_default() {
+    let rendered = by_label("Gemma 4 E2B").render_defaults("type", "openai-compat");
+    assert!(
+        rendered
+            .toml
+            .contains("extra_body = { chat_template_kwargs = { enable_thinking = false } }")
+    );
 }
 
 /// Each preset downloads what the wizard's model registry lists under its
@@ -104,13 +125,13 @@ fn each_gemma_preset_downloads_its_registry_model_for_the_sidecar() {
 }
 
 /// One entry is the stage's default, labels are distinct, and the ranks put
-/// the host server first and the presets in the order they are listed.
+/// the presets in the order they are listed and the host server last.
 #[test]
 fn one_default_distinct_labels_and_ordered_ranks() {
     let choices = wizard_choices();
     let defaults: Vec<_> = choices.iter().filter(|c| c.stage_default).collect();
     assert_eq!(defaults.len(), 1);
-    assert!(defaults[0].label.contains("on host"));
+    assert!(defaults[0].label.contains("Gemma 4 E2B"));
     let mut labels: Vec<_> = choices.iter().map(|c| c.label.as_str()).collect();
     labels.sort_unstable();
     labels.dedup();

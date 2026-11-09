@@ -1,5 +1,4 @@
 use super::*;
-use std::io::Cursor;
 
 /// Build a minimal NPZ file in memory for testing.
 fn build_test_npz(voices: &[(&str, usize, usize)]) -> Vec<u8> {

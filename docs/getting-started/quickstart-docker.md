@@ -32,12 +32,20 @@ The launcher:
 5. starts the orchestrator, the worker (CPU or GPU image, chosen from the
    probe) and the admin console.
 
-**First-run tips.** Pick the local defaults: Parakeet for STT, a local GGUF
-LLM such as Gemma or SmolLM2-360M, Kokoro or Piper for TTS. They need no API keys
-and run on CPU. The first start downloads a few hundred megabytes to a couple
+**First-run tips.** Pick the local defaults: Parakeet or Moonshine for STT,
+Gemma 4 via llama-server sidecar for LLM, Kokoro or Piper for TTS. They need no API keys
+and run self-contained in Docker. The first start downloads a few hundred megabytes to a couple
 of gigabytes of model files, so expect a few minutes; later starts are fast.
-Downloaded models keep their upstream licenses; Gemma is under Google's Gemma
-Terms and is gated, so its download needs a Hugging Face token (`HF_TOKEN`).
+Downloaded models keep their upstream licenses; gated models (e.g. Gemma 3) need
+a Hugging Face token (`HF_TOKEN`), while public models (e.g. Gemma 4 E2B) download without one.
+
+### Wizard deployment types: `[Local]`, `[Cloud]`, and `[Host]`
+
+Options in the configuration wizard are tagged and sorted into three deployment tiers:
+
+- **`[Local]` (Turnkey / recommended for testing)**: Fully self-contained. The engine runs models in-process via ONNX Runtime (e.g. Kokoro, Moonshine, Silero) or automatically spins up managed Docker sidecars (e.g. Gemma 4 via llama-server, Pocket TTS). No external software or API keys are required.
+- **`[Cloud]`**: Remote hosted APIs (e.g. OpenAI, Gemini, ElevenLabs, AssemblyAI). Requires an API key in `voice-pipes/.env`.
+- **`[Host]`**: Connects to an external inference server running natively on your host machine outside Docker (e.g. your own `llama-server.exe`, Ollama, or vLLM at `http://host.docker.internal:8081`). **You must start this server yourself in a separate terminal before launching Voice Pipes.**
 
 When it is up:
 
@@ -47,9 +55,14 @@ When it is up:
 | Orchestrator API | http://localhost:9090 |
 | Worker WebSocket | ws://localhost:8800/ws |
 
-The console asks for a sign-in token on first load. The launcher generates
-one into `voice-pipes-admin/.env` (`ADMIN_UI_TOKEN`) and prints it; paste it
-into the form. It also generates the three engine tokens
+The console asks for a sign-in token on first load. The launcher automatically
+generates one into `voice-pipes-admin/.env` (`ADMIN_UI_TOKEN`). Retrieve it to
+sign in:
+
+- **Windows PowerShell:** `Get-Content voice-pipes-admin\.env`
+- **Linux / macOS:** `cat voice-pipes-admin/.env`
+
+Paste the `ADMIN_UI_TOKEN` value into the sign-in form. It also generates the three engine tokens
 (`VP_CLIENT_TOKEN`, `VP_ADMIN_TOKEN`, `VP_INTERNAL_TOKEN`) into
 `voice-pipes/.env`; the shipped configs refuse to start without them. See
 [Admin console › Authentication](../guides/admin-console.md#authentication)

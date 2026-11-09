@@ -673,6 +673,9 @@ pub async fn flush_turn_as_interrupted(
             audit.record(AuditEvent::LlmOutput {
                 utterance_id: snapshot.utterance_id,
                 text: snapshot.llm_response_text.clone().unwrap_or_default(),
+                spoken_text: None,
+                tts_directives: Vec::new(),
+                stripped_directives: Vec::new(),
                 latency: std::time::Duration::from_millis(snapshot.total_ms),
                 is_partial: false,
             });

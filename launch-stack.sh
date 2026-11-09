@@ -224,7 +224,7 @@ if ! resolve_port_conflicts "voice-pipes/deploy/docker/docker-compose.yml" "$TAK
 fi
 
 # shellcheck disable=SC2086 # SIDECAR_SERVICES is a space-separated list
-docker compose -f voice-pipes/deploy/docker/docker-compose.yml up --build -d orchestrator "$WORKER" $SIDECAR_SERVICES
+docker compose -f voice-pipes/deploy/docker/docker-compose.yml up --build -d --remove-orphans orchestrator "$WORKER" $SIDECAR_SERVICES
 
 # 6. Start the Admin UI
 # The admin backend refuses to start without ADMIN_UI_TOKEN. Compose
@@ -244,6 +244,58 @@ if ! resolve_port_conflicts "voice-pipes-admin/docker-compose.yml" "$TAKE_PORTS"
     exit 1
 fi
 docker compose -f voice-pipes-admin/docker-compose.yml up --build -d
+
+# 6.5 Verify Worker & Fleet Readiness
+echo "⏳ Verifying backend fleet readiness..."
+worker_id=$(docker compose -f voice-pipes/deploy/docker/docker-compose.yml ps -q "$WORKER" 2>/dev/null)
+if [ -n "$worker_id" ]; then
+    for i in $(seq 1 15); do
+        sleep 1
+        status=$(docker inspect --format '{{.State.Status}}' "$worker_id" 2>/dev/null)
+        if [ "$status" = "restarting" ] || [ "$status" = "exited" ]; then
+            echo ""
+            echo "❌ Worker failed startup validation (status: $status)!"
+            docker logs --tail 25 "$worker_id" 2>&1 | grep -E '(ERROR voice_pipes|config validation failed|model load failed|missing model file)' || true
+            echo ""
+            echo "💡 To view full diagnostic logs: docker compose -f voice-pipes/deploy/docker/docker-compose.yml logs $WORKER"
+            exit 1
+        fi
+        if [ "$status" = "running" ] && [ "$i" -ge 2 ]; then
+            break
+        fi
+    done
+fi
+
+# Wait for sidecar healthchecks (e.g. pocket-tts, llama-server) before opening fleet
+for sidecar in $SIDECAR_SERVICES; do
+    [ -z "$sidecar" ] && continue
+    sidecar_id=$(docker compose -f voice-pipes/deploy/docker/docker-compose.yml ps -q "$sidecar" 2>/dev/null)
+    if [ -n "$sidecar_id" ]; then
+        has_health=$(docker inspect --format '{{if .State.Health}}true{{else}}false{{end}}' "$sidecar_id" 2>/dev/null)
+        if [ "$has_health" = "true" ]; then
+            echo "Waiting for sidecar '$sidecar' readiness..."
+            ready=false
+            for s in $(seq 1 90); do
+                h_status=$(docker inspect --format '{{.State.Health.Status}}' "$sidecar_id" 2>/dev/null)
+                c_status=$(docker inspect --format '{{.State.Status}}' "$sidecar_id" 2>/dev/null)
+                if [ "$c_status" = "exited" ] || [ "$c_status" = "restarting" ]; then
+                    echo "❌ Sidecar '$sidecar' failed to start (status: $c_status)!"
+                    docker compose -f voice-pipes/deploy/docker/docker-compose.yml logs --tail 30 "$sidecar"
+                    exit 1
+                fi
+                if [ "$h_status" = "healthy" ]; then
+                    ready=true
+                    echo "✓ Sidecar '$sidecar' is healthy and ready."
+                    break
+                fi
+                sleep 2
+            done
+            if [ "$ready" = false ]; then
+                echo "⚠️ Warning: Sidecar '$sidecar' did not report healthy within timeout."
+            fi
+        fi
+    fi
+done
 
 echo ""
 echo "🎉 Voice Pipes Fleet started successfully!"

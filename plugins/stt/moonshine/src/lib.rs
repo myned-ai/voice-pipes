@@ -114,9 +114,32 @@ impl SessionSet {
 
     /// Encode 16 kHz mono audio and decode it to text.
     fn transcribe(&mut self, samples: &[f32], max_new_tokens: usize) -> Result<String, SttError> {
-        let enc_out = self.encoder.encode(samples)?;
+        let trimmed = trim_trailing_silence(samples);
+        let enc_out = self.encoder.encode(trimmed)?;
         let tokens = self.decoder.decode(&enc_out, max_new_tokens)?;
         self.decoder.detokenize(&tokens)
+    }
+}
+
+/// Moonshine is an attention-based seq2seq model trained on tightly cropped speech
+/// segments. When presented with trailing silence (e.g. from VAD hangover or silence
+/// timeout buffers), its cross-attention mechanism tends to drift or emit <eos> on
+/// token 0.
+///
+/// Trimming trailing silence while preserving a small margin (~150 ms) matches the
+/// model's training distribution without clipping ending consonants.
+fn trim_trailing_silence(samples: &[f32]) -> &[f32] {
+    const SILENCE_THRESHOLD: f32 = 0.005; // ~ -46 dBFS
+    const PADDING_SAMPLES: usize = 2400; // 150 ms at 16 kHz
+
+    if let Some(last_speech_idx) = samples.iter().rposition(|&s| s.abs() >= SILENCE_THRESHOLD) {
+        let end_idx = (last_speech_idx
+            .saturating_add(1)
+            .saturating_add(PADDING_SAMPLES))
+        .min(samples.len());
+        samples.get(..end_idx).unwrap_or(samples)
+    } else {
+        samples
     }
 }
 

@@ -31,10 +31,9 @@ the candidate directory:
 NEMOTRON35_MODEL_DIR=/tmp/n35/nemotron-3.5-onnx-320ms cargo test -p voice-pipes-stt-nemotron35 --release
 ```
 
-Then the archive goes up as a release asset under a data-only tag
-(`models-nemotron35-onnx-<rev>`; the tag must not contain a
-`digit.digit.digit` run, or cargo-dist's release workflow fires on it) and
-`download_nemotron35.py` gets the new tag, archive hash and per-file hashes.
+Then the files are published to the Hugging Face repository
+(`myned-ai/nemotron-3.5-asr-streaming-0.6b-onnx`), and
+`download_nemotron35.py` and `wizard_models.json` get the new revision and per-file hashes.
 
 ## What is vendored
 

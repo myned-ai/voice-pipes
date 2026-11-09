@@ -65,6 +65,9 @@ pub enum AuditEvent {
     LlmOutput {
         utterance_id: u32,
         text: String,
+        spoken_text: Option<String>,
+        tts_directives: Vec<voice_pipes_sdk::TtsDirectiveRecord>,
+        stripped_directives: Vec<voice_pipes_sdk::StrippedDirectiveRecord>,
         latency: Duration,
         is_partial: bool,
     },
@@ -73,6 +76,7 @@ pub enum AuditEvent {
         utterance_id: u32,
         fragment_idx: u32,
         text: String,
+        spoken_text: Option<String>,
         audio: AudioFrame,
     },
     /// Utterance fully processed (or interrupted/terminated).
@@ -368,16 +372,28 @@ async fn write_event(
         AuditEvent::LlmOutput {
             utterance_id,
             text,
+            spoken_text,
+            tts_directives,
+            stripped_directives,
             latency,
             is_partial,
         } => {
             let key = format!("{session_id}/{utterance_id:03}_llm_output.json");
-            let json = serde_json::json!({
+            let mut json = serde_json::json!({
                 "utterance_id": utterance_id,
                 "text": text,
                 "latency_ms": latency.as_millis() as u64,
                 "is_partial": is_partial,
             });
+            if let Some(spoken) = spoken_text {
+                json["spoken_text"] = serde_json::Value::String(spoken.clone());
+            }
+            if !tts_directives.is_empty() {
+                json["tts_directives"] = serde_json::to_value(tts_directives)?;
+            }
+            if !stripped_directives.is_empty() {
+                json["stripped_directives"] = serde_json::to_value(stripped_directives)?;
+            }
             store
                 .put(&key, serde_json::to_string_pretty(&json)?.as_bytes())
                 .await?;
@@ -386,12 +402,20 @@ async fn write_event(
             utterance_id,
             fragment_idx,
             text,
+            spoken_text,
             audio,
         } => {
             let wav_key = format!("{session_id}/{utterance_id:03}_tts_frag_{fragment_idx:03}.wav");
             store.put(&wav_key, &wav_writer::encode_wav(audio)?).await?;
             let txt_key = format!("{session_id}/{utterance_id:03}_tts_frag_{fragment_idx:03}.txt");
             store.put(&txt_key, text.as_bytes()).await?;
+            if let Some(spoken) = spoken_text
+                && spoken != text
+            {
+                let spoken_key =
+                    format!("{session_id}/{utterance_id:03}_tts_frag_{fragment_idx:03}_spoken.txt");
+                store.put(&spoken_key, spoken.as_bytes()).await?;
+            }
         }
         AuditEvent::UtteranceDone {
             utterance_id,

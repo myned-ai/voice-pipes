@@ -2312,6 +2312,54 @@ fn the_dockerfile_rule_catches_each_drift() {
     );
 }
 
+fn dockerfile_copies_member(copy_instruction: &str, member: &str) -> bool {
+    let parts: Vec<&str> = copy_instruction.split_whitespace().collect();
+    if member.starts_with("plugins/") {
+        parts.iter().any(|p| p.starts_with("plugins/"))
+    } else if member.starts_with("voice-pipes") {
+        parts.iter().any(|p| p.starts_with("voice-pipes*"))
+    } else {
+        parts.iter().any(|p| p.starts_with(member))
+    }
+}
+
+/// Every workspace crate in Cargo.toml must be covered by the `COPY --parents`
+/// instruction in each Dockerfile so container builds don't fail with missing manifests.
+#[test]
+fn the_dockerfiles_copy_every_workspace_member() {
+    let read = |rel: &str| {
+        std::fs::read_to_string(root().join(rel)).unwrap_or_else(|e| panic!("{rel}: {e}"))
+    };
+    for file in ["voice-pipes/Dockerfile", "voice-pipes/Dockerfile.cuda"] {
+        let content = read(file);
+        let mut full_copy = String::new();
+        let mut in_copy = false;
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("COPY --parents") {
+                in_copy = true;
+                full_copy.push_str(trimmed);
+                if !trimmed.ends_with('\\') {
+                    break;
+                }
+            } else if in_copy {
+                full_copy.push(' ');
+                full_copy.push_str(trimmed);
+                if !trimmed.ends_with('\\') {
+                    break;
+                }
+            }
+        }
+        assert!(!full_copy.is_empty(), "{file} has no COPY --parents");
+        for member in members() {
+            assert!(
+                dockerfile_copies_member(&full_copy, &member),
+                "{file} COPY --parents does not copy workspace member `{member}`"
+            );
+        }
+    }
+}
+
 // ── Function length ─────────────────────────────────────────
 
 /// Code lines past which a function is too long to read as one thing.

@@ -101,6 +101,7 @@ impl proto::text_processor_service_server::TextProcessorService for TextProcesso
                 is_end_of_response: frag.is_end_of_response,
                 first_token_ms: frag.first_token_ms,
                 token_count: frag.token_count,
+                spoken_text: frag.spoken_text,
             })
             .map(Ok);
         // Surface a streaming failure to the client instead of a clean EOF.

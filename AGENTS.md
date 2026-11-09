@@ -66,7 +66,7 @@ cargo clippy --workspace -- -D warnings
 # Security & supply chain audit
 cargo deny check
 
-# Architectural boundary & invariant tests (50 rules)
+# Architectural boundary & invariant tests (51 rules)
 cargo test -p voice-pipes-cli --test workspace_rules
 
 # Quickstart commands, example configs, and runtime readiness/skip report

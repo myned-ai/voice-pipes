@@ -257,3 +257,18 @@ fn a_newline_ends_a_chunk_whole_and_streamed() {
     let by_char: Vec<String> = text.chars().map(String::from).collect();
     assert_eq!(streamed(by_char.iter().map(String::as_str)), whole(text));
 }
+
+#[test]
+fn sentence_splitter_does_not_split_inside_tts_tags_or_ipa() {
+    let text = "Wait <break time=\"1.5s\"/> here. Next sentence.";
+    assert_eq!(
+        whole(text),
+        ["Wait <break time=\"1.5s\"/> here. ", "Next sentence."]
+    );
+
+    let ipa_text = "See [Kokoro](/kˈoʊ.kə.ɹoʊ/) now. Next line.";
+    assert_eq!(
+        whole(ipa_text),
+        ["See [Kokoro](/kˈoʊ.kə.ɹoʊ/) now. ", "Next line."]
+    );
+}

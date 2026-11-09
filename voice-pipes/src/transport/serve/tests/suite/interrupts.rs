@@ -292,6 +292,7 @@ async fn playback_report_with_zero_ms_truncates_unheard_llm_history() {
     let mut ledger = crate::pipeline::AudioLedger::default();
     ledger.push(
         "Unheard assistant response".into(),
+        None,
         1200,
         0,
         19_200,

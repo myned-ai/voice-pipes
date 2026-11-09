@@ -159,5 +159,5 @@ def _resolve_captures_dir(force: bool = False, timeout: float = 2.0) -> Path:
 # ── Regex for per-utterance capture files ────────────────────
 
 _UTT_FILE_RE = re.compile(
-    r"^(?P<utt>\d+)_(?P<kind>mic_raw|mic_16k|stt|llm_input|llm_output|tts_frag_\d+|turn_resolved|realtime_usage|playback)\.(?P<ext>wav|json|txt)$"
+    r"^(?P<utt>\d+)_(?P<kind>mic_raw|mic_16k|stt|llm_input|llm_output|tts_frag_\d+(?:_spoken)?|turn_resolved|realtime_usage|playback)\.(?P<ext>wav|json|txt)$"
 )

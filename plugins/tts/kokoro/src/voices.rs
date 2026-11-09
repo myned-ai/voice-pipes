@@ -6,7 +6,7 @@
 //! (clamped to the matrix row count).
 
 use std::collections::HashMap;
-use std::io::{Read, Seek};
+use std::io::{Cursor, Read, Seek};
 use std::path::Path;
 
 use npyz::NpyFile;
@@ -34,10 +34,10 @@ struct VoiceMatrix {
 impl KokoroVoices {
     /// Load all voice embeddings from an NPZ file.
     pub fn load(path: &Path) -> Result<Self, TtsError> {
-        let file = std::fs::File::open(path).map_err(|e| {
+        let bytes = std::fs::read(path).map_err(|e| {
             TtsError::ModelLoadFailed(format!("cannot open voices file {}: {e}", path.display()))
         })?;
-        Self::load_from_reader(file)
+        Self::load_from_reader(Cursor::new(bytes))
     }
 
     /// Load from any seekable reader (useful for testing).

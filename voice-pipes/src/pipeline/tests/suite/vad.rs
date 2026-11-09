@@ -121,7 +121,7 @@ async fn test_vad_eou_samples_retained() {
 /// it like any other empty fragment.
 #[test]
 fn strip_unspeakable_removes_emoji_keeps_speech() {
-    use crate::pipeline::tts::strip_unspeakable;
+    use voice_pipes_sdk::strip_unspeakable;
 
     assert_eq!(strip_unspeakable("Great! 😊"), "Great!");
     assert_eq!(strip_unspeakable("Hi 😊 there"), "Hi there");

@@ -114,7 +114,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
               {busy ? "Signing in…" : "Sign in"}
             </button>
             <p className="text-xs opacity-60">
-              Set <code>ADMIN_UI_TOKEN</code> on the admin backend and paste it here. The token is kept for this tab
+              Paste <code>ADMIN_UI_TOKEN</code> from <code>voice-pipes-admin/.env</code> (or backend environment). The token is kept for this tab
               only.
             </p>
           </form>

@@ -129,6 +129,7 @@ zip = { version = "8", default-features = false }
 # Cargo allows no per-crate additions beside it, so a crate that needs one
 # (the SDK's `missing_docs`) sets it as a crate attribute with its reason.
 [workspace.lints.rust]
+unknown_lints = "allow"
 ambiguous_negative_literals = "warn"
 missing_debug_implementations = "warn"
 redundant_imports = "warn"
@@ -138,6 +139,8 @@ unsafe_op_in_unsafe_fn = "warn"
 unused_lifetimes = "warn"
 
 [workspace.lints.clippy]
+assert_is_empty = "allow"
+assert_is_not_empty = "allow"
 cargo = { level = "warn", priority = -1 }
 complexity = { level = "warn", priority = -1 }
 correctness = { level = "warn", priority = -1 }

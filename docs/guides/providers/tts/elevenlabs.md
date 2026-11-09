@@ -57,6 +57,13 @@ voice = "21m00Tcm4TlvDq8ikWAM"          # a voice id; this one is the public "Ra
 | Word timestamps | Yes, aligned from the character timings; captions highlight exactly |
 | Voices | any voice id on the account |
 
+## SSML, Emotion Tags & Passthrough
+
+ElevenLabs supports inline SSML breaks, phonemes, and audio emotion cues (e.g. `<break time="1.5s"/>`, `<phoneme alphabet="ipa" ph="tə.ˈmeɪ.toʊ">tomato</phoneme>`, `[laughs]`, `[whispers]`, `[sighs]`).
+- The dual-track sanitizer automatically forwards supported inline directives to ElevenLabs in `spoken_text` while stripping them from user display captions and LLM conversational history.
+- Additional tags can be enabled via `passthrough_tags` (e.g. `passthrough_tags = ["<break", "[whispers]"]` or `["*"]`).
+- Word timestamps returned by ElevenLabs are mapped back to display text in `AudioLedger`, so karaoke highlighting and barge-in cutoffs align with display word boundaries.
+
 ## Limitations
 
 - Per-character billing.

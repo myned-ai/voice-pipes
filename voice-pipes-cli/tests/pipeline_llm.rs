@@ -235,6 +235,7 @@ async fn process_utterance_llm_produces_tts_audio() {
                 )),
                 std::sync::Arc::new(AtomicBool::new(false)),
                 None,
+                None,
             )
             .await;
         }

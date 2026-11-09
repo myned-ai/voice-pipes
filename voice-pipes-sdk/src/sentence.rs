@@ -148,9 +148,30 @@ pub fn split_first_sentence(
     min_words: usize,
     at_end: bool,
 ) -> Option<(&str, &str)> {
+    let mut in_tag = false;
+    let mut in_paren = false;
     for (i, c) in buffer.char_indices() {
         let len = c.len_utf8();
         let after = &buffer[i + len..];
+
+        // Track XML/SSML tag enclosure `<...>`
+        if c == '<' {
+            in_tag = true;
+        } else if c == '>' && in_tag {
+            in_tag = false;
+        }
+
+        // Track markdown/phoneme link parenthesis enclosure `(...)`
+        if c == '(' {
+            in_paren = true;
+        } else if c == ')' && in_paren {
+            in_paren = false;
+        }
+
+        // If inside an angle-bracket tag or link parenthesis, never split.
+        if in_tag || in_paren {
+            continue;
+        }
 
         if !at_end && matches!(c, '.' | '!' | '?' | ',' | ';' | ':') {
             let arrived = if c == '.' {

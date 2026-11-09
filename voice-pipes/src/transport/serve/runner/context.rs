@@ -72,6 +72,7 @@ pub struct ClassicSessionContext<'a> {
     pub barge_in_sent_at: &'a mut Option<std::time::Instant>,
     pub tts_session: Arc<tokio::sync::Mutex<Option<Box<dyn crate::tts::TtsSession>>>>,
     pub spec_manager: Option<Arc<pipeline::SpeculativeSessionManager>>,
+    pub sanitize_cfg: Option<voice_pipes_sdk::SanitizeConfig>,
     /// Per-session client-tool allowlist.
     /// On cascade the driving LLM surfaces calls as
     /// [`AgentEvent::ClientToolCall`](crate::agent::AgentEvent); the
@@ -909,6 +910,7 @@ impl ClassicSessionContext<'_> {
 
         let tts_session_arg = Arc::clone(&self.tts_session);
         let spec_manager_arg = self.spec_manager.clone();
+        let sanitize_cfg_arg = self.sanitize_cfg.clone();
         tokio::spawn(async move {
             let metrics = pipeline::process_utterance(
                 &utterance,
@@ -926,6 +928,7 @@ impl ClassicSessionContext<'_> {
                 std::sync::Arc::clone(&ledger),
                 cold_start_arg,
                 spec_manager_arg,
+                sanitize_cfg_arg,
             )
             .await;
             let _ = m_tx.send(metrics).await;

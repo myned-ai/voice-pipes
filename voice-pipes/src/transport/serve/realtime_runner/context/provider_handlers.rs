@@ -150,26 +150,7 @@ impl RealtimeSessionContext<'_> {
         // chunk's audio start. The ledger drives word-exact barge-in
         // truncation; the caption gives clients real word timings via
         // the same contract the cascade TTS path uses.
-        let caption = alignment.map(|words| {
-            let chunk_start_ms = turn.start_audio_ms + turn.audio_emitted_ms();
-            for w in &words {
-                turn.aligned_words.push(super::super::turn::AlignedWord {
-                    word: w.word.clone(),
-                    end_ms: chunk_start_ms + w.offset_ms as u64 + w.duration_ms as u64,
-                });
-            }
-            crate::pipeline::CaptionMeta {
-                text: words
-                    .iter()
-                    .map(|w| w.word.as_str())
-                    .collect::<Vec<_>>()
-                    .join(" "),
-                fragment_idx: turn.output_fragment_idx,
-                is_final: false,
-                total_fragment_duration_ms: Some(duration_ms.min(u32::MAX as u64) as u32),
-                word_timings: Some(words),
-            }
-        });
+        let caption = alignment.map(|words| build_realtime_audio_caption(turn, words, duration_ms));
         // The ONLY place `ttfb_ms` is stamped: the first audio delta with
         // samples. Gemini's opening output transcription arrives 0.3–1.2 s
         // before this and must not stamp it.
@@ -207,6 +188,7 @@ impl RealtimeSessionContext<'_> {
                 utterance_id,
                 fragment_idx,
                 text: String::new(),
+                spoken_text: None,
                 audio: crate::audio::AudioFrame {
                     samples: samples.clone(),
                     sample_rate,
@@ -510,6 +492,9 @@ impl RealtimeSessionContext<'_> {
                     audit.record(AuditEvent::LlmOutput {
                         utterance_id: snapshot.utterance_id,
                         text: snapshot.llm_response_text.clone().unwrap_or_default(),
+                        spoken_text: None,
+                        tts_directives: Vec::new(),
+                        stripped_directives: Vec::new(),
                         latency: std::time::Duration::from_millis(snapshot.total_ms),
                         is_partial: false,
                     });
@@ -1895,6 +1880,34 @@ impl RealtimeSessionContext<'_> {
                 false
             }
         }
+    }
+}
+
+fn build_realtime_audio_caption(
+    turn: &mut super::super::turn::RealtimeTurn,
+    words: Vec<crate::pipeline::WordTiming>,
+    duration_ms: u64,
+) -> crate::pipeline::CaptionMeta {
+    let chunk_start_ms = turn.start_audio_ms + turn.audio_emitted_ms();
+    for w in &words {
+        turn.aligned_words.push(super::super::turn::AlignedWord {
+            word: w.word.clone(),
+            end_ms: chunk_start_ms + w.offset_ms as u64 + w.duration_ms as u64,
+        });
+    }
+    crate::pipeline::CaptionMeta {
+        text: words
+            .iter()
+            .map(|w| w.word.as_str())
+            .collect::<Vec<_>>()
+            .join(" "),
+        fragment_idx: turn.output_fragment_idx,
+        is_final: false,
+        total_fragment_duration_ms: Some(duration_ms.min(u32::MAX as u64) as u32),
+        word_timings: Some(words),
+        spoken_text: None,
+        tts_directives: Vec::new(),
+        stripped_directives: Vec::new(),
     }
 }
 

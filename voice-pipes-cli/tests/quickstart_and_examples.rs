@@ -1,13 +1,14 @@
 //! Integration tests verifying that Quickstart commands and all example
 //! configuration files parse validly and run as documented.
 //!
-//! Hosted components (e.g. Gemini Live, OpenAI Realtime, AssemblyAI, Google Cloud)
+//! Hosted components (e.g. Gemini Live, `OpenAI` Realtime, `AssemblyAI`, Google Cloud)
 //! are tested live when their corresponding environment variable is present,
 //! and gracefully validated/skipped when credentials are not configured.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+#[allow(dead_code, reason = "only used in tests with default features")]
 fn bin() -> Command {
     Command::new(env!("CARGO_BIN_EXE_voice-pipes"))
 }
@@ -19,6 +20,7 @@ fn examples_dir() -> PathBuf {
         .expect("voice-pipes/examples directory exists")
 }
 
+#[allow(dead_code, reason = "only used in tests with default features")]
 fn models_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../voice-pipes/models")
@@ -103,13 +105,12 @@ fn all_example_configs_parse_validly() {
         }
     }
 
-    if !parse_errors.is_empty() {
-        panic!(
-            "Found {} example configuration parse error(s):\n{}",
-            parse_errors.len(),
-            parse_errors.join("\n")
-        );
-    }
+    assert!(
+        parse_errors.is_empty(),
+        "Found {} example configuration parse error(s):\n{}",
+        parse_errors.len(),
+        parse_errors.join("\n")
+    );
 }
 
 #[test]
@@ -136,6 +137,7 @@ fn quickstart_pipeline_configs_are_syntactically_valid() {
     }
 }
 
+#[cfg(feature = "tts-piper")]
 #[test]
 fn quickstart_standalone_tts_execution() {
     let tts_cfg = examples_dir().join("tts/piper.toml");
@@ -169,7 +171,7 @@ fn quickstart_standalone_tts_execution() {
     );
 
     assert!(out_wav.exists(), "TTS output WAV file must be created");
-    let file_len = std::fs::metadata(&out_wav).map(|m| m.len()).unwrap_or(0);
+    let file_len = std::fs::metadata(&out_wav).map_or(0, |m| m.len());
     assert!(
         file_len > 44,
         "WAV file must contain audio data (got {file_len} bytes)"
@@ -178,6 +180,7 @@ fn quickstart_standalone_tts_execution() {
     let _ = std::fs::remove_file(&out_wav);
 }
 
+#[cfg(all(feature = "s2s-gemini", feature = "realtime"))]
 #[test]
 fn quickstart_gemini_live_options_and_credential_gate() {
     let gemini_cfg = examples_dir().join("live/gemini-live.toml");
@@ -197,7 +200,9 @@ fn quickstart_gemini_live_options_and_credential_gate() {
     // 2. If GEMINI_API_KEY is unset, assert that running interactive fails cleanly
     // with a missing credentials error (no panic/crash).
     let has_key = std::env::var("GEMINI_API_KEY").is_ok_and(|k| !k.trim().is_empty());
-    if !has_key {
+    if has_key {
+        eprintln!("[INFO] GEMINI_API_KEY is present; configuration is validated for live calling.");
+    } else {
         let run_out = bin()
             .env_remove("GEMINI_API_KEY")
             .args(["--config"])
@@ -219,8 +224,6 @@ fn quickstart_gemini_live_options_and_credential_gate() {
             err_text.contains("GEMINI_API_KEY") || err_text.contains("api_key"),
             "Error output must explain missing API key:\n{err_text}"
         );
-    } else {
-        eprintln!("[INFO] GEMINI_API_KEY is present; configuration is validated for live calling.");
     }
 }
 
@@ -264,7 +267,7 @@ fn quickstart_documentation_commands_parse_as_valid_cli_invocations() {
         // Verify that the first word is a known flag or subcommand
         let first = parts[0];
         let valid_first = first.starts_with("--config")
-            || first.starts_with("-")
+            || first.starts_with('-')
             || [
                 "models",
                 "live",
@@ -319,9 +322,8 @@ fn test_examples_runtime_readiness_and_skip_report() {
             continue; // Skip orchestrator/worker configs from pipeline component report
         }
 
-        let content = match std::fs::read_to_string(file) {
-            Ok(s) => s,
-            Err(_) => continue,
+        let Ok(content) = std::fs::read_to_string(file) else {
+            continue;
         };
 
         let cfg: voice_pipes::config::PipelineConfig = match toml::from_str(&content) {
@@ -429,12 +431,10 @@ fn test_examples_runtime_readiness_and_skip_report() {
         }
 
         // 5. Check VAD
-        if let Some(ref vad) = cfg.vad {
-            if let Some(ref m) = vad.model {
-                let resolved = vp_root.join(m);
-                if !resolved.exists() {
-                    skip_reasons.push(format!("Missing VAD model: {}", m.display()));
-                }
+        if let Some(m) = cfg.vad.as_ref().and_then(|v| v.model.as_ref()) {
+            let resolved = vp_root.join(m);
+            if !resolved.exists() {
+                skip_reasons.push(format!("Missing VAD model: {}", m.display()));
             }
         }
 
@@ -457,12 +457,12 @@ fn test_examples_runtime_readiness_and_skip_report() {
     println!(" VOICE PIPES EXAMPLES: RELEASE READINESS & SKIP DIAGNOSTICS REPORT");
     println!("{}", "=".repeat(105));
     println!(
-        "{:<45} | {:<7} | {}",
-        "Example Configuration", "Status", "Diagnostics / Reason"
+        "{:<45} | {:<7} | Diagnostics / Reason",
+        "Example Configuration", "Status"
     );
     println!("{}", "-".repeat(105));
     for (name, status, reason) in &rows {
-        println!("{:<45} | {:<7} | {}", name, status, reason);
+        println!("{name:<45} | {status:<7} | {reason}");
     }
     println!("{}", "=".repeat(105));
     println!(

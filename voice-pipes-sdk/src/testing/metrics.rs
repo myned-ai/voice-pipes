@@ -465,6 +465,7 @@ mod tests {
         let run = |tx: mpsc::Sender<TextFragment>, _cancel: CancellationToken| async move {
             tx.send(TextFragment {
                 text: String::new(),
+                spoken_text: None,
                 is_end_of_response: false,
                 hints: None,
                 first_token_ms: None,
@@ -477,6 +478,7 @@ mod tests {
 
             tx.send(TextFragment {
                 text: "Hello".into(),
+                spoken_text: None,
                 is_end_of_response: false,
                 hints: None,
                 first_token_ms: Some(40.0),
@@ -487,6 +489,7 @@ mod tests {
 
             tx.send(TextFragment {
                 text: " world".into(),
+                spoken_text: None,
                 is_end_of_response: true,
                 hints: None,
                 first_token_ms: None,
@@ -507,6 +510,7 @@ mod tests {
         let run = |tx: mpsc::Sender<TextFragment>, _cancel: CancellationToken| async move {
             tx.send(TextFragment {
                 text: String::new(),
+                spoken_text: None,
                 is_end_of_response: false,
                 hints: None,
                 first_token_ms: Some(0.1),
@@ -526,6 +530,7 @@ mod tests {
         let run = |tx: mpsc::Sender<TextFragment>, _cancel: CancellationToken| async move {
             tx.send(TextFragment {
                 text: "Hello".into(),
+                spoken_text: None,
                 is_end_of_response: true,
                 hints: None,
                 first_token_ms: Some(2.0),

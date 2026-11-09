@@ -378,6 +378,7 @@ impl LlmProcessor {
             // stop generating instead of grinding to `max_tokens` while
             // holding the backend lock.
             let mut consumer_stopped = false;
+            let mut think_filter = voice_pipes_sdk::ThinkTagFilter::new();
 
             for (pos, i) in (prompt_tokens.len()..).zip(0..max_tokens) {
                 if cancel.is_cancelled() {
@@ -390,12 +391,6 @@ impl LlmProcessor {
                 }
                 output_tokens.push(next_token);
 
-                if first_token_ms.is_none() {
-                    let t = t_request.elapsed().as_secs_f64() * 1000.0;
-                    first_token_ms = Some(t);
-                    pending_first_token_ms = Some(t);
-                }
-
                 // Feed this token to the incremental decoder. It returns the
                 // newly-completed text, or nothing while a multi-byte character
                 // is still spanning tokens (byte-level BPE tokens are not
@@ -404,7 +399,15 @@ impl LlmProcessor {
                     TextProcessorError::new("llm", format!("token decode failed: {e}"))
                 })? {
                     let token_text = Self::clean_output(template.as_ref(), &piece);
-                    sentence_buffer.push_str(&token_text);
+                    let filtered = think_filter.push(&token_text);
+                    if !filtered.is_empty() {
+                        if first_token_ms.is_none() {
+                            let t = t_request.elapsed().as_secs_f64() * 1000.0;
+                            first_token_ms = Some(t);
+                            pending_first_token_ms = Some(t);
+                        }
+                        sentence_buffer.push_str(&filtered);
+                    }
                 }
 
                 // Emit complete sentences as they form.
@@ -476,6 +479,11 @@ impl LlmProcessor {
                 ),
                 "LLM generation complete"
             );
+
+            let trailing = think_filter.flush();
+            if !trailing.is_empty() {
+                sentence_buffer.push_str(&trailing);
+            }
 
             // Flush remaining buffer.
             let final_text = sentence_buffer.trim().to_string();

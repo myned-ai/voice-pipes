@@ -1,0 +1,67 @@
+# Dual-Track Text Sanitizer, TTS Inline Tags, and Pronunciation Lexicon
+#
+# Demonstrates Voice Pipes' dual-track text processing:
+# - Spoken text (`spoken_text`): Markdown stripped, whole-word lexicon substitutions
+#   applied, and provider-supported inline tags preserved for speech synthesis.
+# - Display text (`display_text`): Rich Markdown formatting preserved for client UI
+#   captures and LLM conversation history, preventing phonetic memory pollution.
+#
+# Run (from `voice-pipes/` directory):
+#   cargo run --release -p voice-pipes-cli -- \
+#     --config examples/features/tts-lexicon-and-tags.toml live
+
+[pipeline]
+name = "feature-tts-lexicon-and-tags"
+min_utterance_chars = 2
+
+[pipeline.audit]
+enabled = true
+captures_dir = "captures"
+
+[transport]
+enabled = true
+bind = "127.0.0.1"
+port = 8800
+
+[vad]
+mode = "silero"
+model = "models/silero_vad.onnx"
+speech_prob = 0.5
+min_speech_ms = 200
+min_silence_ms = 500
+
+[stt]
+provider = "parakeet-tdt"
+model_dir = "models/parakeet-tdt"
+
+[stt.options]
+initial_buffer_ms = 500.0
+inference_step_ms = 500.0
+
+[turn_detection]
+mode = "silence"
+silence_timeout_ms = 800
+
+[barge_in]
+enabled = true
+min_chunks = 3
+speech_threshold = 200.0
+
+[[text_processor]]
+type = "openai-compat"
+model = "gpt-4o-mini"
+system_prompt = "You are a helpful voice assistant. Use Markdown for emphasis and structure when appropriate."
+max_tokens = 128
+temperature = 0.7
+
+[tts]
+provider = "piper"
+model = "models/en_US-lessac-medium.onnx"
+sanitize_markdown = true
+passthrough_tags = ["<break", "[whispers]"]
+
+[tts.lexicon]
+"SQL" = "sequel"
+"Myned" = "Mined"
+"nginx" = "engine x"
+"API" = "A P I"

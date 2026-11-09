@@ -32,6 +32,7 @@ async fn test_tts_task_end_to_end() {
         None,
         evt_tx,
         err_flag,
+        None,
     ));
 
     frag_tx
@@ -132,6 +133,7 @@ async fn test_tts_task_stateful_session_does_not_deadlock() {
         None,
         evt_tx,
         err_flag,
+        None,
     ));
 
     for (text, is_end) in [("one", false), ("two", false), ("three", true)] {
@@ -189,6 +191,7 @@ async fn test_tts_task_fragment_idx_increments_without_audit() {
         None, // audit disabled — the scenario regressed on
         evt_tx,
         err_flag,
+        None,
     ));
 
     for (text, is_end) in [("hello", false), ("world", true)] {
@@ -243,6 +246,7 @@ async fn test_tts_task_skips_empty_fragment() {
         None,
         evt_tx,
         err_flag,
+        None,
     ));
 
     // Send empty fragment followed by real one
@@ -288,6 +292,7 @@ async fn test_tts_task_emits_tts_timing_on_empty_final_fragment() {
         Some(audit),
         evt_tx,
         err_flag,
+        None,
     ));
 
     // Fragment 1: real text (like a complete sentence from the LLM)
@@ -362,6 +367,7 @@ async fn test_tts_task_resamples_to_output_rate() {
         None,
         evt_tx,
         err_flag,
+        None,
     ));
 
     frag_tx
@@ -420,6 +426,7 @@ async fn test_tts_task_resampler_is_fresh_per_fragment() {
         None,
         evt_tx,
         err_flag,
+        None,
     ));
 
     // Two identical fragments back-to-back.
@@ -484,6 +491,7 @@ async fn test_tts_task_no_resample_when_none() {
         None,
         evt_tx,
         err_flag,
+        None,
     ));
 
     frag_tx
@@ -528,6 +536,7 @@ async fn test_tts_task_fixed_chunking_splits_large_frames() {
         None,
         evt_tx,
         err_flag,
+        None,
     ));
 
     frag_tx
@@ -579,6 +588,7 @@ async fn test_tts_task_fixed_chunking_preserves_fragment_boundaries() {
         None,
         evt_tx,
         err_flag,
+        None,
     ));
 
     frag_tx.send(TextFragment::new("hi")).await.unwrap();
@@ -633,6 +643,7 @@ async fn test_tts_task_cancel_stops_processing() {
         None,
         evt_tx,
         err_flag,
+        None,
     ));
 
     // Send first fragment.
@@ -735,6 +746,7 @@ async fn test_tts_prefetch_word_timings() {
         None,
         evt_tx,
         err_flag,
+        None,
     ));
 
     frag_tx.send(TextFragment::new("first")).await.unwrap();
@@ -801,6 +813,7 @@ async fn test_tts_sentinel_channel_metadata() {
         None,
         evt_tx,
         err_flag,
+        None,
     ));
 
     frag_tx
@@ -862,6 +875,7 @@ async fn test_tts_clean_exit_on_end() {
         None,
         evt_tx,
         err_flag,
+        None,
     ));
 
     frag_tx
@@ -954,6 +968,7 @@ async fn words_sent_before_the_first_frame_do_not_stall_the_fragment() {
         None,
         evt_tx,
         err_flag,
+        None,
     ));
     frag_tx
         .send(TextFragment::new("a long sentence").with_is_end_of_response(true))
@@ -969,4 +984,95 @@ async fn words_sent_before_the_first_frame_do_not_stall_the_fragment() {
         .and_then(|c| c.word_timings)
         .expect("the caption carries the words");
     assert_eq!(timings.len(), 300);
+}
+
+struct CapturingTts {
+    spoken: Arc<tokio::sync::Mutex<Vec<String>>>,
+}
+
+#[async_trait]
+impl TtsProvider for CapturingTts {
+    async fn synthesize(&self, text: &str) -> Result<AudioFrame, TtsError> {
+        self.spoken.lock().await.push(text.to_string());
+        Ok(AudioFrame {
+            samples: vec![100; 160],
+            sample_rate: 16_000,
+            channels: 1,
+        })
+    }
+    fn sample_rate(&self) -> u32 {
+        16_000
+    }
+    fn name(&self) -> &'static str {
+        "capturing-tts"
+    }
+    fn supported_inline_tags(&self) -> &'static [&'static str] {
+        &["<break"]
+    }
+}
+
+#[tokio::test]
+async fn test_tts_task_dual_track_sanitizer_and_lexicon() {
+    let captured = Arc::new(tokio::sync::Mutex::new(Vec::new()));
+    let tts = Arc::new(CapturingTts {
+        spoken: Arc::clone(&captured),
+    });
+
+    let (frag_tx, frag_rx) = mpsc::channel(4);
+    let (audio_tx, mut audio_rx) = mpsc::channel(16);
+    let (evt_tx, err_flag) = test_event_channel();
+
+    let sanitize_cfg = voice_pipes_sdk::SanitizeConfig {
+        sanitize_markdown: true,
+        passthrough_tags: vec!["<break".to_string()],
+        provider_name: "capturing-tts".to_string(),
+        lexicon: std::collections::BTreeMap::from([("SQL".to_string(), "sequel".to_string())]),
+    };
+
+    tokio::spawn(tts_task(
+        frag_rx,
+        audio_tx,
+        tts,
+        Arc::new(tokio::sync::Mutex::new(None)),
+        None,
+        None,
+        CancellationToken::new(),
+        1,
+        None,
+        evt_tx,
+        err_flag,
+        Some(sanitize_cfg),
+    ));
+
+    frag_tx
+        .send(
+            TextFragment::new("Check **SQL** at [Docs](https://example.com) <break time=\"500ms\"/> [whispers] now!")
+                .with_is_end_of_response(true),
+        )
+        .await
+        .unwrap();
+
+    let chunk = tokio::time::timeout(std::time::Duration::from_secs(5), audio_rx.recv())
+        .await
+        .expect("audio received")
+        .expect("chunk received");
+
+    let caption = chunk.caption.expect("chunk carries caption");
+    assert_eq!(
+        caption.text,
+        "Check **SQL** at [Docs](https://example.com) now!"
+    );
+    assert_eq!(
+        caption.spoken_text.as_deref(),
+        Some("Check sequel at Docs <break time=\"500ms\"/> now!")
+    );
+    assert_eq!(caption.tts_directives.len(), 2); // 1 TagPassthrough (<break>) + 1 Lexicon (SQL -> sequel)
+    assert_eq!(caption.stripped_directives.len(), 1); // 1 stripped ([whispers])
+
+    let spoken_calls = captured.lock().await;
+    assert_eq!(spoken_calls.len(), 1);
+    assert_eq!(
+        spoken_calls[0],
+        "Check sequel at Docs <break time=\"500ms\"/> now!"
+    );
 }

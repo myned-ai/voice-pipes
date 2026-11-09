@@ -43,7 +43,7 @@ The interactive launcher runs a setup wizard, downloads the local models you cho
 .\launch-stack.ps1    # Windows PowerShell
 ```
 
-Then open **http://localhost:3000**:
+Then open **http://localhost:3000** (sign in using `ADMIN_UI_TOKEN` from `voice-pipes-admin/.env`):
 1. Go to **Playground**, click **Connect**, and grant microphone access.
 2. **Say something.** The agent transcribes, thinks, and speaks back with live karaoke captions synced word-for-word to the audio.
 3. **Interrupt it mid-sentence.** The dedicated barge-in monitor cancels in-flight LLM and TTS immediately and truncates conversation history to the portion actually played on your speaker.

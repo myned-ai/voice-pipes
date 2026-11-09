@@ -16,6 +16,7 @@ log = logging.getLogger("admin.captures")
 # ── Helper: read local capture artifacts for a session ───────
 
 _TTS_FRAG_RE = re.compile(r"^tts_frag_(\d+)$")
+_TTS_FRAG_SPOKEN_RE = re.compile(r"^tts_frag_(\d+)_spoken$")
 # The microphone audio of speech that made no turn, kept under the id the
 # speech would have become and the reason it was dropped; a second drop
 # under the same id carries its attempt number.
@@ -1296,17 +1297,29 @@ def _read_capture_artifacts(session_id: str, events_offset: int = 0, events_limi
     # Synthesize llm_output from TTS fragment text files when llm_output.json was not
     # written (common for turns interrupted before LLM generation completed).
     for utt in utterances.values():
-        if "llm_output" in utt:
-            continue  # already have the file — don't overwrite
-        frag_keys = sorted(
-            [k for k in utt if _TTS_FRAG_RE.match(k)],
-            key=lambda k: int(_TTS_FRAG_RE.match(k).group(1)),  # type: ignore[union-attr]
-        )
-        if not frag_keys:
-            continue
-        parts = [str(utt[k]).strip() for k in frag_keys if str(utt.get(k, "")).strip()]
-        if parts:
-            utt["llm_output"] = {"text": " ".join(parts)}
+        if "llm_output" not in utt:
+            frag_keys = sorted(
+                [k for k in utt if _TTS_FRAG_RE.match(k)],
+                key=lambda k: int(_TTS_FRAG_RE.match(k).group(1)),  # type: ignore[union-attr]
+            )
+            if frag_keys:
+                parts = [str(utt[k]).strip() for k in frag_keys if str(utt.get(k, "")).strip()]
+                if parts:
+                    utt["llm_output"] = {"text": " ".join(parts)}
+        llm_out = utt.get("llm_output")
+        if isinstance(llm_out, dict):
+            if not llm_out.get("spoken_text"):
+                frag_spoken_keys = sorted(
+                    [k for k in utt if _TTS_FRAG_SPOKEN_RE.match(k)],
+                    key=lambda k: int(_TTS_FRAG_SPOKEN_RE.match(k).group(1)),  # type: ignore[union-attr]
+                )
+                if frag_spoken_keys:
+                    spoken_parts = [str(utt[k]).strip() for k in frag_spoken_keys if str(utt.get(k, "")).strip()]
+                    if spoken_parts:
+                        llm_out["spoken_text"] = " ".join(spoken_parts)
+                        utt["spoken_text"] = llm_out["spoken_text"]
+            else:
+                utt["spoken_text"] = llm_out["spoken_text"]
 
     # Fallback: derive retained_text from TTS fragment files for interrupted turns
     # that don't have a history_modified pipeline event (AudioLedger not populated).

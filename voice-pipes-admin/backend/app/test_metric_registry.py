@@ -2,13 +2,11 @@
 from __future__ import annotations
 
 import unittest
+
 from app.captures.descriptors import (
     get_all_metric_keys,
-    get_component_descriptor,
-    get_field_descriptor,
     get_metric_descriptors,
 )
-from app.captures.reader import INPUT_AUDIO_KEYS, project_snapshot_metrics
 
 
 class TestMetricRegistry(unittest.TestCase):
@@ -83,7 +81,7 @@ class TestMetricRegistry(unittest.TestCase):
             "ttfb_anchor_source": "raw",
         }
         all_keys = get_all_metric_keys()
-        for key, expected_unit in expected_units.items():
+        for key, _expected_unit in expected_units.items():
             self.assertIn(
                 key,
                 all_keys,

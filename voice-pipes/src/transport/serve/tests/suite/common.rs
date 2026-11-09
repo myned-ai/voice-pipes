@@ -344,6 +344,7 @@ macro_rules! classic_ctx {
             barge_in_sent_at: &mut $bed.barge_in_sent_at,
             tts_session: Arc::clone(&$bed.tts_session),
             spec_manager: None,
+            sanitize_cfg: None,
             client_tools: &$bed.client_tools,
             client_calls: &mut $bed.client_calls,
         }

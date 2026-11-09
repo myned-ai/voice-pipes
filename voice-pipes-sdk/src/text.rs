@@ -152,6 +152,8 @@ pub struct TextFragment {
     /// first fragment that carries tokens; `None` on follow-up fragments and
     /// on providers that don't track TTFT.
     pub first_token_ms: Option<f64>,
+    /// Optional spoken text override for TTS synthesis when different from `text`.
+    pub spoken_text: Option<String>,
 }
 
 impl TextFragment {
@@ -164,11 +166,19 @@ impl TextFragment {
         }
     }
 
+    /// The text intended for speech synthesis: returns `spoken_text` if set,
+    /// otherwise falls back to `text`.
+    #[must_use]
+    pub fn spoken(&self) -> &str {
+        self.spoken_text.as_deref().unwrap_or(&self.text)
+    }
+
     with_setters! {
         with_is_end_of_response => is_end_of_response: bool,
         with_hints => hints: Option<SynthesisHints>,
         with_token_count => token_count: Option<u32>,
         with_first_token_ms => first_token_ms: Option<f64>,
+        with_spoken_text => spoken_text: Option<String>,
     }
 }
 
@@ -225,13 +235,7 @@ pub trait TextProcessor: Send + Sync {
         }
         let result = self.process(input).await?;
         let _ = tx
-            .send(TextFragment {
-                text: result,
-                is_end_of_response: true,
-                hints: None,
-                token_count: None,
-                first_token_ms: None,
-            })
+            .send(TextFragment::new(result).with_is_end_of_response(true))
             .await;
         Ok(())
     }

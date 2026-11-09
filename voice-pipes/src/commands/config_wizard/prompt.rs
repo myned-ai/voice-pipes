@@ -73,12 +73,9 @@ pub mod scripted {
     /// One scripted answer. `Default` accepts whatever default the wizard
     /// offers for that question (works for `select`, `text` and `confirm`).
     #[derive(Debug, Clone)]
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "general-purpose test fixture; not every variant is scripted yet"
-        )
+    #[allow(
+        dead_code,
+        reason = "general-purpose test fixture; not every variant is scripted yet"
     )]
     pub enum Answer {
         Default,

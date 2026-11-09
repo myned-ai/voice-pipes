@@ -643,6 +643,12 @@ services:
     # Entrypoint launches `pocket-tts serve` and fires one warm-up synthesis
     # so the first real turn doesn't pay the ~1.4s cold first-byte cost.
     entrypoint: ["sh", "/usr/local/bin/pocket-tts-entrypoint.sh"]
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 180s
     restart: unless-stopped
 
   # VibeVoice-Realtime GPU TTS sidecar — Microsoft VibeVoice-Realtime-0.5B served
@@ -682,4 +688,10 @@ services:
     # Run as the host user's ids on Linux (launcher exports them);
     # falls back to the image's built-in unprivileged uid.
     user: "${VP_UID:-10001}:${VP_GID:-10001}"
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8091/health', timeout=2)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 180s
     restart: unless-stopped

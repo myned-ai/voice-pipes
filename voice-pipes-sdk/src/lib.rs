@@ -117,6 +117,7 @@ pub mod params;
 pub mod phonemize;
 pub mod reconnect;
 pub mod s2s;
+pub mod sanitize;
 pub mod schema;
 pub mod secrets;
 pub mod sentence;
@@ -144,6 +145,10 @@ pub use config::{
     VadConfig,
 };
 pub use params::{AtomicParamStore, AtomicParamStoreBuilder, MutableParamStore};
+pub use sanitize::{
+    DualTrackText, SanitizeConfig, StrippedDirectiveRecord, ThinkTagFilter, TtsDirectiveRecord,
+    is_unspeakable_symbol, sanitize_dual_track, strip_unspeakable,
+};
 pub use schema::{
     OnlyWhen, ParamConstraints, ParamDescriptor, ParamError, ParamValue, ParamValueType,
     ProviderSchema,

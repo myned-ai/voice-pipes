@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Mic, Keyboard, MessageSquare, ChevronDown, AlertCircle } from 'lucide-react';
+import { Mic, Keyboard, MessageSquare, ChevronDown, AlertCircle, Volume2 } from 'lucide-react';
 import { useTheme } from '../../../contexts/ThemeContext';
 import type { Utterance, LlmTiming, TtsTiming, SttTiming, OrchTurn, ReportAnomaly } from './types';
 import { TurnCardHeader } from './TurnCardHeader';
@@ -33,6 +33,17 @@ export const TurnCard = ({ utt, sessionId, llmTiming, ttsTiming, sttTiming, orch
   const endpointingMs: number | undefined = sttTiming?.endpointing_ms ?? summary?.endpointing_ms;
 
   const [promptOpen, setPromptOpen] = useState(false);
+  const [ttsInputOpen, setTtsInputOpen] = useState(false);
+
+  // TTS input differences (spoken_text vs display_text, directives applied/stripped)
+  const ttsDirectives = utt.llm_output?.tts_directives ?? [];
+  const strippedDirectives = utt.llm_output?.stripped_directives ?? [];
+  const spokenText = utt.llm_output?.spoken_text;
+  const hasSpokenDiff = spokenText != null && utt.llm_output?.text != null && spokenText !== utt.llm_output.text;
+  const hasTtsInputDiff = hasSpokenDiff || ttsDirectives.length > 0 || strippedDirectives.length > 0;
+
+  const directiveCount = ttsDirectives.filter(d => d.kind !== 'lexicon').length;
+  const lexiconCount = ttsDirectives.filter(d => d.kind === 'lexicon').length;
 
   // Determine user-side text: speech transcript or typed text input
   const userText: string | null = utt.stt?.text ?? utt.user_text ?? null;
@@ -153,6 +164,13 @@ export const TurnCard = ({ utt, sessionId, llmTiming, ttsTiming, sttTiming, orch
               summary={summary}
             />
           </div>
+          {hasSpokenDiff && spokenText && (
+            <div className={`pl-7 text-xs flex items-center gap-1.5 ${isDark ? 'text-purple-300/90' : 'text-purple-700'}`}>
+              <Volume2 size={12} className="shrink-0" />
+              <span className="font-medium">Spoken:</span>
+              <span className="italic select-text">&ldquo;{spokenText}&rdquo;</span>
+            </div>
+          )}
           {aiAudioEntries.length > 0 && (
             <div className="pl-7 flex flex-col gap-1">
               {heardNote && (
@@ -195,6 +213,113 @@ export const TurnCard = ({ utt, sessionId, llmTiming, ttsTiming, sttTiming, orch
           {promptOpen && (
             <div className={`mt-1.5 rounded p-3 text-xs font-mono whitespace-pre-wrap max-h-52 overflow-y-auto leading-relaxed ${isDark ? 'bg-indigo-950/25 border border-indigo-900/30 text-indigo-200/80' : 'bg-indigo-50 border border-indigo-100 text-indigo-900'}`}>
               {utt.llm_input}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Collapsible TTS input inspector ── */}
+      {hasTtsInputDiff && (
+        <div className="mt-1">
+          <button
+            onClick={() => setTtsInputOpen(o => !o)}
+            className={`flex items-center gap-1.5 text-[10px] font-mono transition-colors ${
+              isDark ? 'text-purple-400/80 hover:text-purple-300' : 'text-purple-700/80 hover:text-purple-900'
+            }`}
+          >
+            <ChevronDown size={11} className={`transition-transform duration-150 ${ttsInputOpen ? '' : '-rotate-90'}`} />
+            <span>
+              TTS input
+              {directiveCount > 0 && ` · ${directiveCount} directive${directiveCount > 1 ? 's' : ''}`}
+              {lexiconCount > 0 && ` · ${lexiconCount} lexicon`}
+              {directiveCount === 0 && lexiconCount === 0 && ' · sanitized'}
+            </span>
+            {strippedDirectives.length > 0 && (
+              <span className={`font-semibold ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
+                · {strippedDirectives.length} stripped ⚠
+              </span>
+            )}
+          </button>
+          {ttsInputOpen && (
+            <div
+              className={`mt-1.5 rounded p-3 text-xs font-mono max-h-64 overflow-y-auto leading-relaxed ${
+                isDark
+                  ? 'bg-purple-950/25 border border-purple-900/40 text-purple-200/90'
+                  : 'bg-purple-50 border border-purple-200 text-purple-950'
+              }`}
+            >
+              {spokenText && (
+                <div>
+                  <div className={`text-[10px] font-sans font-medium uppercase tracking-wider mb-1 ${
+                    isDark ? 'text-purple-400/70' : 'text-purple-600/80'
+                  }`}>
+                    Spoken text sent to TTS
+                  </div>
+                  <div className="whitespace-pre-wrap select-text">{spokenText}</div>
+                </div>
+              )}
+              {ttsDirectives.length > 0 && (
+                <div className={spokenText ? 'mt-2.5' : ''}>
+                  <div className={`text-[10px] font-sans font-medium uppercase tracking-wider mb-1.5 ${
+                    isDark ? 'text-purple-400/70' : 'text-purple-600/80'
+                  }`}>
+                    Applied Directives
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {ttsDirectives.map((d, i) => (
+                      <span
+                        key={i}
+                        className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] ${
+                          isDark
+                            ? 'bg-purple-900/40 border border-purple-700/50 text-purple-200'
+                            : 'bg-purple-100 border border-purple-200 text-purple-900'
+                        }`}
+                      >
+                        {d.kind === 'lexicon' && (
+                          <span>
+                            <span className="font-semibold">{d.from}</span>
+                            <span className="mx-1 opacity-60">→</span>
+                            <span className="font-semibold">{d.to}</span>
+                          </span>
+                        )}
+                        {d.kind === 'ipa_phoneme' && (
+                          <span>
+                            <span className="font-semibold">{d.word}</span>
+                            <span className="mx-1 opacity-60">→</span>
+                            <span className="font-mono text-[10px] opacity-90">{d.ipa}</span>
+                          </span>
+                        )}
+                        {(d.kind === 'inline_tag' || d.kind === 'tag_passthrough') && (
+                          <span className="font-mono">{d.raw}</span>
+                        )}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {strippedDirectives.length > 0 && (
+                <div
+                  className={`mt-2.5 rounded p-2.5 text-[11px] ${
+                    isDark
+                      ? 'bg-amber-950/30 border border-amber-900/50 text-amber-200'
+                      : 'bg-amber-50 border border-amber-200 text-amber-900'
+                  }`}
+                >
+                  <div className="flex items-center gap-1 font-semibold text-amber-600 dark:text-amber-400 mb-1">
+                    <AlertCircle size={12} className="shrink-0" />
+                    <span>Stripped Directives</span>
+                  </div>
+                  <div className="space-y-0.5">
+                    {strippedDirectives.map((sd, i) => (
+                      <div key={i} className="pl-4">
+                        <code className="font-bold">{sd.raw}</code>
+                        <span className="mx-1.5 opacity-60">—</span>
+                        <span className="opacity-90">{sd.reason}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -1,8 +1,7 @@
-# Nemotron streaming (STT, local)
+# Nemotron English streaming (STT, local, legacy manual export)
 
-**Status:** active — the more accurate Nemotron for English. For other
-languages use [Nemotron 3.5](nemotron-3.5.md).
-**Last verified:** 2026-09-25
+**Status:** legacy export — more accurate for English only, but requires manual NeMo export. For auto-download and multilingual support (40 languages), use [Nemotron 3.5 Streaming](nemotron-3.5.md).
+**Last verified:** 2026-11-08
 **Owner:** Docs
 
 ## What it is
@@ -11,7 +10,8 @@ NVIDIA's `nemotron-speech-streaming-en-0.6b`, a cache-aware streaming
 FastConformer with an RNNT decoder, run in-process through ONNX Runtime. The
 only built-in STT that streams natively frame by frame rather than
 re-decoding a buffer, so its latency does not grow with utterance length.
-Requires a one-time model export.
+Requires a one-time manual model export. In the setup wizard, it is listed as
+**Nemotron English Streaming (Legacy, requires manual NeMo export; use Nemotron 3.5 instead)**.
 
 ### Against Nemotron 3.5, on English
 
@@ -66,8 +66,8 @@ no longer gated: no token or license click needed as of 2026-09) and run the
 export once:
 
 ```sh
-# see scripts/README-export-nemotron.md
-pwsh scripts/export-nemotron.ps1          # or export_nemotron_streaming.py / Dockerfile.nemo-export
+# see voice-pipes/scripts/README-export-nemotron.md
+pwsh voice-pipes/scripts/export-nemotron.ps1          # or export_nemotron_streaming.py / Dockerfile.nemo-export
 ```
 
 The result is `encoder.onnx`, `decoder.onnx`, `joint.onnx`,
