@@ -1144,6 +1144,9 @@ describe("Text and Hybrid Mode Transcription Flow", () => {
   });
 
   it("Text interruption: user types 'stop' while agent is speaking audio", async () => {
+    // Pin UUID to start with '1' (the active utteranceId) to guarantee non-regression
+    // against safeId.replace("stt-", "") digit-parsing collisions.
+    vi.spyOn(crypto, "randomUUID").mockReturnValue("10000000-0000-0000-0000-000000000000");
     const hook = renderHook(() => usePlaygroundSession());
     await setupSession(hook);
 
