@@ -488,7 +488,8 @@ async fn eou_sentinel_does_not_wait_for_the_llm_stream_to_close() {
 async fn agent_say_turn_has_null_llm_ttft_and_skip_reason() {
     let (audio_tx, mut audio_rx) = mpsc::channel(32);
     let (event_tx, _flag) = test_event_channel();
-    let processors: Arc<Vec<Box<dyn TextProcessor>>> = Arc::new(vec![Box::new(BlockedTextProcessor)]);
+    let processors: Arc<Vec<Box<dyn TextProcessor>>> =
+        Arc::new(vec![Box::new(BlockedTextProcessor)]);
     let utterance = Utterance {
         text: "Welcome aboard.".into(),
         utterance_id: 7,
@@ -682,7 +683,10 @@ struct DelayedTts {
 
 #[async_trait]
 impl TtsProvider for DelayedTts {
-    async fn synthesize(&self, _text: &str) -> Result<crate::audio::AudioFrame, crate::tts::TtsError> {
+    async fn synthesize(
+        &self,
+        _text: &str,
+    ) -> Result<crate::audio::AudioFrame, crate::tts::TtsError> {
         tokio::time::sleep(std::time::Duration::from_millis(self.delay_ms)).await;
         Ok(crate::audio::AudioFrame {
             samples: vec![100i16; 1600],
@@ -747,14 +751,24 @@ async fn telescoping_stage_latencies_sum_to_commit_to_first_audio() {
     let out_span = snap.component_by_kind("output").expect("output span");
 
     let llm_wait = llm.extras["llm_wait_ms"].as_f64().expect("llm_wait_ms");
-    let tts_wait = tts_span.extras["tts_wait_ms"].as_f64().expect("tts_wait_ms");
-    let output_wait = tts_span.extras["output_wait_ms"].as_f64().expect("output_wait_ms");
+    let tts_wait = tts_span.extras["tts_wait_ms"]
+        .as_f64()
+        .expect("tts_wait_ms");
+    let output_wait = tts_span.extras["output_wait_ms"]
+        .as_f64()
+        .expect("output_wait_ms");
     let commit_fa = tts_span.extras["commit_to_first_audio_ms"]
         .as_f64()
         .expect("commit_to_first_audio_ms");
 
-    assert!(llm_wait >= 40.0, "llm_wait_ms should include commit queue + 40ms LLM wait: {llm_wait}");
-    assert!(tts_wait >= 25.0, "tts_wait_ms should include ~30ms TTS wait: {tts_wait}");
+    assert!(
+        llm_wait >= 40.0,
+        "llm_wait_ms should include commit queue + 40ms LLM wait: {llm_wait}"
+    );
+    assert!(
+        tts_wait >= 25.0,
+        "tts_wait_ms should include ~30ms TTS wait: {tts_wait}"
+    );
     assert!(output_wait >= 0.0);
     let sum = llm_wait + tts_wait + output_wait;
     assert!(

@@ -274,7 +274,9 @@ fn is_tag_allowed(tag_str: &str, cfg: &SanitizeConfig, allow_all: bool) -> bool 
     }
     cfg.passthrough_tags.iter().any(|allowed| {
         tag_str.eq_ignore_ascii_case(allowed)
-            || tag_str.to_ascii_lowercase().starts_with(&allowed.to_ascii_lowercase())
+            || tag_str
+                .to_ascii_lowercase()
+                .starts_with(&allowed.to_ascii_lowercase())
     })
 }
 
@@ -289,7 +291,9 @@ fn handle_bracket_link_or_directive(
     if let Some(link) = parse_markdown_link(rest) {
         if is_ipa_target(link.target) {
             display_buf.push_str(link.text);
-            if is_tag_allowed("/ipa/", cfg, allow_all) || is_tag_allowed(link.target, cfg, allow_all) {
+            if is_tag_allowed("/ipa/", cfg, allow_all)
+                || is_tag_allowed(link.target, cfg, allow_all)
+            {
                 spoken_buf.push_str(link.full);
                 dual.directives.push(TtsDirectiveRecord::IpaPhoneme {
                     word: link.text.to_string(),
@@ -357,7 +361,9 @@ fn handle_xml_tag(
             });
         }
     } else if tag_str == "</phoneme>" {
-        if is_tag_allowed("</phoneme>", cfg, allow_all) || is_tag_allowed("<phoneme", cfg, allow_all) {
+        if is_tag_allowed("</phoneme>", cfg, allow_all)
+            || is_tag_allowed("<phoneme", cfg, allow_all)
+        {
             spoken_buf.push_str(tag_str);
         }
     } else if is_tag_allowed(tag_str, cfg, allow_all) {
@@ -407,13 +413,7 @@ pub fn sanitize_dual_track(raw: &str, cfg: &SanitizeConfig) -> DualTrackText {
 
         // 2. Check for XML/SSML tag: `<...>`
         if rest.starts_with('<')
-            && let Some(consumed) = handle_xml_tag(
-                rest,
-                cfg,
-                allow_all,
-                &mut spoken_buf,
-                &mut dual,
-            )
+            && let Some(consumed) = handle_xml_tag(rest, cfg, allow_all, &mut spoken_buf, &mut dual)
         {
             idx += consumed;
             continue;
@@ -487,7 +487,15 @@ fn parse_bracket_directive(text: &str) -> Option<&str> {
     let content = text.get(1..close)?.trim();
     let is_directive = matches!(
         content.to_ascii_lowercase().as_str(),
-        "laughs" | "whispers" | "sighs" | "gasp" | "gasps" | "laughter" | "pause" | "chuckle" | "snicker"
+        "laughs"
+            | "whispers"
+            | "sighs"
+            | "gasp"
+            | "gasps"
+            | "laughter"
+            | "pause"
+            | "chuckle"
+            | "snicker"
     );
     is_directive.then(|| text.get(..=close)).flatten()
 }
@@ -503,7 +511,10 @@ fn parse_xml_tag(text: &str) -> Option<&str> {
         return None;
     }
     let is_valid = tag_inner.starts_with('/')
-        || tag_inner.chars().next().is_some_and(|c| c.is_ascii_alphabetic());
+        || tag_inner
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_alphabetic());
     is_valid.then(|| text.get(..=close)).flatten()
 }
 
@@ -524,7 +535,10 @@ fn split_leading_punctuation(token: &str) -> (&str, &str) {
 fn split_trailing_punctuation(token: &str) -> (&str, &str) {
     let mut end = token.len();
     for (idx, c) in token.char_indices().rev() {
-        if matches!(c, '.' | ',' | '!' | '?' | ';' | ':' | ')' | ']' | '}' | '>' | '"' | '\'' | '`') {
+        if matches!(
+            c,
+            '.' | ',' | '!' | '?' | ';' | ':' | ')' | ']' | '}' | '>' | '"' | '\'' | '`'
+        ) {
             end = idx;
         } else {
             break;
@@ -557,7 +571,9 @@ fn verbalize_url(raw_url: &str) -> String {
         url_core
     };
 
-    let without_www = without_scheme.strip_prefix("www.").unwrap_or(without_scheme);
+    let without_www = without_scheme
+        .strip_prefix("www.")
+        .unwrap_or(without_scheme);
 
     let host_end = without_www
         .find(['/', '?', '#'])
@@ -598,7 +614,9 @@ fn verbalize_url(raw_url: &str) -> String {
     let mut verbalized_path = String::new();
     let is_simple_path = !segments.is_empty()
         && segments.len() <= 2
-        && segments.iter().all(|s| s.len() <= 24 && !looks_like_hash_or_id(s));
+        && segments
+            .iter()
+            .all(|s| s.len() <= 24 && !looks_like_hash_or_id(s));
 
     if is_simple_path {
         for seg in segments {

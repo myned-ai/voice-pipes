@@ -146,8 +146,8 @@ pub use config::{
 };
 pub use params::{AtomicParamStore, AtomicParamStoreBuilder, MutableParamStore};
 pub use sanitize::{
-    is_unspeakable_symbol, sanitize_dual_track, strip_unspeakable, DualTrackText, SanitizeConfig,
-    StrippedDirectiveRecord, ThinkTagFilter, TtsDirectiveRecord,
+    DualTrackText, SanitizeConfig, StrippedDirectiveRecord, ThinkTagFilter, TtsDirectiveRecord,
+    is_unspeakable_symbol, sanitize_dual_track, strip_unspeakable,
 };
 pub use schema::{
     OnlyWhen, ParamConstraints, ParamDescriptor, ParamError, ParamValue, ParamValueType,

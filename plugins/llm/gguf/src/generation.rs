@@ -363,10 +363,9 @@ impl LlmProcessor {
             let t_generate = Instant::now();
             let first_logits =
                 Self::apply_repeat_penalty(&first_logits, &output_tokens, repeat_penalty)?;
-            let mut next_token =
-                logits_processor
-                    .sample(&first_logits)
-                    .map_err(|e| TextProcessorError::new("llm", format!("sampling failed: {e}")))?;
+            let mut next_token = logits_processor
+                .sample(&first_logits)
+                .map_err(|e| TextProcessorError::new("llm", format!("sampling failed: {e}")))?;
 
             let mut first_token_ms: Option<f64> = None;
             // Same value as `first_token_ms`, but consumed (`take`) on the first
@@ -412,7 +411,12 @@ impl LlmProcessor {
                 }
 
                 // Emit complete sentences as they form.
-                while let Some((sentence, rest)) = split_first_sentence(&sentence_buffer, text_chunking.min_soft_split_chars, text_chunking.min_soft_split_words, false) {
+                while let Some((sentence, rest)) = split_first_sentence(
+                    &sentence_buffer,
+                    text_chunking.min_soft_split_chars,
+                    text_chunking.min_soft_split_words,
+                    false,
+                ) {
                     if !sentence.trim().is_empty() {
                         if first_sentence_chars.is_none() {
                             first_sentence_chars = Some(sentence.trim_end().len());
@@ -437,13 +441,11 @@ impl LlmProcessor {
                     break;
                 }
 
-                let logits =
-                    backend
-                        .forward(&[next_token], pos)
-                        .map_err(|e| TextProcessorError::new("llm", e.message))?;
+                let logits = backend
+                    .forward(&[next_token], pos)
+                    .map_err(|e| TextProcessorError::new("llm", e.message))?;
 
-                let logits =
-                    Self::apply_repeat_penalty(&logits, &output_tokens, repeat_penalty)?;
+                let logits = Self::apply_repeat_penalty(&logits, &output_tokens, repeat_penalty)?;
 
                 next_token = logits_processor
                     .sample(&logits)
@@ -471,7 +473,10 @@ impl LlmProcessor {
                 cache_reset_ms = format!("{cache_reset_ms:.1}"),
                 prompt_ingest_ms = format!("{prompt_ingest_ms:.1}"),
                 prompt_tokens = ingest_count,
-                total_ms = format!("{:.1}", tokenize_ms + cache_reset_ms + prompt_ingest_ms + generate_ms),
+                total_ms = format!(
+                    "{:.1}",
+                    tokenize_ms + cache_reset_ms + prompt_ingest_ms + generate_ms
+                ),
                 "LLM generation complete"
             );
 
@@ -522,7 +527,9 @@ impl LlmProcessor {
                     &cancel,
                     TextFragment::new(final_text)
                         .with_is_end_of_response(true)
-                        .with_token_count(Some(u32::try_from(output_tokens.len()).unwrap_or(u32::MAX)))
+                        .with_token_count(Some(
+                            u32::try_from(output_tokens.len()).unwrap_or(u32::MAX),
+                        ))
                         // If the entire response fit before any sentence boundary,
                         // forward the captured TTFT on the final flush so it's not lost.
                         .with_first_token_ms(pending_first_token_ms.take()),
@@ -576,19 +583,8 @@ mod tests {
 
     #[test]
     fn llm_detail_first_token_ms_is_null_when_absent() {
-        let payload = build_llm_detail_payload(
-            0.2,
-            145.6,
-            24,
-            1.1,
-            0,
-            None,
-            None,
-            0.0,
-            "cpu",
-            false,
-            0.0,
-        );
+        let payload =
+            build_llm_detail_payload(0.2, 145.6, 24, 1.1, 0, None, None, 0.0, "cpu", false, 0.0);
         assert!(
             payload["first_token_ms"].is_null(),
             "missing first_token_ms must serialize as null, got {}",

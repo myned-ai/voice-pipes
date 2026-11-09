@@ -1071,5 +1071,8 @@ async fn test_tts_task_dual_track_sanitizer_and_lexicon() {
 
     let spoken_calls = captured.lock().await;
     assert_eq!(spoken_calls.len(), 1);
-    assert_eq!(spoken_calls[0], "Check sequel at Docs <break time=\"500ms\"/> now!");
+    assert_eq!(
+        spoken_calls[0],
+        "Check sequel at Docs <break time=\"500ms\"/> now!"
+    );
 }

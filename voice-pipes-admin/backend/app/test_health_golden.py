@@ -188,9 +188,9 @@ class HealthGoldenReplayTests(unittest.TestCase):
 
     def test_replay_session_73d30ef8_shape_names_llm_as_culprit(self):
         """Incident session 73d30ef8 (zero TTFT with LLM work) must blame the LLM, not TTS."""
-        from .test_measurement import _session_73d30ef8_turns, TARGETS
         from .report.anomalies import _detect_anomalies
         from .report.verdict import _compute_verdict
+        from .test_measurement import TARGETS, _session_73d30ef8_turns
 
         turns = _session_73d30ef8_turns()
         anomalies = _detect_anomalies(turns, TARGETS)

@@ -412,7 +412,8 @@ async fn write_event(
             if let Some(spoken) = spoken_text
                 && spoken != text
             {
-                let spoken_key = format!("{session_id}/{utterance_id:03}_tts_frag_{fragment_idx:03}_spoken.txt");
+                let spoken_key =
+                    format!("{session_id}/{utterance_id:03}_tts_frag_{fragment_idx:03}_spoken.txt");
                 store.put(&spoken_key, spoken.as_bytes()).await?;
             }
         }

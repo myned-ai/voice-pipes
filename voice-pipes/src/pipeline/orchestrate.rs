@@ -361,11 +361,7 @@ pub async fn process_utterance(
         let cancel_bridge = cancel.clone();
         let bridge_pe_tx = pe_tx.clone();
         let sanitize_cfg_bridge = sanitize_cfg.clone().unwrap_or_else(|| {
-            voice_pipes_sdk::SanitizeConfig::from_tts(
-                None,
-                tts.name(),
-                tts.supported_inline_tags(),
-            )
+            voice_pipes_sdk::SanitizeConfig::from_tts(None, tts.name(), tts.supported_inline_tags())
         });
         bridge_handle = tokio::spawn(async move {
             let mut accumulated = String::new();

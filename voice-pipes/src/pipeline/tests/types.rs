@@ -85,11 +85,31 @@ fn text_at_offset_with_lexicon_replacement_matches_display_word_boundary() {
     let display = "I love **SQL** and databases.";
     let spoken = "I love sequel and databases.";
     let wt = vec![
-        WordTiming { word: "I".into(), offset_ms: 0, duration_ms: 100 },
-        WordTiming { word: "love".into(), offset_ms: 100, duration_ms: 200 },
-        WordTiming { word: "sequel".into(), offset_ms: 300, duration_ms: 300 },
-        WordTiming { word: "and".into(), offset_ms: 600, duration_ms: 150 },
-        WordTiming { word: "databases.".into(), offset_ms: 750, duration_ms: 400 },
+        WordTiming {
+            word: "I".into(),
+            offset_ms: 0,
+            duration_ms: 100,
+        },
+        WordTiming {
+            word: "love".into(),
+            offset_ms: 100,
+            duration_ms: 200,
+        },
+        WordTiming {
+            word: "sequel".into(),
+            offset_ms: 300,
+            duration_ms: 300,
+        },
+        WordTiming {
+            word: "and".into(),
+            offset_ms: 600,
+            duration_ms: 150,
+        },
+        WordTiming {
+            word: "databases.".into(),
+            offset_ms: 750,
+            duration_ms: 400,
+        },
     ];
     ledger.push(
         display.to_string(),

@@ -235,10 +235,7 @@ pub trait TextProcessor: Send + Sync {
         }
         let result = self.process(input).await?;
         let _ = tx
-            .send(
-                TextFragment::new(result)
-                    .with_is_end_of_response(true),
-            )
+            .send(TextFragment::new(result).with_is_end_of_response(true))
             .await;
         Ok(())
     }

@@ -12,8 +12,6 @@ use crate::tts::{SynthesisRequest, TtsProvider, WordBoundary};
 
 use super::types::AudioChunk;
 
-
-
 /// Helper to determine the number of audio samples per fixed-size chunk,
 /// based on the target sample rate and the `OutputChunkingConfig` settings.
 /// Returns `None` if output chunking is disabled or not configured.
@@ -437,11 +435,7 @@ pub async fn tts_task(
     let tts_name = tts.name().to_string();
     let target_rate = output_rate.unwrap_or(tts_rate);
     let sanitize_cfg = sanitize_cfg.unwrap_or_else(|| {
-        voice_pipes_sdk::SanitizeConfig::from_tts(
-            None,
-            &tts_name,
-            tts.supported_inline_tags(),
-        )
+        voice_pipes_sdk::SanitizeConfig::from_tts(None, &tts_name, tts.supported_inline_tags())
     });
     let needs_resample = tts_rate != target_rate;
     // A rate the resampler refuses (a provider reporting zero) could not be

@@ -133,7 +133,10 @@ fn trim_trailing_silence(samples: &[f32]) -> &[f32] {
     const PADDING_SAMPLES: usize = 2400; // 150 ms at 16 kHz
 
     if let Some(last_speech_idx) = samples.iter().rposition(|&s| s.abs() >= SILENCE_THRESHOLD) {
-        let end_idx = (last_speech_idx.saturating_add(1).saturating_add(PADDING_SAMPLES)).min(samples.len());
+        let end_idx = (last_speech_idx
+            .saturating_add(1)
+            .saturating_add(PADDING_SAMPLES))
+        .min(samples.len());
         samples.get(..end_idx).unwrap_or(samples)
     } else {
         samples

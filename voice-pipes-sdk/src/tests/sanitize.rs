@@ -1,9 +1,7 @@
 //! Tests for dual-track text sanitization, think tags, and pronunciation lexicon.
 
+use crate::sanitize::{SanitizeConfig, ThinkTagFilter, TtsDirectiveRecord, sanitize_dual_track};
 use std::collections::BTreeMap;
-use crate::sanitize::{
-    sanitize_dual_track, SanitizeConfig, ThinkTagFilter, TtsDirectiveRecord,
-};
 
 #[test]
 fn think_tag_filter_strips_across_chunk_boundaries() {
@@ -131,7 +129,10 @@ fn lexicon_respects_word_boundaries_and_skips_tags() {
     let res = sanitize_dual_track(input, &cfg);
 
     assert_eq!(res.display, "Run SQL and MySQL queries now.");
-    assert_eq!(res.spoken, "Run sequel and MySQL queries <break time=\"SQL\"/> now.");
+    assert_eq!(
+        res.spoken,
+        "Run sequel and MySQL queries <break time=\"SQL\"/> now."
+    );
     assert_eq!(
         res.directives,
         vec![
@@ -158,14 +159,23 @@ fn bare_urls_verbalized_naturally_in_spoken_track() {
     // 1. Google URL ending with sentence punctuation
     let input1 = "The URL for Google is https://www.google.com.";
     let res1 = sanitize_dual_track(input1, &cfg);
-    assert_eq!(res1.display, "The URL for Google is https://www.google.com.");
+    assert_eq!(
+        res1.display,
+        "The URL for Google is https://www.google.com."
+    );
     assert_eq!(res1.spoken, "The URL for Google is google dot com.");
 
     // 2. Short GitHub repository path
     let input2 = "Check https://github.com/myned-ai/voice-pipes for code.";
     let res2 = sanitize_dual_track(input2, &cfg);
-    assert_eq!(res2.display, "Check https://github.com/myned-ai/voice-pipes for code.");
-    assert_eq!(res2.spoken, "Check github dot com slash myned-ai slash voice-pipes for code.");
+    assert_eq!(
+        res2.display,
+        "Check https://github.com/myned-ai/voice-pipes for code."
+    );
+    assert_eq!(
+        res2.spoken,
+        "Check github dot com slash myned-ai slash voice-pipes for code."
+    );
 
     // 3. Localhost with port
     let input3 = "Connect to http://localhost:8080/api now.";
@@ -174,7 +184,8 @@ fn bare_urls_verbalized_naturally_in_spoken_track() {
     assert_eq!(res3.spoken, "Connect to localhost port 8080 slash api now.");
 
     // 4. Long URL with query string drops the messy query/hash
-    let input4 = "See https://docs.google.com/document/d/1X98yZ30491823091283091283/edit?usp=sharing.";
+    let input4 =
+        "See https://docs.google.com/document/d/1X98yZ30491823091283091283/edit?usp=sharing.";
     let res4 = sanitize_dual_track(input4, &cfg);
     assert_eq!(
         res4.display,
