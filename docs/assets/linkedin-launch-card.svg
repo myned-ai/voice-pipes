@@ -1,0 +1,227 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 627" width="1200" height="627" role="img" aria-label="Voice Pipes — Composable Real-Time Voice AI Runtime in Safe Rust">
+  <defs>
+    <!-- Matte Carbon Canvas -->
+    <linearGradient id="canvas" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#090B10"/>
+      <stop offset="100%" stop-color="#050608"/>
+    </linearGradient>
+
+    <!-- Soft Center Spotlight -->
+    <radialGradient id="ambientLight" cx="50%" cy="55%" r="52%">
+      <stop offset="0%" stop-color="#1E293B" stop-opacity="0.50"/>
+      <stop offset="60%" stop-color="#0F172A" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#050608" stop-opacity="0"/>
+    </radialGradient>
+
+    <radialGradient id="coralGlow" cx="50%" cy="52%" r="36%">
+      <stop offset="0%" stop-color="#FF5A26" stop-opacity="0.11"/>
+      <stop offset="100%" stop-color="#FF5A26" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Hardware Module Surface -->
+    <linearGradient id="moduleSurface" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#141824"/>
+      <stop offset="100%" stop-color="#0B0E15"/>
+    </linearGradient>
+
+    <!-- Subtle Architectural Blueprint Grid -->
+    <pattern id="archGrid" width="64" height="64" patternUnits="userSpaceOnUse">
+      <path d="M 64 0 L 0 0 0 64" fill="none" stroke="#FFFFFF" stroke-width="1" stroke-opacity="0.025"/>
+    </pattern>
+
+    <filter id="cardShadow" x="-12%" y="-12%" width="124%" height="132%">
+      <feDropShadow dx="0" dy="20" stdDeviation="20" flood-color="#000000" flood-opacity="0.72"/>
+    </filter>
+  </defs>
+
+  <!-- 1. Matte Background & Grid -->
+  <rect width="1200" height="627" fill="url(#canvas)"/>
+  <rect width="1200" height="627" fill="url(#ambientLight)"/>
+  <rect width="1200" height="627" fill="url(#coralGlow)"/>
+  <rect width="1200" height="627" fill="url(#archGrid)"/>
+
+  <!-- Precision Frame + Crosshairs -->
+  <rect x="28" y="28" width="1144" height="571" fill="none" stroke="#1A1E29" stroke-width="1"/>
+  <g stroke="#475569" stroke-width="1.2">
+    <path d="M 23 28 H 33 M 28 23 V 33"/>
+    <path d="M 1167 28 H 1177 M 1172 23 V 33"/>
+    <path d="M 23 599 H 33 M 28 594 V 604"/>
+    <path d="M 1167 599 H 1177 M 1172 594 V 604"/>
+  </g>
+
+  <!-- ===================================================================== -->
+  <!-- TOP HEADER: Big Typography + Clean Repo Pill                          -->
+  <!-- ===================================================================== -->
+  <g transform="translate(72, 68)" font-family="-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif">
+    <!-- Eyebrow -->
+    <rect x="0" y="0" width="9" height="9" fill="#FF5A26"/>
+    <text x="20" y="9" font-family="ui-monospace, 'JetBrains Mono', SFMono-Regular, Menlo, monospace" font-size="12" font-weight="600" fill="#94A3B8" letter-spacing="0.16em">OPEN-SOURCE VOICE AI RUNTIME IN SAFE RUST</text>
+
+    <!-- Title -->
+    <text x="-3" y="76" font-size="68" font-weight="800" fill="#F8FAFC" letter-spacing="-0.04em">Voice Pipes</text>
+
+    <!-- Subtitle neatly below title -->
+    <text x="0" y="114" font-size="22" font-weight="400" fill="#94A3B8" letter-spacing="-0.01em">
+      Composable voice pipelines in native Rust. <tspan fill="#F8FAFC" font-weight="600">Built-in observability &amp; UI dashboard.</tspan>
+    </text>
+
+    <!-- Right-Aligned GitHub Pill -->
+    <g transform="translate(706, 26)">
+      <rect x="0" y="0" width="350" height="48" rx="8" fill="#10141F" stroke="#2A3142" stroke-width="1.5"/>
+      <circle cx="22" cy="24" r="4.5" fill="#FF5A26"/>
+      <text x="38" y="29" font-family="ui-monospace, 'JetBrains Mono', SFMono-Regular, Menlo, monospace" font-size="14.5" font-weight="600" fill="#F8FAFC">github.com/myned-ai/voice-pipes</text>
+    </g>
+  </g>
+
+  <!-- ===================================================================== -->
+  <!-- CENTERPIECE: 5 LARGE ICONIC HARDWARE MODULES ON AN AUDIO STREAM       -->
+  <!-- ===================================================================== -->
+  <g transform="translate(72, 246)" font-family="-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif">
+
+    <!-- Audio Signal Line Behind Cards -->
+    <line x1="-24" y1="115" x2="1080" y2="115" stroke="#252C3D" stroke-width="3"/>
+    <line x1="-24" y1="115" x2="1080" y2="115" stroke="#FF5A26" stroke-width="2" stroke-dasharray="6 8"/>
+
+    <!-- Arrowheads Between Modules -->
+    <g fill="#FF5A26">
+      <polygon points="207,115 198,110 198,120"/>
+      <polygon points="426,115 417,110 417,120"/>
+      <polygon points="645,115 636,110 636,120"/>
+      <polygon points="864,115 855,110 855,120"/>
+    </g>
+
+    <!-- MODULE 01: VAD -->
+    <g transform="translate(0, 0)" filter="url(#cardShadow)">
+      <rect width="180" height="230" rx="12" fill="url(#moduleSurface)" stroke="#262D40" stroke-width="1.5"/>
+      <line x1="2" y1="1" x2="178" y2="1" stroke="#FF5A26" stroke-width="3"/>
+
+      <text x="20" y="30" font-family="ui-monospace, 'JetBrains Mono', monospace" font-size="11" font-weight="600" fill="#64748B">01</text>
+      <circle cx="160" cy="26" r="3.5" fill="#10B981"/>
+
+      <!-- Large Centered Icon -->
+      <rect x="62" y="46" width="56" height="56" rx="14" fill="#161C2A" stroke="#2D3548" stroke-width="1.2"/>
+      <path d="M76 74 V66 M83 82 V58 M90 86 V54 M97 80 V60 M104 73 V67" stroke="#FF7A4D" stroke-width="2.6" stroke-linecap="round"/>
+
+      <text x="90" y="138" text-anchor="middle" font-size="24" font-weight="800" fill="#F8FAFC" letter-spacing="-0.02em">VAD</text>
+      <text x="90" y="162" text-anchor="middle" font-size="13.5" font-weight="500" fill="#94A3B8">Silero · Energy</text>
+
+      <rect x="20" y="182" width="140" height="28" rx="6" fill="#090B10" stroke="#1E2433"/>
+      <text x="90" y="200" text-anchor="middle" font-family="ui-monospace, 'JetBrains Mono', monospace" font-size="11.5" font-weight="600" fill="#FF7A4D">trait VadEngine</text>
+    </g>
+
+    <!-- MODULE 02: STT -->
+    <g transform="translate(219, 0)" filter="url(#cardShadow)">
+      <rect width="180" height="230" rx="12" fill="url(#moduleSurface)" stroke="#262D40" stroke-width="1.5"/>
+      <line x1="2" y1="1" x2="178" y2="1" stroke="#38BDF8" stroke-width="3"/>
+
+      <text x="20" y="30" font-family="ui-monospace, 'JetBrains Mono', monospace" font-size="11" font-weight="600" fill="#64748B">02</text>
+      <circle cx="160" cy="26" r="3.5" fill="#10B981"/>
+
+      <!-- Large Centered Icon -->
+      <rect x="62" y="46" width="56" height="56" rx="14" fill="#161C2A" stroke="#2D3548" stroke-width="1.2"/>
+      <rect x="85" y="57" width="10" height="18" rx="5" fill="none" stroke="#38BDF8" stroke-width="2.4"/>
+      <path d="M80 68 A10 10 0 0 0 100 68" fill="none" stroke="#38BDF8" stroke-width="2.4" stroke-linecap="round"/>
+      <line x1="90" y1="78" x2="90" y2="85" stroke="#38BDF8" stroke-width="2.4" stroke-linecap="round"/>
+      <line x1="84" y1="85" x2="96" y2="85" stroke="#38BDF8" stroke-width="2.4" stroke-linecap="round"/>
+
+      <text x="90" y="138" text-anchor="middle" font-size="24" font-weight="800" fill="#F8FAFC" letter-spacing="-0.02em">STT</text>
+      <text x="90" y="162" text-anchor="middle" font-size="13.5" font-weight="500" fill="#94A3B8">Parakeet · Chirp 3</text>
+
+      <rect x="20" y="182" width="140" height="28" rx="6" fill="#090B10" stroke="#1E2433"/>
+      <text x="90" y="200" text-anchor="middle" font-family="ui-monospace, 'JetBrains Mono', monospace" font-size="11.5" font-weight="600" fill="#38BDF8">trait SttProvider</text>
+    </g>
+
+    <!-- MODULE 03: TURN -->
+    <g transform="translate(438, 0)" filter="url(#cardShadow)">
+      <rect width="180" height="230" rx="12" fill="url(#moduleSurface)" stroke="#262D40" stroke-width="1.5"/>
+      <line x1="2" y1="1" x2="178" y2="1" stroke="#10B981" stroke-width="3"/>
+
+      <text x="20" y="30" font-family="ui-monospace, 'JetBrains Mono', monospace" font-size="11" font-weight="600" fill="#64748B">03</text>
+      <circle cx="160" cy="26" r="3.5" fill="#10B981"/>
+
+      <!-- Large Centered Icon -->
+      <rect x="62" y="46" width="56" height="56" rx="14" fill="#161C2A" stroke="#2D3548" stroke-width="1.2"/>
+      <circle cx="90" cy="74" r="14" fill="none" stroke="#10B981" stroke-width="2.4"/>
+      <polyline points="90,65 90,74 97,78" fill="none" stroke="#10B981" stroke-width="2.4" stroke-linecap="round"/>
+
+      <text x="90" y="138" text-anchor="middle" font-size="24" font-weight="800" fill="#F8FAFC" letter-spacing="-0.02em">Turn</text>
+      <text x="90" y="162" text-anchor="middle" font-size="13.5" font-weight="500" fill="#94A3B8">Smart Turn · VAP</text>
+
+      <rect x="20" y="182" width="140" height="28" rx="6" fill="#090B10" stroke="#1E2433"/>
+      <text x="90" y="200" text-anchor="middle" font-family="ui-monospace, 'JetBrains Mono', monospace" font-size="11.5" font-weight="600" fill="#10B981">trait TurnDetector</text>
+    </g>
+
+    <!-- MODULE 04: AGENT / LLM -->
+    <g transform="translate(657, 0)" filter="url(#cardShadow)">
+      <rect width="180" height="230" rx="12" fill="url(#moduleSurface)" stroke="#262D40" stroke-width="1.5"/>
+      <line x1="2" y1="1" x2="178" y2="1" stroke="#E2E8F0" stroke-width="3"/>
+
+      <text x="20" y="30" font-family="ui-monospace, 'JetBrains Mono', monospace" font-size="11" font-weight="600" fill="#64748B">04</text>
+      <circle cx="160" cy="26" r="3.5" fill="#10B981"/>
+
+      <!-- Large Centered Icon -->
+      <rect x="62" y="46" width="56" height="56" rx="14" fill="#161C2A" stroke="#2D3548" stroke-width="1.2"/>
+      <rect x="80" y="64" width="20" height="20" rx="4" fill="none" stroke="#F8FAFC" stroke-width="2.2"/>
+      <path d="M86 58 V64 M94 58 V64 M86 84 V90 M94 84 V90 M74 70 H80 M74 78 H80 M100 70 H106 M100 78 H106" stroke="#F8FAFC" stroke-width="2" stroke-linecap="round"/>
+
+      <text x="90" y="138" text-anchor="middle" font-size="24" font-weight="800" fill="#F8FAFC" letter-spacing="-0.02em">LLM</text>
+      <text x="90" y="162" text-anchor="middle" font-size="13.5" font-weight="500" fill="#94A3B8">Local GGUF · Cloud</text>
+
+      <rect x="20" y="182" width="140" height="28" rx="6" fill="#090B10" stroke="#1E2433"/>
+      <text x="90" y="200" text-anchor="middle" font-family="ui-monospace, 'JetBrains Mono', monospace" font-size="11.5" font-weight="600" fill="#E2E8F0">TextProcessor</text>
+    </g>
+
+    <!-- MODULE 05: TTS -->
+    <g transform="translate(876, 0)" filter="url(#cardShadow)">
+      <rect width="180" height="230" rx="12" fill="url(#moduleSurface)" stroke="#262D40" stroke-width="1.5"/>
+      <line x1="2" y1="1" x2="178" y2="1" stroke="#FF5A26" stroke-width="3"/>
+
+      <text x="20" y="30" font-family="ui-monospace, 'JetBrains Mono', monospace" font-size="11" font-weight="600" fill="#64748B">05</text>
+      <circle cx="160" cy="26" r="3.5" fill="#10B981"/>
+
+      <!-- Large Centered Icon -->
+      <rect x="62" y="46" width="56" height="56" rx="14" fill="#161C2A" stroke="#2D3548" stroke-width="1.2"/>
+      <polygon points="78,70 84,70 91,63 91,85 84,78 78,78" fill="none" stroke="#FF7A4D" stroke-width="2.2" stroke-linejoin="round"/>
+      <path d="M96 67 A8 8 0 0 1 96 81 M101 63 A13 13 0 0 1 101 85" fill="none" stroke="#FF7A4D" stroke-width="2.2" stroke-linecap="round"/>
+
+      <text x="90" y="138" text-anchor="middle" font-size="24" font-weight="800" fill="#F8FAFC" letter-spacing="-0.02em">TTS</text>
+      <text x="90" y="162" text-anchor="middle" font-size="13.5" font-weight="500" fill="#94A3B8">Kokoro · Piper · S2S</text>
+
+      <rect x="20" y="182" width="140" height="28" rx="6" fill="#090B10" stroke="#1E2433"/>
+      <text x="90" y="200" text-anchor="middle" font-family="ui-monospace, 'JetBrains Mono', monospace" font-size="11.5" font-weight="600" fill="#FF7A4D">trait TtsProvider</text>
+    </g>
+  </g>
+
+  <!-- ===================================================================== -->
+  <!-- BOTTOM BAR: 4 CRISP PILLARS                                           -->
+  <!-- ===================================================================== -->
+  <g transform="translate(72, 522)" font-family="-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif">
+    <line x1="0" y1="0" x2="1056" y2="0" stroke="#1E2433" stroke-width="1.5"/>
+
+    <g transform="translate(0, 32)">
+      <text x="0" y="0" font-family="ui-monospace, 'JetBrains Mono', monospace" font-size="11" font-weight="600" fill="#FF7A4D" letter-spacing="0.1em">NATIVE THREADS</text>
+      <text x="0" y="24" font-size="17" font-weight="700" fill="#F8FAFC">True Multithreading</text>
+    </g>
+
+    <line x1="264" y1="16" x2="264" y2="62" stroke="#1E2433" stroke-width="1"/>
+
+    <g transform="translate(292, 32)">
+      <text x="0" y="0" font-family="ui-monospace, 'JetBrains Mono', monospace" font-size="11" font-weight="600" fill="#38BDF8" letter-spacing="0.1em">SAFE BY DESIGN</text>
+      <text x="0" y="24" font-size="17" font-weight="700" fill="#F8FAFC">#![forbid(unsafe_code)]</text>
+    </g>
+
+    <line x1="572" y1="16" x2="572" y2="62" stroke="#1E2433" stroke-width="1"/>
+
+    <g transform="translate(600, 32)">
+      <text x="0" y="0" font-family="ui-monospace, 'JetBrains Mono', monospace" font-size="11" font-weight="600" fill="#10B981" letter-spacing="0.1em">LOCAL INFERENCE</text>
+      <text x="0" y="24" font-size="17" font-weight="700" fill="#F8FAFC">Consumer Hardware Ready</text>
+    </g>
+
+    <line x1="854" y1="16" x2="854" y2="62" stroke="#1E2433" stroke-width="1"/>
+
+    <g transform="translate(880, 32)">
+      <text x="0" y="0" font-family="ui-monospace, 'JetBrains Mono', monospace" font-size="11" font-weight="600" fill="#E2E8F0" letter-spacing="0.1em">OBSERVABILITY</text>
+      <text x="0" y="24" font-size="17" font-weight="700" fill="#F8FAFC">Built-in UI &amp; Telemetry</text>
+    </g>
+  </g>
+</svg>
