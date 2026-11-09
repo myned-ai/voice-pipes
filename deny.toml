@@ -36,6 +36,10 @@ ignore = [
     { id = "RUSTSEC-2026-0381", reason = "transitive via ureq/ort-sys; emSign root" },
     # tokio 1.53.1 AsyncFd constructor advisory; not used directly on raw fds.
     { id = "RUSTSEC-2026-0386", reason = "transitive tokio 1.53.1 AsyncFd deprecation; no raw fd usage" },
+    # libsqlite3-sys WAL page-size mismatch vulnerability in bundled SQLite < 3.54.0.
+    # Voice Pipes uses SQLite only for internal session audit storage created locally,
+    # never opening untrusted databases with mismatched WAL files.
+    { id = "RUSTSEC-2026-0459", reason = "transitive via rusqlite 0.40; only opens trusted local audit db files, no untrusted WAL files" },
 ]
 
 [licenses]
