@@ -27,6 +27,7 @@ import asyncio
 import logging
 import os
 
+import anyio
 import httpx
 import websockets
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -132,6 +133,7 @@ async def _connect_upstream(url: str):
             max_size=MAX_UPSTREAM_FRAME_BYTES,
             max_queue=UPSTREAM_QUEUE_FRAMES,
             open_timeout=CONNECT_TIMEOUT_S,
+            close_timeout=2.0,
         )
     except (TimeoutError, OSError, websockets.exceptions.WebSocketException) as exc:
         # The URL is not logged: it is internal topology, and nothing about
@@ -229,8 +231,12 @@ async def playground_ws_proxy(client_ws: WebSocket):
                 # Reserved codes that may not be sent in a close frame.
                 close_code, close_reason = 4502, "worker connection lost"
     finally:
-        for task in pumps:
-            task.cancel()
-        await asyncio.gather(*pumps, return_exceptions=True)
-        await upstream.close()
-        await _close(client_ws, close_code, close_reason)
+        with anyio.CancelScope(shield=True):
+            for task in pumps:
+                task.cancel()
+            await asyncio.gather(*pumps, return_exceptions=True)
+            try:
+                await asyncio.wait_for(upstream.close(), timeout=2.0)
+            except Exception:  # noqa: BLE001, S110 - worker might already be closed or unreachable
+                pass
+            await _close(client_ws, close_code, close_reason)
