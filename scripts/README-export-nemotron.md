@@ -6,7 +6,7 @@
 > see `docs/guides/providers/stt/nemotron-3.5.md`. This chapter remains for
 > the English-only `nemotron-speech-streaming-en-0.6b` built-in provider,
 > which is the more accurate of the two on English
-> (`docs/guides/providers/stt/nemotron.md` has the measurement).
+> (measured at 3.3% LibriSpeech WER).
 
 This document describes how to produce the cache-aware streaming ONNX graphs
 consumed by [`examples/streaming_decode`](../plugins/stt/nemotron/examples/streaming_decode/main.rs) of voice-pipes-stt-nemotron

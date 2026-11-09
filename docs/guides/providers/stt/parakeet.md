@@ -133,7 +133,7 @@ Reported WER on the model card, lower is better:
 
 - The default export is English only. For other languages use the v3 export
   or the Greek fine-tune above, [Google Cloud STT](google.md), or
-  [Nemotron](nemotron.md) where its language list fits.
+  [Nemotron 3.5](nemotron-3.5.md) where its language list fits.
 - Pseudo-streaming re-decodes the growing utterance buffer, so the cost of
   an inference pass grows with utterance length; a bounded window keeps it
   in check. For long dictation-style input prefer a true streaming model.

@@ -343,7 +343,7 @@ const BUILD_HINTS: &[(voice_pipes::plugins::Stage, &str)] = {
     &[
         (
             Stage::Stt,
-            "stt-parakeet, stt-moonshine, stt-nemotron, stt-nemotron35, stt-assemblyai or stt-google",
+            "stt-parakeet, stt-moonshine, stt-nemotron35, stt-assemblyai or stt-google",
         ),
         (Stage::Llm, "llm-gguf or llm-openai-compat"),
         (
