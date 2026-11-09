@@ -58,9 +58,7 @@ pub async fn run_config_wizard() -> Result<()> {
 
     let Some(written) = write_outputs(&plan, Path::new("."), &prompt)? else {
         println!("\n⚠️  Kept existing configuration. Your new wizard choices were discarded.");
-        println!(
-            "💡 Tip: To start with existing configuration in the future without running the wizard, use: launch-stack -SkipWizard"
-        );
+        println!("💡 Tip: To start with existing configuration in the future without running the wizard, use: launch-stack -SkipWizard");
         return Ok(());
     };
 
@@ -69,9 +67,16 @@ pub async fn run_config_wizard() -> Result<()> {
     println!("  - Worker config:   {}", written.worker.display());
     println!("  - Stack manifest:  {}", written.manifest.display());
 
-    // Check and download missing models.
-    let missing = plan_missing_downloads(&plan.downloads, &registry, Path::new(""));
-    if !missing.is_empty() {
+    let from_launcher = std::env::var_os(FROM_LAUNCHER_ENV).is_some();
+
+    // Check and download missing models with verification and retry loop.
+    loop {
+        let missing = plan_missing_downloads(&plan.downloads, &registry, Path::new(""));
+        if missing.is_empty() {
+            println!("\n✅ All required model files are present.");
+            break;
+        }
+
         println!("\n⚠️  Some required model files are missing for your configuration:");
         for item in &missing {
             println!("   - {}", item.dest.display());
@@ -81,24 +86,51 @@ pub async fn run_config_wizard() -> Result<()> {
             "Would you like to download these missing model files now?",
             true,
         )?;
-        if confirm {
-            for item in missing {
-                if let Err(e) = download_file(item.url, &item.dest).await {
-                    println!(
-                        "❌ Failed to download model to {}: {}",
-                        item.dest.display(),
-                        e
-                    );
-                }
+        if !confirm {
+            if from_launcher {
+                anyhow::bail!(
+                    "cannot start fleet: {} required model file(s) are missing. Please download them before running launch-stack.",
+                    missing.len()
+                );
             }
-        } else {
             println!(
                 "⚠️  Skipped downloading. Please ensure the model files are present before starting the worker."
             );
+            break;
+        }
+
+        let mut failed = 0usize;
+        for item in &missing {
+            if let Err(e) = download_file(item.url, &item.dest).await {
+                println!(
+                    "❌ Failed to download model to {}: {e}",
+                    item.dest.display()
+                );
+                failed += 1;
+            }
+        }
+
+        if failed > 0 {
+            let still_missing = plan_missing_downloads(&plan.downloads, &registry, Path::new(""));
+            if !still_missing.is_empty() {
+                let retry = prompt.confirm(
+                    &format!(
+                        "⚠️  {failed} file(s) failed to download. Would you like to retry downloading them now?"
+                    ),
+                    true,
+                )?;
+                if !retry {
+                    if from_launcher {
+                        anyhow::bail!(
+                            "cannot start fleet: {failed} required model file(s) failed to download. Please verify your internet connection and retry."
+                        );
+                    }
+                    break;
+                }
+            }
         }
     }
 
-    let from_launcher = std::env::var_os(FROM_LAUNCHER_ENV).is_some();
     if let Some(next) = next_step(from_launcher, cfg!(windows)) {
         println!("\n{next}");
     }
@@ -455,6 +487,16 @@ pub fn menu(stage: crate::plugins::Stage) -> Vec<(String, String)> {
         .collect()
 }
 
+/// Deployment tier for grouping menu choices: Local models first, then Cloud
+/// services, then external host servers.
+fn deploy_tier(deploy: &voice_pipes_sdk::WizardDeploy) -> u8 {
+    match deploy {
+        voice_pipes_sdk::WizardDeploy::Cloud { .. } => 1,
+        voice_pipes_sdk::WizardDeploy::None => 2,
+        _ => 0,
+    }
+}
+
 /// A stage's built-in entries and its plugins' (already in rank-then-label
 /// order) as one menu by rank, a built-in first among equal ranks; a plugin
 /// entry for a provider a built-in offers is dropped.
@@ -471,8 +513,9 @@ fn merge_by_rank(
         .chain(registered)
         .map(|(provider, choice)| MenuChoice { provider, choice })
         .collect();
-    // A stable sort keeps the built-ins before plugins of the same rank.
-    choices.sort_by_key(|c| c.choice.menu_rank);
+    // A stable sort groups by deployment tier (Local -> Cloud -> Host), then rank,
+    // keeping built-ins before plugins of the same rank.
+    choices.sort_by_key(|c| (deploy_tier(&c.choice.deploy), c.choice.menu_rank));
     choices
 }
 
@@ -547,14 +590,26 @@ fn run_stage(
     manifest: &mut StackManifest,
     downloads: &mut Vec<DownloadSpec>,
 ) -> Result<()> {
-    let labels: Vec<&str> = menu
+    let labels: Vec<String> = menu
         .choices
         .iter()
-        .map(|c| c.choice.label.as_str())
+        .map(|c| {
+            let tag = match deploy_tier(&c.choice.deploy) {
+                0 => "[Local]",
+                1 => "[Cloud]",
+                _ => "[Host] ",
+            };
+            if c.choice.label.starts_with('[') {
+                c.choice.label.clone()
+            } else {
+                format!("{tag} {}", c.choice.label)
+            }
+        })
         .collect();
+    let label_refs: Vec<&str> = labels.iter().map(String::as_str).collect();
     // `assemble_plan_with` refuses a mode with an empty stage before asking
     // anything; this keeps an empty menu an error rather than a panic.
-    if labels.is_empty() {
+    if label_refs.is_empty() {
         anyhow::bail!("{}", describe_gaps(&[menu]));
     }
     // A plugin that is its stage's out-of-the-box choice is preselected
@@ -566,7 +621,7 @@ fn run_stage(
         .unwrap_or(0);
     let idx = ctx
         .prompt
-        .select(menu.stage.menu_title(), &labels, default)?;
+        .select(menu.stage.menu_title(), &label_refs, default)?;
     let Some(chosen) = menu.choices.get(idx) else {
         anyhow::bail!("no menu entry {idx}");
     };

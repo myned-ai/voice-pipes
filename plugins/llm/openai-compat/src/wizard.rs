@@ -1,6 +1,6 @@
-//! How the OpenAI-compatible LLM offers itself in the setup wizard: a server
-//! the operator already runs, and Gemma presets the wizard downloads and
-//! serves from the llama-server sidecar.
+//! How the OpenAI-compatible LLM offers itself in the setup wizard: Gemma
+//! presets the wizard downloads and serves from the llama-server sidecar,
+//! and an external server the operator already runs.
 
 use voice_pipes_sdk::{
     WizardChoice, WizardDeploy, WizardDownload, WizardField, WizardLayout, WizardModel,
@@ -11,13 +11,12 @@ const FEATURE: &str = "llm-openai-compat";
 
 /// Every entry this provider offers, in menu order.
 pub fn wizard_choices() -> Vec<WizardChoice> {
-    let mut choices = vec![host_server()];
-    choices.extend(GEMMA.iter().map(gemma_preset));
+    let mut choices: Vec<WizardChoice> = GEMMA.iter().map(gemma_preset).collect();
+    choices.push(host_server());
     choices
 }
 
-/// A server the operator runs, asked for by URL and model name. The LLM
-/// stage's out-of-the-box choice.
+/// A server the operator runs, asked for by URL and model name.
 fn host_server() -> WizardChoice {
     WizardChoice::new(
         "OpenAI-Compatible (e.g. llama-server on host)",
@@ -38,8 +37,11 @@ fn host_server() -> WizardChoice {
         WizardField::fixed_literal("max_tokens", "256"),
         WizardField::fixed_literal("temperature", "0.7"),
     ])
-    .with_stage_default(true)
-    .with_menu_rank(10)
+    .with_notes(vec![
+        "Make sure your OpenAI-compatible server (e.g. llama-server on host, vLLM, Ollama) is running and accessible at the specified Base URL before connecting."
+            .into(),
+    ])
+    .with_menu_rank(30)
 }
 
 /// A Gemma model served by the llama-server sidecar.
@@ -60,14 +62,14 @@ const GEMMA: &[Gemma] = &[
         key: "gemma4-e2b",
         model: "gemma-4-E2B-it",
         repo: "unsloth/gemma-4-E2B-it-GGUF",
-        menu_rank: 20,
+        menu_rank: 10,
     },
     Gemma {
         label: "Gemma 4 E4B via llama-server sidecar (4.5B effective, ~5 GB; ~6 GB VRAM)",
         key: "gemma4-e4b",
         model: "gemma-4-E4B-it",
         repo: "unsloth/gemma-4-E4B-it-GGUF",
-        menu_rank: 21,
+        menu_rank: 11,
     },
     Gemma {
         label: "Gemma 4 12B via llama-server sidecar (12B dense, 256k context, ~7.1 GB; ~10 GB VRAM)",
@@ -76,26 +78,45 @@ const GEMMA: &[Gemma] = &[
         // (unlike the uppercase E2B/E4B ones); the download is named after it.
         model: "gemma-4-12b-it",
         repo: "unsloth/gemma-4-12b-it-GGUF",
-        menu_rank: 22,
+        menu_rank: 12,
     },
     Gemma {
         label: "Gemma 3 1B via llama-server sidecar (GPU, ~700 MB)",
         key: "gemma3-1b",
         model: "gemma-3-1b-it",
         repo: "unsloth/gemma-3-1b-it-GGUF",
-        menu_rank: 30,
+        menu_rank: 20,
     },
     Gemma {
         label: "Gemma 3 4B via llama-server sidecar (GPU, ~2.7 GB)",
         key: "gemma3-4b",
         model: "gemma-3-4b-it",
         repo: "unsloth/gemma-3-4b-it-GGUF",
-        menu_rank: 31,
+        menu_rank: 21,
     },
 ];
 
 fn gemma_preset(g: &Gemma) -> WizardChoice {
     let file = format!("{}-Q4_K_M.gguf", g.model);
+    let is_default = g.key == "gemma4-e2b";
+    let mut fields = vec![
+        WizardField::fixed("base_url", "http://llama-server:8081/v1"),
+        WizardField::fixed("model", g.model),
+        WizardField::fixed("api_key", ""),
+        WizardField::fixed(
+            "system_prompt",
+            "You are a friendly voice assistant. Keep responses to one or two short sentences.",
+        ),
+        WizardField::fixed_literal("max_tokens", "1024"),
+        WizardField::fixed_literal("temperature", "1.0"),
+        WizardField::fixed_literal("top_p", "0.95"),
+    ];
+    if g.model.starts_with("gemma-4") {
+        fields.push(WizardField::fixed_literal(
+            "extra_body",
+            "{ chat_template_kwargs = { enable_thinking = false } }",
+        ));
+    }
     WizardChoice::new(
         g.label,
         WizardDeploy::DockerSidecarModel {
@@ -116,18 +137,8 @@ fn gemma_preset(g: &Gemma) -> WizardChoice {
         },
     )
     .with_feature(Some(FEATURE.into()))
-    .with_fields(vec![
-        WizardField::fixed("base_url", "http://llama-server:8081/v1"),
-        WizardField::fixed("model", g.model),
-        WizardField::fixed("api_key", ""),
-        WizardField::fixed(
-            "system_prompt",
-            "You are a friendly voice assistant. Keep responses to one or two short sentences.",
-        ),
-        WizardField::fixed_literal("max_tokens", "1024"),
-        WizardField::fixed_literal("temperature", "1.0"),
-        WizardField::fixed_literal("top_p", "0.95"),
-    ])
+    .with_fields(fields)
+    .with_stage_default(is_default)
     .with_menu_rank(g.menu_rank)
 }
 
