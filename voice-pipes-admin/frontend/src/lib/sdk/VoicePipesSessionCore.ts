@@ -1349,7 +1349,11 @@ export class VoicePipesSessionCore {
       return;
     }
 
-    const serverTextUttId = parseInt(msg.messageId?.replace("llm-", "") ?? "-1", 10);
+    let serverTextUttId = -1;
+    if (msg.messageId?.startsWith("llm-")) {
+      const n = parseInt(msg.messageId.slice("llm-".length), 10);
+      if (Number.isFinite(n)) serverTextUttId = n;
+    }
     this.emit("textDelta", {
       text: msg.text,
       isFinal: true,

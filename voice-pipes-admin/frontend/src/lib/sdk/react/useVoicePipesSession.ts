@@ -163,18 +163,29 @@ export function useVoicePipesSession() {
       if (role === "user") {
         if (isFinal) {
           const safeId = typeof messageId === "string" ? messageId : "";
-          const parsedId = parseInt(safeId.replace("stt-", ""), 10);
+          let parsedId: number | undefined;
+          if (safeId.startsWith("stt-")) {
+            const n = parseInt(safeId.slice("stt-".length), 10);
+            if (Number.isFinite(n)) parsedId = n;
+          }
           dispatchTranscript({
             type: "USER_TRANSCRIBED",
             text,
             now: Date.now(),
-            utteranceId: isNaN(parsedId) ? undefined : parsedId,
+            utteranceId: parsedId,
           });
         }
       } else if (role === "assistant") {
         const safeId = typeof messageId === "string" ? messageId : "";
-        const uId = parseInt(safeId.replace("llm-", "").replace("rt-asst-", ""), 10);
-        const uIdSafe = isNaN(uId) ? -1 : uId;
+        let uIdSafe = -1;
+        if (safeId.startsWith("llm-")) {
+          const n = parseInt(safeId.slice("llm-".length), 10);
+          if (Number.isFinite(n)) uIdSafe = n;
+        } else if (safeId.startsWith("rt-asst-")) {
+          const rest = safeId.slice("rt-asst-".length);
+          const n = parseInt(rest.split("-")[0], 10);
+          if (Number.isFinite(n)) uIdSafe = n;
+        }
 
         if (!isFinal) {
           // If no placeholder / actual agent bubble exists for this turn, prepare it first
