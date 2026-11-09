@@ -34,8 +34,9 @@ jobs:
       - name: install mdbook
         run: |
           mkdir -p "$HOME/.local/bin"
-          curl -sSL "https://github.com/rust-lang/mdBook/releases/download/${MDBOOK_VERSION}/mdbook-${MDBOOK_VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
-            | tar -xz -C "$HOME/.local/bin"
+          curl --retry 5 --retry-delay 2 --retry-connrefused -sSfL "https://github.com/rust-lang/mdBook/releases/download/${MDBOOK_VERSION}/mdbook-${MDBOOK_VERSION}-x86_64-unknown-linux-gnu.tar.gz" -o mdbook.tar.gz
+          tar -xzf mdbook.tar.gz -C "$HOME/.local/bin"
+          rm -f mdbook.tar.gz
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: build the book
         run: mdbook build
@@ -47,6 +48,8 @@ jobs:
           mkdir -p book/rustdoc
           cp -r target/doc/. book/rustdoc/
       - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+        with:
+          enablement: true
       - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
         with:
           path: book

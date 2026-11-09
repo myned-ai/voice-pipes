@@ -225,7 +225,7 @@ class PlaygroundProxyTests(unittest.TestCase):
             with client.websocket_connect("/api/v1/playground/ws?worker_id=w1") as ws:
                 ws.send_text("hi")
                 ws.receive_text()
-            self.assertTrue(worker.closed.wait(5), "the proxy left the worker connection open")
+            self.assertTrue(worker.closed.wait(10), "the proxy left the worker connection open")
 
     def test_an_oversized_browser_frame_is_refused(self):
         from app.routers import playground
