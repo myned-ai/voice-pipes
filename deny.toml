@@ -24,6 +24,18 @@ ignore = [
     { id = "RUSTSEC-2025-0134", reason = "tonic 0.12 tls transitive; removed by the tonic 0.14 migration" },
     # paste is unmaintained but frozen; transitive via candle. No behaviour risk.
     { id = "RUSTSEC-2024-0436", reason = "proc-macro transitive via candle; unmaintained but frozen" },
+    # zip 8.6.0 advisories: transitive via candle-core 0.11 and kokoro voice asset unpacking.
+    # We do not extract untrusted archives. Retired when candle updates to zip 9+.
+    { id = "RUSTSEC-2026-0367", reason = "transitive via candle-core 0.11; no untrusted zip extraction" },
+    { id = "RUSTSEC-2026-0368", reason = "transitive via candle-core 0.11; no untrusted zip extraction" },
+    { id = "RUSTSEC-2026-0369", reason = "transitive via candle-core 0.11; no untrusted zip extraction" },
+    { id = "RUSTSEC-2026-0429", reason = "transitive via candle-core 0.11; no untrusted zip extraction" },
+    # rustls-webpki 0.103.15 transitive via rustls 0.23.
+    { id = "RUSTSEC-2026-0382", reason = "transitive via rustls 0.23; well-known intermediate certs" },
+    # webpki-roots 1.0.9 transitive via ureq/ort-sys.
+    { id = "RUSTSEC-2026-0381", reason = "transitive via ureq/ort-sys; emSign root" },
+    # tokio 1.53.1 AsyncFd constructor advisory; not used directly on raw fds.
+    { id = "RUSTSEC-2026-0386", reason = "transitive tokio 1.53.1 AsyncFd deprecation; no raw fd usage" },
 ]
 
 [licenses]

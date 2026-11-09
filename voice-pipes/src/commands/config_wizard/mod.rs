@@ -490,11 +490,19 @@ pub fn menu(stage: crate::plugins::Stage) -> Vec<(String, String)> {
 }
 
 /// Deployment tier for grouping menu choices: Local models first, then Cloud
-/// services, then external host servers.
-fn deploy_tier(deploy: &voice_pipes_sdk::WizardDeploy) -> u8 {
-    match deploy {
+/// services, then external host servers. Built-in components with nothing to
+/// provision (e.g. layered/silence turn detection) are local in-process algorithms.
+fn deploy_tier(choice: &voice_pipes_sdk::WizardChoice) -> u8 {
+    match &choice.deploy {
         voice_pipes_sdk::WizardDeploy::Cloud { .. } => 1,
-        voice_pipes_sdk::WizardDeploy::None => 2,
+        voice_pipes_sdk::WizardDeploy::None
+            if choice
+                .fields
+                .iter()
+                .any(|f| f.key == "base_url" || f.key == "url") =>
+        {
+            2
+        }
         _ => 0,
     }
 }
@@ -517,7 +525,7 @@ fn merge_by_rank(
         .collect();
     // A stable sort groups by deployment tier (Local -> Cloud -> Host), then rank,
     // keeping built-ins before plugins of the same rank.
-    choices.sort_by_key(|c| (deploy_tier(&c.choice.deploy), c.choice.menu_rank));
+    choices.sort_by_key(|c| (deploy_tier(&c.choice), c.choice.menu_rank));
     choices
 }
 
@@ -596,7 +604,7 @@ fn run_stage(
         .choices
         .iter()
         .map(|c| {
-            let tag = match deploy_tier(&c.choice.deploy) {
+            let tag = match deploy_tier(&c.choice) {
                 0 => "[Local]",
                 1 => "[Cloud]",
                 _ => "[Host] ",
