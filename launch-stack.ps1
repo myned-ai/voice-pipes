@@ -273,10 +273,66 @@ if ($LASTEXITCODE -ne 0) {
     Exit 1
 }
 
+# 6.5 Verify Worker & Fleet Readiness
+Write-Host "Verifying backend fleet readiness..." -ForegroundColor Gray
+$workerId = (docker compose -f voice-pipes/deploy/docker/docker-compose.yml ps -q $worker 2>$null)
+if ($workerId) {
+    $probeSeconds = 15
+    for ($i = 0; $i -lt $probeSeconds; $i++) {
+        Start-Sleep -Seconds 1
+        $status = (docker inspect --format '{{.State.Status}}' $workerId 2>$null)
+        if ($status -eq "restarting" -or $status -eq "exited") {
+            $errLines = (docker logs --tail 25 $workerId 2>&1) | Where-Object { $_ -match '(ERROR voice_pipes|config validation failed|model load failed|missing model file)' }
+            Write-Host ""
+            Write-Host "[-] Worker failed startup validation (status: $status)!" -ForegroundColor Red
+            if ($errLines) {
+                Write-Host "   $($errLines -join "`n   ")" -ForegroundColor Yellow
+            }
+            Write-Host ""
+            Write-Host "[i] To view full diagnostic logs: docker compose -f voice-pipes/deploy/docker/docker-compose.yml logs $worker" -ForegroundColor DarkGray
+            Exit 1
+        }
+        if ($status -eq "running" -and $i -ge 2) {
+            break
+        }
+    }
+}
+
+# Wait for sidecar healthchecks (e.g. pocket-tts, llama-server) before opening fleet
+foreach ($sidecar in $sidecars) {
+    $sidecarId = (docker compose -f voice-pipes/deploy/docker/docker-compose.yml ps -q $sidecar 2>$null)
+    if ($sidecarId) {
+        $hasHealth = (docker inspect --format '{{if .State.Health}}true{{else}}false{{end}}' $sidecarId 2>$null)
+        if ($hasHealth -eq "true") {
+            Write-Host "Waiting for sidecar '$sidecar' readiness..." -ForegroundColor Gray
+            $sidecarTimeout = 180
+            $ready = $false
+            for ($s = 0; $s -lt $sidecarTimeout; $s += 2) {
+                $hStatus = (docker inspect --format '{{.State.Health.Status}}' $sidecarId 2>$null)
+                $cStatus = (docker inspect --format '{{.State.Status}}' $sidecarId 2>$null)
+                if ($cStatus -eq "exited" -or $cStatus -eq "restarting") {
+                    Write-Host "[-] Sidecar '$sidecar' failed to start (status: $cStatus)!" -ForegroundColor Red
+                    docker compose -f voice-pipes/deploy/docker/docker-compose.yml logs --tail 30 $sidecar
+                    Exit 1
+                }
+                if ($hStatus -eq "healthy") {
+                    $ready = $true
+                    Write-Host "[+] Sidecar '$sidecar' is healthy and ready." -ForegroundColor Green
+                    break
+                }
+                Start-Sleep -Seconds 2
+            }
+            if (-not $ready) {
+                Write-Host "[!] Warning: Sidecar '$sidecar' did not report healthy within $sidecarTimeout seconds." -ForegroundColor Yellow
+            }
+        }
+    }
+}
+
 Write-Host ""
 Write-Host "Voice Pipes Fleet started successfully!" -ForegroundColor Green
 Write-Host "  Admin UI available at:  http://localhost:3000" -ForegroundColor Cyan
-Write-Host "  Sign-in token: ADMIN_UI_TOKEN in $adminEnvPath (not printed; it would stay in this terminal's scrollback)" -ForegroundColor Cyan
+Write-Host "  Sign-in token: ADMIN_UI_TOKEN in $($adminEnvPath) (not printed; it would stay in this terminal's scrollback)" -ForegroundColor Cyan
 Write-Host "  View token:    Get-Content $adminEnvPath" -ForegroundColor DarkGray
 Write-Host "  Orchestrator API at:    http://localhost:9090" -ForegroundColor Cyan
 Write-Host "  Worker WebSocket at:    ws://localhost:8800/ws" -ForegroundColor Cyan

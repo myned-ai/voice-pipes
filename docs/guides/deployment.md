@@ -55,7 +55,9 @@ The engine images carry a `HEALTHCHECK` that runs `voice-pipes healthz`
 (the image has no other HTTP client) against a worker's `/healthz` on
 8800; the orchestrator's compose service probes its own `/healthz` on
 9090 instead, and every worker waits for the orchestrator to be healthy
-before it starts.
+before it starts. Sidecars such as `llama-server`, `pocket-tts`, and `vibevoice` define
+their own readiness healthchecks (probing `/health`), and the launcher
+verifies that all active sidecars report `healthy` before opening fleet access.
 
 **Stopping.** A worker given Ctrl-C or SIGTERM (`docker stop`) ends every
 open session with a `closing` frame whose reason is `worker_shutdown`,

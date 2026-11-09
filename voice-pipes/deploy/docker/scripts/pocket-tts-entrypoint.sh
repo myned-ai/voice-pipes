@@ -14,12 +14,12 @@ uvx pocket-tts serve --host 0.0.0.0 --port 8000 &
 server_pid=$!
 
 # Block until the server answers one synthesis request, then return.
-# Retries for ~2 minutes to cover the first-run package + model download.
+# Retries for ~4 minutes to cover first-run package + model download.
 ( python3 - <<'PY'
 import time, urllib.request, urllib.parse
 
 body = urllib.parse.urlencode({"text": "warming up the voice pipeline"}).encode()
-for _ in range(60):
+for _ in range(120):
     try:
         req = urllib.request.Request("http://127.0.0.1:8000/tts", data=body)
         urllib.request.urlopen(req, timeout=30).read()
