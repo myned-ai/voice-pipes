@@ -51,6 +51,8 @@ impl AgentService for ScriptedAgent {
                                         turn_id: t.turn_id,
                                         text: "z".repeat(2 * 1024 * 1024),
                                         is_end_of_response: true,
+                                        first_token_ms: None,
+                                        token_count: None,
                                     })),
                                 }))
                                 .await;
@@ -62,6 +64,8 @@ impl AgentService for ScriptedAgent {
                                     turn_id: t.turn_id,
                                     text: format!("echo:{}", t.text),
                                     is_end_of_response: true,
+                                    first_token_ms: None,
+                                    token_count: None,
                                 })),
                             }))
                             .await;

@@ -502,8 +502,7 @@ mod tests {
         // 1,000 in-memory resets must take < 5ms (averaging < 5µs per reset)
         assert!(
             elapsed.as_millis() < 5,
-            "1,000 resets took {:?} (expected < 5ms)",
-            elapsed
+            "1,000 resets took {elapsed:?} (expected < 5ms)"
         );
     }
 }
