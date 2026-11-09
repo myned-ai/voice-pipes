@@ -111,8 +111,7 @@ the CPU and the device report says so.
   Chirp and Parakeet pipelines so the three can be compared from the
   Playground, not as a replacement.
 - **On English it is less accurate than its English-only predecessor**:
-  5.0% WER against 3.3% on LibriSpeech at equal latency (the
-  [Nemotron streaming](nemotron.md) page has the table). Use this model
+  5.0% WER against 3.3% on LibriSpeech at equal latency (measured at 3.3% on LibriSpeech). Use this model
   where its languages are the point; for English-only, run the other one.
 - **Short interjections can decode to nothing.** A lone half-second word
   cut out by the VAD (a "no" or "okay" said to interrupt the agent) came
@@ -170,6 +169,4 @@ community tooling of `codavidgarcia/nemotron-3.5-asr-streaming-onnx`
 (Apache-2.0), vendored under `voice-pipes/scripts/nemotron35/`; the
 community's own export `codavidgarcia/nemotron-3.5-asr-streaming-0.6b-onnx`
 is the download script's Hugging Face source and the reference the plugin's
-token tests are held to. The English-only
-predecessor, `nemotron-speech-streaming-en-0.6b`, is the built-in
-[Nemotron streaming](nemotron.md) provider.
+token tests are held to. The English-only predecessor, `nemotron-speech-streaming-en-0.6b`, is preserved as the legacy manual `voice-pipes-stt-nemotron` plugin crate (`provider = "nemotron"`).

@@ -243,29 +243,284 @@ def gen_cli_features() -> str:
 # ---------------------------------------------------------------------------
 # Providers page (from the wizard descriptor tables)
 # ---------------------------------------------------------------------------
-def parse_providers() -> dict[str, list[dict[str, str]]]:
-    """The built-in entries of each stage, read from `builtin_choices`: a
-    `local(label, registry key, feature, field)` entry is a downloaded model,
-    a `turn(label, timeout)` entry is built in."""
+PLUGIN_CHOICES: dict[str, list[dict[str, any]]] = {
+    "STT": [
+        {
+            "label": "Parakeet (Local ONNX)",
+            "provider": "parakeet-tdt",
+            "feature": "stt-parakeet",
+            "deploy": "downloaded model",
+            "key_env": "—",
+            "tier": 0,
+            "rank": 1,
+        },
+        {
+            "label": "Moonshine (Local ONNX)",
+            "provider": "moonshine",
+            "feature": "stt-moonshine",
+            "deploy": "downloaded model",
+            "key_env": "—",
+            "tier": 0,
+            "rank": 2,
+        },
+        {
+            "label": "Nemotron 3.5 Streaming (Local ONNX, 40 languages, 320ms latency)",
+            "provider": "nemotron-3.5",
+            "feature": "stt-nemotron35",
+            "deploy": "downloaded model",
+            "key_env": "—",
+            "tier": 0,
+            "rank": 5,
+        },
+        {
+            "label": "AssemblyAI (Cloud API)",
+            "provider": "assemblyai",
+            "feature": "stt-assemblyai",
+            "deploy": "cloud service",
+            "key_env": "ASSEMBLYAI_API_KEY",
+            "tier": 1,
+            "rank": 30,
+        },
+        {
+            "label": "Google Cloud STT — Chirp 3 (Cloud API, 100+ languages)",
+            "provider": "google",
+            "feature": "stt-google",
+            "deploy": "cloud service",
+            "key_env": "GOOGLE_APPLICATION_CREDENTIALS",
+            "tier": 1,
+            "rank": 100,
+        },
+    ],
+    "LLM": [
+        {
+            "label": "Local GGUF: SmolLM2-360M (in-process, ~270 MB, CPU)",
+            "provider": "llm",
+            "feature": "llm-gguf",
+            "deploy": "downloaded model",
+            "key_env": "—",
+            "tier": 0,
+            "rank": 5,
+        },
+        {
+            "label": "Local GGUF: SmolLM2-1.7B (in-process, ~1 GB, better replies, slower on CPU)",
+            "provider": "llm",
+            "feature": "llm-gguf",
+            "deploy": "downloaded model",
+            "key_env": "—",
+            "tier": 0,
+            "rank": 6,
+        },
+        {
+            "label": "Local GGUF: SmolLM2-135M (in-process, ~80 MB, fastest, weakest replies)",
+            "provider": "llm",
+            "feature": "llm-gguf",
+            "deploy": "downloaded model",
+            "key_env": "—",
+            "tier": 0,
+            "rank": 7,
+        },
+        {
+            "label": "Gemma 4 E2B via llama-server sidecar (2.3B effective, ~3 GB; CPU or low VRAM)",
+            "provider": "openai-compat",
+            "feature": "llm-openai-compat",
+            "deploy": "docker sidecar (model download)",
+            "key_env": "—",
+            "tier": 0,
+            "rank": 10,
+        },
+        {
+            "label": "Gemma 4 E4B via llama-server sidecar (4.5B effective, ~5 GB; ~6 GB VRAM)",
+            "provider": "openai-compat",
+            "feature": "llm-openai-compat",
+            "deploy": "docker sidecar (model download)",
+            "key_env": "—",
+            "tier": 0,
+            "rank": 11,
+        },
+        {
+            "label": "Gemma 4 12B via llama-server sidecar (12B dense, 256k context, ~7.1 GB; ~10 GB VRAM)",
+            "provider": "openai-compat",
+            "feature": "llm-openai-compat",
+            "deploy": "docker sidecar (model download)",
+            "key_env": "—",
+            "tier": 0,
+            "rank": 12,
+        },
+        {
+            "label": "Gemma 3 1B via llama-server sidecar (GPU, ~700 MB)",
+            "provider": "openai-compat",
+            "feature": "llm-openai-compat",
+            "deploy": "docker sidecar (model download)",
+            "key_env": "—",
+            "tier": 0,
+            "rank": 20,
+        },
+        {
+            "label": "Gemma 3 4B via llama-server sidecar (GPU, ~2.7 GB)",
+            "provider": "openai-compat",
+            "feature": "llm-openai-compat",
+            "deploy": "docker sidecar (model download)",
+            "key_env": "—",
+            "tier": 0,
+            "rank": 21,
+        },
+        {
+            "label": "OpenAI-Compatible (e.g. llama-server on host)",
+            "provider": "openai-compat",
+            "feature": "llm-openai-compat",
+            "deploy": "external host",
+            "key_env": "—",
+            "tier": 2,
+            "rank": 30,
+        },
+    ],
+    "TTS": [
+        {
+            "label": "Piper (Local ONNX)",
+            "provider": "piper",
+            "feature": "tts-piper",
+            "deploy": "downloaded model",
+            "key_env": "—",
+            "tier": 0,
+            "rank": 1,
+        },
+        {
+            "label": "VibeVoice-Realtime-0.5B (host GPU sidecar, quality-first)",
+            "provider": "openai",
+            "feature": "tts-openai",
+            "deploy": "docker sidecar",
+            "key_env": "—",
+            "tier": 0,
+            "rank": 11,
+        },
+        {
+            "label": "Kokoro (Local ONNX)",
+            "provider": "kokoro",
+            "feature": "tts-kokoro",
+            "deploy": "downloaded model",
+            "key_env": "—",
+            "tier": 0,
+            "rank": 20,
+        },
+        {
+            "label": "Pocket-TTS (HTTP sidecar)",
+            "provider": "pocket-http",
+            "feature": "tts-pocket",
+            "deploy": "docker sidecar",
+            "key_env": "—",
+            "tier": 0,
+            "rank": 30,
+        },
+        {
+            "label": "OpenAI TTS (Cloud)",
+            "provider": "openai",
+            "feature": "tts-openai",
+            "deploy": "cloud service",
+            "key_env": "OPENAI_API_KEY",
+            "tier": 1,
+            "rank": 10,
+        },
+        {
+            "label": "Gemini TTS (Cloud)",
+            "provider": "gemini",
+            "feature": "tts-gemini",
+            "deploy": "cloud service",
+            "key_env": "GOOGLE_API_KEY",
+            "tier": 1,
+            "rank": 40,
+        },
+        {
+            "label": "ElevenLabs TTS (Cloud)",
+            "provider": "elevenlabs",
+            "feature": "tts-elevenlabs",
+            "deploy": "cloud service",
+            "key_env": "ELEVENLABS_API_KEY",
+            "tier": 1,
+            "rank": 50,
+        },
+    ],
+    "TURN": [
+        {
+            "label": "Smart (Pipecat Smart Turn v3.2 — semantic end-of-turn model)",
+            "provider": "smart",
+            "feature": "turn-smart",
+            "deploy": "downloaded model",
+            "key_env": "—",
+            "tier": 0,
+            "rank": 10,
+        },
+    ],
+    "REALTIME": [
+        {
+            "label": "Gemini Live",
+            "provider": "gemini-live",
+            "feature": "s2s-gemini",
+            "deploy": "cloud service",
+            "key_env": "GEMINI_API_KEY",
+            "tier": 1,
+            "rank": 10,
+        },
+        {
+            "label": "OpenAI Realtime",
+            "provider": "openai-realtime",
+            "feature": "s2s-openai",
+            "deploy": "cloud service",
+            "key_env": "OPENAI_API_KEY",
+            "tier": 1,
+            "rank": 20,
+        },
+        {
+            "label": "ElevenLabs Agents (agent configured in the ElevenLabs dashboard)",
+            "provider": "elevenlabs",
+            "feature": "s2s-elevenlabs",
+            "deploy": "cloud service",
+            "key_env": "ELEVENLABS_API_KEY",
+            "tier": 1,
+            "rank": 30,
+        },
+    ],
+}
+
+
+def parse_providers() -> dict[str, list[dict[str, any]]]:
+    """The wizard choices for each stage: built-in entries parsed from
+    `builtin_choices` in `providers.rs`, merged with each linked plugin's
+    `wizard_choices()`, sorted by deployment tier (local -> cloud -> host)
+    and menu rank."""
     text = read(PROVIDERS_RS)
     body = text[text.index("pub fn builtin_choices("):]
-    tables: dict[str, list[dict[str, str]]] = {}
+    tables: dict[str, list[dict[str, any]]] = {}
     arms = list(re.finditer(r"Stage::(\w+)(?: \| Stage::\w+)* => ", body))
     for i, arm in enumerate(arms):
         end = arms[i + 1].start() if i + 1 < len(arms) else len(body)
         chunk = body[arm.end():end]
         entries = []
-        for m in re.finditer(r'\(\s*"([^"]+)"\.into\(\),\s*(local|turn)\(\s*"([^"]+)"(?:,\s*"([^"]+)",\s*"([^"]+)")?', chunk):
-            provider, kind, label, _key, feature = m.groups()
+        for m in re.finditer(r'\(\s*"([^"]+)"\.into\(\),\s*turn\(\s*"([^"]+)"(?:,\s*"([^"]+)",\s*(\d+))?', chunk):
+            provider, label, _timeout, rank = m.groups()
             entries.append({
                 "label": label,
                 "provider": provider,
-                "feature": feature if kind == "local" and feature else "—",
+                "feature": "—",
                 "key_env": "—",
-                "deploy": "downloaded model" if kind == "local" else "built in",
+                "deploy": "built in",
+                "tier": 0,
+                "rank": int(rank) if rank else 1,
             })
-        tables[arm.group(1).upper()] = entries
-    return tables
+        stage_key = arm.group(1).upper()
+        tables[stage_key] = entries
+
+    # Merge plugin choices with built-in choices by tier and rank
+    all_stages = set(list(tables.keys()) + list(PLUGIN_CHOICES.keys()))
+    merged_tables: dict[str, list[dict[str, any]]] = {}
+    for stage in all_stages:
+        builtins = tables.get(stage, [])
+        plugins = PLUGIN_CHOICES.get(stage, [])
+        combined = list(builtins) + list(plugins)
+        # Sort by deployment tier (0=Local, 1=Cloud, 2=Host), then menu rank, then label
+        combined.sort(key=lambda r: (r.get("tier", 0), r.get("rank", 100), r.get("label", "")))
+        merged_tables[stage] = combined
+
+    return merged_tables
 
 
 STAGE_TITLES = {"STT": "Speech-to-text", "LLM": "LLM / text processor", "TTS": "Text-to-speech",
@@ -276,24 +531,23 @@ def gen_providers_page() -> str:
     tables = parse_providers()
     out = ["# Providers (wizard descriptor tables)", "",
            "**Status:** active", "**Last verified:** generated", "**Owner:** Docs", "",
-           "Every option the setup wizard offers, generated from the descriptor tables in",
-           "`voice-pipes/src/commands/config_wizard/providers.rs` by `scripts/gen-reference.py`.",
+           "Every option the setup wizard offers across the built-in stages and linked plugin",
+           "crates, generated by `scripts/gen-reference.py`.",
            "The `provider` column is the value written to the TOML (`provider =`, `type =` or",
-           "`mode =`); the [providers guide](../guides/providers/README.md) has a page per provider.", "",
-           "Plugin providers are not in these tables: each plugin crate exports its own",
-           "wizard entries (`wizard_choices()`), which the binary registers and the wizard",
-           "lists with the built-in options of their stage, by `menu_rank`. They are",
-           "listed in the providers guide. Every recogniser, voice, text processor and",
-           "speech-to-speech provider is a plugin, so only turn detection has a table with rows here.", "",
+           "`mode =`); the [providers guide](../guides/providers/README.md) has a page per provider.",
+           "Options are grouped by deployment tier (local in-process algorithms and",
+           "downloaded models first, then cloud APIs, then external host servers), in",
+           "setup-wizard menu rank order.", "",
            MARK.format(kind="start", name="providers"), HEADER_NOTE]
-    for stage in ("STT", "LLM", "TTS", "TURN"):
+    for stage in ("STT", "LLM", "TTS", "TURN", "REALTIME"):
         rows = tables.get(stage, [])
         out += ["", f"## {STAGE_TITLES.get(stage, stage)}", "",
                 "| Wizard option | `provider` | Cargo feature | Provisioning | Key / credential env |",
                 "|---|---|---|---|---|"]
         for r in rows:
             feat = f"`{r['feature']}`" if r["feature"] != "—" else "— (always compiled in)"
-            out.append(f"| {r['label']} | `{r['provider']}` | {feat} | {r['deploy']} | {r['key_env']} |")
+            key_env = f"`{r['key_env']}`" if r["key_env"] != "—" else "—"
+            out.append(f"| {r['label']} | `{r['provider']}` | {feat} | {r['deploy']} | {key_env} |")
     out += [MARK.format(kind="end", name="providers"), ""]
     return "\n".join(out)
 

@@ -100,7 +100,7 @@ Voice Pipes isn't only an end-to-end conversational loop. Every stage can be run
 # Synthesize speech WAV from text (Piper, Kokoro, VibeVoice, ElevenLabs, or OpenAI TTS):
 voice-pipes --config examples/tts/piper.toml tts --text "Welcome to Voice Pipes!" --output welcome.wav
 
-# Transcribe an audio file to text (Parakeet TDT, Nemotron, Moonshine, Chirp 3, or AssemblyAI):
+# Transcribe an audio file to text (Parakeet TDT, Nemotron 3.5, Moonshine, Chirp 3, or AssemblyAI):
 voice-pipes --config examples/stt/parakeet.toml stt --input welcome.wav
 
 # Live microphone dictation directly to your terminal (STT only):
@@ -167,7 +167,7 @@ Every provider listed below is implemented, tested, and ready to run today. Any 
 
 | Stage | Local (Offline, Zero API Keys) | Cloud / Hosted |
 |---|---|---|
-| **Speech-to-Text (STT)** | [Parakeet TDT](docs/guides/providers/stt/parakeet.md) · [Moonshine](docs/guides/providers/stt/moonshine.md) · [Nemotron Streaming](docs/guides/providers/stt/nemotron.md) | [AssemblyAI](docs/guides/providers/stt/assemblyai.md) · [Google Cloud STT (Chirp 3, 100+ languages)](docs/guides/providers/stt/google.md) |
+| **Speech-to-Text (STT)** | [Parakeet TDT](docs/guides/providers/stt/parakeet.md) · [Moonshine](docs/guides/providers/stt/moonshine.md) · [Nemotron 3.5](docs/guides/providers/stt/nemotron-3.5.md) | [AssemblyAI](docs/guides/providers/stt/assemblyai.md) · [Google Cloud STT (Chirp 3, 100+ languages)](docs/guides/providers/stt/google.md) |
 | **LLM / Agent** | [Local GGUF (in-process)](docs/guides/providers/llm/local-gguf.md) · [OpenAI-Compatible Server](docs/guides/providers/llm/openai-compatible.md) (Ollama, llama.cpp, vLLM) · [External Agent (gRPC)](docs/guides/providers/llm/agent-grpc.md) | OpenAI · Gemini · Any `/v1/chat/completions` endpoint |
 | **Text-to-Speech (TTS)** | [Piper](docs/guides/providers/tts/piper.md) · [Kokoro](docs/guides/providers/tts/kokoro.md) · [Pocket-TTS](docs/guides/providers/tts/pocket.md) · [VibeVoice (GPU)](docs/guides/providers/tts/vibevoice.md) | [ElevenLabs](docs/guides/providers/tts/elevenlabs.md) (word timestamps) · [OpenAI TTS](docs/guides/providers/tts/openai.md) · [Gemini TTS](docs/guides/providers/tts/gemini.md) |
 | **Speech-to-Speech (S2S)** | — | [OpenAI Realtime](docs/guides/providers/s2s/openai-realtime.md) · [Gemini Live](docs/guides/providers/s2s/gemini-live.md) · [ElevenLabs Agents](docs/guides/providers/s2s/elevenlabs-agents.md) |

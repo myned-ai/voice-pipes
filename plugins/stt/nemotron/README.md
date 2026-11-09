@@ -1,6 +1,6 @@
 # Nemotron English streaming (STT, local, legacy manual export)
 
-**Status:** legacy export — more accurate for English only, but requires manual NeMo export. For auto-download and multilingual support (40 languages), use [Nemotron 3.5 Streaming](nemotron-3.5.md).
+**Status:** legacy export — more accurate for English only, but requires manual NeMo export. For auto-download and multilingual support (40 languages), use [Nemotron 3.5 Streaming](../../../docs/guides/providers/stt/nemotron-3.5.md).
 **Last verified:** 2026-11-08
 **Owner:** Docs
 
@@ -10,8 +10,7 @@ NVIDIA's `nemotron-speech-streaming-en-0.6b`, a cache-aware streaming
 FastConformer with an RNNT decoder, run in-process through ONNX Runtime. The
 only built-in STT that streams natively frame by frame rather than
 re-decoding a buffer, so its latency does not grow with utterance length.
-Requires a one-time manual model export. In the setup wizard, it is listed as
-**Nemotron English Streaming (Legacy, requires manual NeMo export; use Nemotron 3.5 instead)**.
+Requires a one-time manual model export. This legacy provider requires a manual NeMo export and is not offered in the interactive setup wizard (use Nemotron 3.5 Streaming instead). It is preserved as an undocumented manual plugin for existing exports.
 
 ### Against Nemotron 3.5, on English
 
@@ -42,7 +41,7 @@ feature; `-p voice-pipes --features stt-nemotron` no longer exists.)
 
 ```toml
 [stt]
-provider = "nemotron-streaming"             # alias: nemotron (what the wizard writes)
+provider = "nemotron-streaming"             # alias: nemotron
 model_dir = "models/nemotron-streaming/7-10-7"
 
 [stt.options]
@@ -66,8 +65,8 @@ no longer gated: no token or license click needed as of 2026-09) and run the
 export once:
 
 ```sh
-# see voice-pipes/scripts/README-export-nemotron.md
-pwsh voice-pipes/scripts/export-nemotron.ps1          # or export_nemotron_streaming.py / Dockerfile.nemo-export
+# see voice-pipes/../../../scripts/README-export-nemotron.md
+pwsh ../../../scripts/export-nemotron.ps1          # or export_nemotron_streaming.py / Dockerfile.nemo-export
 ```
 
 The result is `encoder.onnx`, `decoder.onnx`, `joint.onnx`,
@@ -107,7 +106,7 @@ points at that directory but cannot fetch it.
   a full copy of the model in memory, so size the pool to the sessions per
   worker, not higher.
 - CPU inference is heavier than Parakeet's; the CUDA build is the intended
-  deployment. [GPU and CUDA](../../gpu-and-cuda.md) covers the execution
+  deployment. [GPU and CUDA](../../../docs/guides/gpu-and-cuda.md) covers the execution
   provider, streaming decode details and measured numbers.
 
 ## Upstream

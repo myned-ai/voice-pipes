@@ -17,7 +17,6 @@
   - [Parakeet TDT](guides/providers/stt/parakeet.md)
   - [Moonshine](guides/providers/stt/moonshine.md)
   - [Nemotron 3.5](guides/providers/stt/nemotron-3.5.md)
-  - [Nemotron streaming](guides/providers/stt/nemotron.md)
   - [AssemblyAI](guides/providers/stt/assemblyai.md)
   - [Google Cloud STT](guides/providers/stt/google.md)
   - [gRPC STT client](guides/providers/stt/grpc.md)

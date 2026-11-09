@@ -20,7 +20,6 @@ and no audio leaving the machine.
 | [Parakeet TDT](stt/parakeet.md) | `parakeet-tdt` | local, ONNX, CUDA optional | `stt-parakeet` (default; CLI crate; plugin) | NVIDIA FastConformer + TDT, int8, word timestamps, the default |
 | [Moonshine](stt/moonshine.md) | `moonshine` | local, ONNX, CUDA optional | `stt-moonshine` (CLI crate; plugin) | Small and fast; `stt-moonshine-cuda` for GPU |
 | [Nemotron 3.5](stt/nemotron-3.5.md) | `nemotron-3.5` | local, ONNX, CUDA optional | `stt-nemotron35` (CLI crate; plugin) | True streaming RNNT, 40 locales, per-session language; `stt-nemotron35-cuda` for GPU |
-| [Nemotron streaming](stt/nemotron.md) | `nemotron` | local, ONNX | `stt-nemotron` (CLI crate; plugin) | English only, and more accurate on English than 3.5; one-time model export |
 | [AssemblyAI](stt/assemblyai.md) | `assemblyai` | cloud, WebSocket | `stt-assemblyai` (CLI crate; plugin) | Streaming, end-of-turn signal, word timestamps |
 | [Google Cloud STT](stt/google.md) | `google` | cloud, gRPC | `stt-google` (CLI crate; plugin) | Chirp 3, 100+ languages, voice-activity events |
 | [gRPC](stt/grpc.md) | `grpc` | remote component server | `stt-grpc` | Any provider behind the split-mode server |

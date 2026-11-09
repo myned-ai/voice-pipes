@@ -172,7 +172,7 @@ services:
         # tts-openai: the wizard's "OpenAI TTS (Cloud)" and VibeVoice (host GPU
         # sidecar, reached via the openai provider) options both need it.
         # stt-assemblyai: the wizard's default STT choice needs it.
-        # tts-gemini / stt-nemotron: the wizard's Gemini TTS + Nemotron STT options.
+        # tts-gemini: the wizard's Gemini TTS option; stt-nemotron: legacy manual Nemotron STT.
         # stt-nemotron35: the Nemotron 3.5 plugin recogniser (40 locales).
         # text-grpc: the agent-grpc gateway + gRPC agent tool backend, used for
         #   out-of-turn agentic tool calls.
