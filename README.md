@@ -172,6 +172,7 @@ Every provider listed below is implemented, tested, and ready to run today. Any 
 | **Text-to-Speech (TTS)** | [Piper](docs/guides/providers/tts/piper.md) · [Kokoro](docs/guides/providers/tts/kokoro.md) · [Pocket-TTS](docs/guides/providers/tts/pocket.md) · [VibeVoice (GPU)](docs/guides/providers/tts/vibevoice.md) | [ElevenLabs](docs/guides/providers/tts/elevenlabs.md) (word timestamps) · [OpenAI TTS](docs/guides/providers/tts/openai.md) · [Gemini TTS](docs/guides/providers/tts/gemini.md) |
 | **Speech-to-Speech (S2S)** | — | [OpenAI Realtime](docs/guides/providers/s2s/openai-realtime.md) · [Gemini Live](docs/guides/providers/s2s/gemini-live.md) · [ElevenLabs Agents](docs/guides/providers/s2s/elevenlabs-agents.md) |
 | **VAD & Turn Detection** | Silero VAD · Energy VAD · [Smart Turn](docs/guides/turn-detection-and-interruptions.md) · Layered / Silence · [VAP Anticipatory (Experimental)](docs/guides/turn-detection-and-interruptions.md#vap-anticipatory-experimental) | Provider-native turn signals |
+| **Ingress Audio Filter** | [DeepFilter](docs/guides/vad.md#ingress-noise-suppression-audio_filter) (pure-Rust ERB Wiener noise suppression, `8..96 kHz`) | — |
 
 ---
 
@@ -226,7 +227,7 @@ Start at **[docs/README.md](docs/README.md)** or jump directly to your workflow:
 | [`voice-pipes-sdk/`](voice-pipes-sdk/) | SemVer-stable (`1.0`) plugin SDK and trait boundary for all stage providers |
 | [`voice-pipes-cli/`](voice-pipes-cli/) | The `voice-pipes` command-line binary and interactive setup wizard |
 | [`voice-pipes-onnx/`](voice-pipes-onnx/) · [`voice-pipes-net/`](voice-pipes-net/) | Shared ONNX Runtime session pooling (CPU/CUDA) and network/TLS client policy |
-| [`plugins/`](plugins/) | 20 modular stage provider crates (`plugins/{stt,tts,llm,s2s,turn,vad}/*`) built strictly against `voice-pipes-sdk` |
+| [`plugins/`](plugins/) | 21 modular stage provider crates (`plugins/{stt,tts,llm,s2s,turn,vad,filter}/*`) built strictly against `voice-pipes-sdk` |
 | [`voice-pipes-bench/`](voice-pipes-bench/) | Automated A/B latency, RTF, WER, and synthetic-caller benchmarking suite |
 | [`voice-pipes-gym/`](voice-pipes-gym/) | In-memory reinforcement learning environment and regression harness for voice agents |
 | [`voice-pipes-admin/`](voice-pipes-admin/) | Admin console, live karaoke playground, and session inspector (React 18 + FastAPI) |

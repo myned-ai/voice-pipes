@@ -192,6 +192,7 @@ voice_pipes::commands::run_serve(cfg, Some("worker.toml".into())).await?;
 | Speech-to-text | `SttProvider` + `SttFactory` | `register_stt_factory()` |
 | Text-to-speech | `TtsProvider` + `TtsFactory` | `register_tts_factory()` |
 | LLM / text processor | `TextProcessor` + `TextProcessorFactory` | `register_text_processor_factory()` |
+| Ingress audio filter | `AudioFilter` + `AudioFilterFactory` | `register_filter_factory()` / `Plugin::Filter` |
 
 All three follow the same **provider + factory + register** pattern.
 

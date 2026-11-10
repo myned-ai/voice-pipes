@@ -67,7 +67,7 @@ Three audiences: people building a voice agent (configure, run, deploy), people 
 
 ## Instructions for AI coding agents
 
-- Configuration is one TOML file. `[stt]`/`[tts]`/`[realtime_provider]` take provider-specific keys in a nested `[x.options]` table; `[[text_processor]]` and `[[audio_post_processor]]` are flat. `client_tools_path` must precede the first table header. Unknown keys are errors.
+- Configuration is one TOML file. `[stt]`/`[tts]`/`[realtime_provider]` take provider-specific keys in a nested `[x.options]` table; `[[text_processor]]`, `[[audio_filter]]`, and `[[audio_post_processor]]` are flat. `client_tools_path` must precede the first table header. Unknown keys are errors.
 - A cascade file has `[stt]`, `[[text_processor]]`, `[tts]`; a speech-to-speech file has `[realtime_provider]`; never both.
 - Providers are Cargo features on the `voice-pipes` crate; enable them on the CLI crate as `--features voice-pipes/<feature>`. Each provider page names its feature, config block and env var.
 - New providers implement the `voice-pipes-sdk` factory + provider traits in their own crate and register with one call; see the Plugin SDK guide and `voice-pipes-sdk/llms.txt`. Built-in providers also need a wizard descriptor and a docs page.

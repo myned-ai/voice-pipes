@@ -25,6 +25,7 @@ Create a new directory under `plugins/<stage>/<name>` (with package name `voice-
 - VAD: `voice-pipes-vad-<name>`
 - S2S: `voice-pipes-s2s-<name>`
 - Turn: `voice-pipes-turn-<name>`
+- Filter: `voice-pipes-filter-<name>`
 
 Add the crate to workspace `Cargo.toml` under `members = [...]`.
 

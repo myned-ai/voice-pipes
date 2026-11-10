@@ -14,6 +14,11 @@ earlier release.
 
 ### Added
 
+- Ingress audio filter stage (`[[audio_filter]]`) and SDK plugin boundary
+  (`voice_pipes_sdk::filter::{AudioFilter, AudioFilterFactory, FilterMetrics}`),
+  with pure-Rust, zero-allocation ERB Wiener noise suppression in
+  `voice-pipes-filter-deepfilter` (`provider = "deepfilter"`, Cargo feature
+  `filter-deepfilter` enabled by default in `voice-pipes-cli`).
 - Contiguous engine-measured telescoping stage latencies for cascade turns:
   `llm.llm_wait_ms` (`utterance.committed_at` to first LLM fragment),
   `tts.tts_wait_ms` (first LLM fragment to first raw TTS audio chunk),

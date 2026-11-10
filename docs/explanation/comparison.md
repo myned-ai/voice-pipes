@@ -16,6 +16,7 @@ There are no latency benchmarks on this page because real-world conversational l
 | **Core runtime** | **Safe Rust (`#![forbid(unsafe_code)]`)**, single native binary | Python (`asyncio`) or Node.js runtime | Managed cloud service |
 | **License** | **BUSL-1.1** (free production use under \$5M USD annual revenue; converts to Apache-2.0 after 3 years) | Open source (varies: MIT, BSD, Apache-2.0) | Proprietary per-minute API |
 | **100% offline STT + LLM + TTS + VAD** | **Built in** (ONNX Runtime + GGUF in-process, no cloud keys required) | Possible via external model servers or Python bindings | No (cloud-only) |
+| **Offline ingress noise suppression** | **Built in** (`[[audio_filter]] provider = "deepfilter"`, pure Rust, zero commercial licensing) | Typically requires proprietary commercial plugins (e.g. Krisp) or cloud WebRTC media servers | Provider-managed |
 | **Barge-in & history truncation** | **Built in**, playback-accurate truncation via client `PlaybackReport` (`last_played_offset_ms`) | Supported (truncation accuracy depends on transport and TTS alignment) | Provider-managed |
 | **Semantic turn detection** | **Smart Turn (ONNX)** + Silero VAD + provider endpoint signals | Available in major frameworks | Provider-managed |
 | **Per-turn, per-component latency audit trail** | **Built in** at engine trait seams ([VPO-Metrics](../reference/vpo-metrics.md) / [VPO-Telemetry](../reference/vpo-telemetry.md)) | Typically via external OpenTelemetry tracing or third-party observability plugins | Limited to provider-exposed events |
