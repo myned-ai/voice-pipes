@@ -64,8 +64,9 @@ This is the one shape rule worth memorising.
   `model_dir`, `model_name`, `api_key`, `endpoint`, `voice`, …). Anything
   provider-specific goes in a **nested** sub-table: `[stt.options]`,
   `[tts.options]`.
-- `[[text_processor]]` and `[[audio_post_processor]]` are **flat**: after
-  `type = "…"`, every other key is passed to the processor as an option.
+- `[[text_processor]]`, `[[audio_filter]]`, and `[[audio_post_processor]]` are
+  **flat**: after `type = "…"` (or `provider = "…"` on `[[audio_filter]]`),
+  every other key is passed to the processor or filter as an option.
 - `[realtime_provider]` is nested like STT: fixed keys plus
   `[realtime_provider.options]`.
 
@@ -193,6 +194,21 @@ hangover_ms = 300
 ```
 
 Requires the `realtime` Cargo feature (on by default).
+
+### `[[audio_filter]]`
+
+An ordered chain of ingress audio filters that run in place on incoming
+microphone chunks *before* VAD segmentation and STT. Leave the section out for
+zero-overhead passthrough.
+
+```toml
+[[audio_filter]]
+provider = "deepfilter"        # "deepfilter" (aliases: "deepfilternet", "deepfilternet3")
+attenuation_limit_db = 30.0    # maximum noise floor attenuation in dB (0.0..=100.0, default 30.0)
+```
+
+Requires the `filter-deepfilter` Cargo feature (on by default in the CLI).
+[Guide](vad.md#ingress-noise-suppression-audio_filter).
 
 ### `[vad]`
 

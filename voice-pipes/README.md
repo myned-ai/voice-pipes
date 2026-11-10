@@ -6,9 +6,9 @@ provider, the WebSocket transport, the worker and the orchestrator. The
 this crate.
 
 ```
-Audio in ──→ [VAD] ──→ [STT provider] ──→ [Turn detector] ──→ [Text processor chain] ──→ [TTS provider] ──→ Audio out
-                                                                         ↑
-                                                            Barge-in monitor (cancels on user speech)
+Audio in ──→ [Audio filter] ──→ [VAD] ──→ [STT provider] ──→ [Turn detector] ──→ [Text processor chain] ──→ [TTS provider] ──→ Audio out
+                                                                                            ↑
+                                                                               Barge-in monitor (cancels on user speech)
 
 Audio in ──→ [Realtime provider: OpenAI Realtime · Gemini Live · ElevenLabs Agents] ──→ Audio out
 ```

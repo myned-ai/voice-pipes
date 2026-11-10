@@ -7,8 +7,8 @@
 
 ## Context
 
-As the workspace grew to 27 Rust crates (7 core/shared crates and 20 provider
-plugin crates across STT, TTS, LLM, S2S, VAD, and Turn Detection), keeping all
+As the workspace grew to 28 Rust crates (7 core/shared crates and 21 provider
+plugin crates across STT, TTS, LLM, S2S, VAD, Turn Detection, and Audio Filter), keeping all
 27 crates flat at the repository root made it hard for newcomers to distinguish
 the core runtime and SDK from individual provider integrations. At the same
 time, moving core crates into nested subdirectories would add friction to daily
@@ -21,7 +21,7 @@ engine development, Docker volume mounts, and top-level repository navigation.
    `voice-pipes-bench`, `voice-pipes-gym`, and `voice-pipes-admin`.
 2. **Provider plugin crates live under `plugins/<stage>/<name>`:** grouped by
    pipeline stage (`plugins/stt/*`, `plugins/tts/*`, `plugins/llm/*`,
-   `plugins/s2s/*`, `plugins/turn/*`, `plugins/vad/*`).
+   `plugins/s2s/*`, `plugins/turn/*`, `plugins/vad/*`, `plugins/filter/*`).
 3. **Cargo package names remain `voice-pipes-<stage>-<name>`:** directory paths
    change, but `package.name` in each plugin's `Cargo.toml` stays
    `voice-pipes-<stage>-<name>`, preserving all Cargo feature flags, crate

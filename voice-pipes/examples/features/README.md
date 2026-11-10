@@ -19,6 +19,7 @@ This directory (`voice-pipes/examples/features/`) together with sibling folders 
 | **Distributed gRPC Stage Offloading** (`remote-grpc` TTS/STT worker split) | Cascade, `serve` | *(built-in)* | [`examples/grpc/pipeline-remote-tts.toml`](../grpc/pipeline-remote-tts.toml), [`examples/grpc/worker-tts.toml`](../grpc/worker-tts.toml) |
 | **Fleet Orchestration** (Orchestrator + multi-worker registration) | All modes (`orchestrate` + `serve`) | *(built-in)* | [`examples/orchestrate/orchestrator.toml`](../orchestrate/orchestrator.toml), [`examples/orchestrate/worker.toml`](../orchestrate/worker.toml) |
 | **TTS Pronunciation Lexicon & Markdown Sanitizer** (`[tts.lexicon]`, `sanitize_markdown`, `passthrough_tags`) | Cascade (`STT -> LLM -> TTS`), `live` & `serve` | *(built-in)* | [`examples/features/tts-lexicon-and-tags.toml`](tts-lexicon-and-tags.toml) |
+| **Ingress Noise Suppression (`DeepFilter`)** (`[[audio_filter]] provider = "deepfilter"`) | Cascade (`listen`, `live` & `serve`) | `filter-deepfilter` | [`examples/features/noise-suppression-deepfilter.toml`](noise-suppression-deepfilter.toml) |
 
 ---
 

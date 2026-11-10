@@ -11,6 +11,33 @@ that keeps those two uses independent is described in
 [Composable VAD](../explanation/composable-vad.md); this page is the
 configuration.
 
+## Ingress noise suppression (`[[audio_filter]]`)
+
+Before microphone audio reaches the VAD backend or STT recognizer, it can pass
+through an ordered `[[audio_filter]]` chain (`voice-pipes-sdk::filter::AudioFilter`).
+The `deepfilter` plugin (`voice-pipes-filter-deepfilter`, compiled into the CLI
+by default behind the `filter-deepfilter` Cargo feature) performs pure-Rust,
+zero-allocation STFT / 32-band Equivalent Rectangular Bandwidth (ERB) Wiener
+noise suppression with speech-presence gated MCRA noise floor estimation and
+Decision-Directed (Ephraim-Malah) prior SNR smoothing:
+
+```toml
+[[audio_filter]]
+provider = "deepfilter"        # aliases: "deepfilternet", "deepfilternet3"
+attenuation_limit_db = 30.0    # maximum noise suppression in dB (0.0..=100.0, default 30.0)
+```
+
+- **Why before VAD:** Stationary fan noise, HVAC rumble, or 50/60 Hz mains hum
+  can hold RMS energy or neural speech probability above the VAD threshold and
+  prevent utterances from endpointing cleanly. Suppressing stationary noise
+  upstream of VAD keeps silence segments quiet and improves downstream STT word
+  error rate.
+- **Multi-rate & fail-open:** `deepfilter` supports any sample rate in
+  `8000..=96000 Hz` (pre-allocated for 16 kHz by default and dynamically
+  re-planning its 20 ms Vorbis window and 10 ms hop if the input rate changes).
+  If any filter in the chain returns an error or if `[[audio_filter]]` is
+  omitted, the pipeline continues without dropping audio.
+
 ## Backends
 
 ```toml

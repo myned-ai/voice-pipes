@@ -17,12 +17,13 @@ Voice Pipes is an ultra-low-latency, modular conversational voice pipeline runti
   - `voice-pipes-bench`: Automated latency, RTF, and WER benchmarking suite.
   - `voice-pipes-cli`: Command-line interface and configuration wizard.
   - `voice-pipes-gym`: Reinforcement-learning environment and regression harness for voice agents.
-- **Plugin Crates (20 crates in `plugins/{stt,tts,llm,s2s,turn,vad}/`)**:
+- **Plugin Crates (21 crates in `plugins/{stt,tts,llm,s2s,turn,vad,filter}/`)**:
   - STT: `voice-pipes-stt-parakeet`, `voice-pipes-stt-nemotron`, `voice-pipes-stt-nemotron35`, `voice-pipes-stt-moonshine`, `voice-pipes-stt-assemblyai`, `voice-pipes-stt-google`.
   - TTS: `voice-pipes-tts-kokoro`, `voice-pipes-tts-piper`, `voice-pipes-tts-pocket`, `voice-pipes-tts-openai`, `voice-pipes-tts-gemini`, `voice-pipes-tts-elevenlabs`.
   - LLM: `voice-pipes-llm-openai-compat`, `voice-pipes-llm-gguf`.
   - S2S: `voice-pipes-s2s-openai`, `voice-pipes-s2s-gemini`, `voice-pipes-s2s-elevenlabs`.
   - VAD / Turn: `voice-pipes-vad-silero`, `voice-pipes-turn-smart`, `voice-pipes-turn-vap`.
+  - Filter: `voice-pipes-filter-deepfilter`.
 - **Admin Console (`voice-pipes-admin`)**:
   - `backend/`: FastAPI application (Python 3.12+), Server-Sent Events fleet stream, and WebSocket playground proxy.
   - `frontend/`: React 18 + Vite + TypeScript dashboard, live audio player, karaoke transcript reveal, and session inspector.
@@ -57,7 +58,7 @@ Voice Pipes is an ultra-low-latency, modular conversational voice pipeline runti
 
 ### Build & Lint
 ```sh
-# Workspace compile check across all 27 crates
+# Workspace compile check across all 28 crates
 cargo check --workspace
 
 # Workspace clippy (must pass with 0 warnings)
@@ -118,7 +119,7 @@ When implementing a new AI model provider (e.g. STT, TTS, or LLM):
    ```
 
 2. **Implement the Stage Trait**:
-   Implement `SttProvider`, `TtsProvider`, `TextProcessor`, or `VadEngine`.
+   Implement `SttProvider`, `TtsProvider`, `TextProcessor`, `VadBackend`, `TurnDetector`, `RealtimeProtocol`, or `AudioFilter`.
    Always implement `as_component(&self) -> Option<Arc<dyn Component>>`:
    ```rust
    fn as_component(&self) -> Option<Arc<dyn Component>> {
