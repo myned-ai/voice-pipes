@@ -18,6 +18,7 @@ pub use conformance::{back_to_back_utterances_stay_apart, two_utterances_on_one_
 pub use factory::build_refuses_what_validate_refuses;
 #[cfg(feature = "testing")]
 pub use metrics::{
-    MetricConformanceError, assert_llm_metrics_conformance, assert_s2s_metrics_conformance,
-    assert_stt_metrics_conformance, assert_tts_metrics_conformance, assert_vad_metrics_conformance,
+    MetricConformanceError, assert_filter_metrics_conformance, assert_llm_metrics_conformance,
+    assert_s2s_metrics_conformance, assert_stt_metrics_conformance, assert_tts_metrics_conformance,
+    assert_vad_metrics_conformance,
 };

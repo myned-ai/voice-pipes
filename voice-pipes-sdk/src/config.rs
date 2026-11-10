@@ -535,6 +535,50 @@ pub struct VadConfig {
     pub options: HashMap<String, serde_json::Value>,
 }
 
+// ── Audio filter stage configuration ──────────────────────────
+
+/// Configuration an audio filter plugin receives, resolved from TOML `[audio.filter.<name>]`.
+#[derive(Clone, Default)]
+#[non_exhaustive]
+pub struct FilterStageConfig {
+    /// The provider name that selected this filter.
+    pub provider: String,
+    /// Model file or directory, for filters that load one.
+    pub model: Option<PathBuf>,
+    /// Filter-specific settings from `[audio.filter.<provider>]`.
+    pub options: HashMap<String, serde_json::Value>,
+}
+
+impl FilterStageConfig {
+    /// A filter config for `provider` with default options.
+    pub fn new(provider: impl Into<String>) -> Self {
+        Self {
+            provider: provider.into(),
+            ..Self::default()
+        }
+    }
+
+    /// A reader over this filter's options (`audio.filter.<provider>.<key>`).
+    pub fn options(&self) -> crate::options::ProviderOptions<'_> {
+        crate::options::ProviderOptions::new("filter.options", &self.options).with_engine_keys(&[])
+    }
+
+    with_setters! {
+        with_model => model: Option<PathBuf>,
+        with_options => options: HashMap<String, serde_json::Value>,
+    }
+}
+
+impl fmt::Debug for FilterStageConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("FilterStageConfig")
+            .field("provider", &self.provider)
+            .field("model", &self.model)
+            .field("options", &debug_options(&self.options))
+            .finish()
+    }
+}
+
 impl VadConfig {
     /// A reader over this section's options (`vad.<key>` in
     /// errors), with the keys the engine itself reads already accounted for.

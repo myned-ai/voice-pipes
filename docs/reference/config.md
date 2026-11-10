@@ -44,6 +44,7 @@ All sections reject unknown keys except the open option maps noted.
 | `[adaptive_quality]` | table | disabled | Network-aware fidelity tiers (`serve` only) |
 | `[grading]` | table | built-in defaults | Per-pipeline session SLA targets and latency bands |
 | `[transport]` | table | disabled | WebSocket server (`serve` only) |
+| `[[audio_filter]]` | array | `[]` | Ingress audio filters (pre-VAD, pre-STT noise suppression) |
 | `[[audio_post_processor]]` | array | `[]` | Post-TTS chain |
 | `[[client_tool]]` | array | `[]` | Inline client tools |
 | `[agent]` | table | — | External agent and idle re-engagement |
@@ -278,6 +279,17 @@ but the session's fidelity tier stays `full`.
 
 A `poor` ping bucket counts as one tier; `lost` does not vote because the
 heartbeat is already closing the session.
+
+## `[[audio_filter]]`
+
+Ingress audio filters that process microphone PCM in place before VAD and STT.
+Multiple filters execute in configured array order.
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `provider` | string | required | Factory name or alias (e.g. `"deepfilter"`, `"deepfilternet3"`) |
+| `model` | path | — | ONNX model path when using model-based filter; omitted runs pure-Rust DSP |
+| `attenuation_limit_db` | float | `30.0` | Maximum attenuation floor in dB (`0.0..=100.0`) |
 
 ## `[[audio_post_processor]]`
 

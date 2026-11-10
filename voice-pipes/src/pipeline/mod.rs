@@ -5,6 +5,7 @@
 
 pub mod annotate;
 pub mod events;
+pub mod filter;
 pub mod extras;
 mod interrupt;
 mod llm;
@@ -47,7 +48,8 @@ pub use post_audio::{
 pub use stt::stt_task;
 pub use throughput::{CallOutcome, ChainStats, OutputThroughput};
 pub use tts::tts_task;
-pub use vad::vad_filter_task;
+pub use filter::{FilterChain, build_filter_chain};
+pub use vad::{vad_filter_task, vad_filter_task_with_filter};
 
 #[cfg(test)]
 #[path = "tests/suite/mod.rs"]

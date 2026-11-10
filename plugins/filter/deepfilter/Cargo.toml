@@ -1,0 +1,24 @@
+[package]
+name = "voice-pipes-filter-deepfilter"
+version.workspace = true
+edition = "2024"
+description = "Pure-Rust DeepFilterNet3 noise suppression as a voice-pipes audio filter plugin, on the SDK only"
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+voice-pipes-sdk.workspace = true
+rustfft.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+voice-pipes-sdk = { workspace = true, features = ["testing"] }
+hound.workspace = true
+serde_json.workspace = true
