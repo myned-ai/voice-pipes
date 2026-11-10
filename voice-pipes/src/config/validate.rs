@@ -10,6 +10,7 @@ pub const MAX_PROMPT_BYTES: usize = 32 * 1024;
 /// Caps on repeated tables that are instantiated per session.
 pub const MAX_TEXT_PROCESSORS: usize = 16;
 pub const MAX_POST_PROCESSORS: usize = 16;
+pub const MAX_AUDIO_FILTERS: usize = 16;
 pub const MAX_STATIC_CLIENT_TOOLS: usize = 64;
 
 /// Validate a merged config. Returns a list of errors (empty = valid).
@@ -33,6 +34,7 @@ pub fn validate(cfg: &PipelineConfig) -> Vec<ConfigError> {
     check_vad_timing(cfg, &mut errors);
     check_shape_caps(cfg, &mut errors);
     check_text_processors(cfg, &mut errors);
+    check_audio_filters(cfg, &mut errors);
     check_client_tools(cfg, &mut errors);
 
     errors
@@ -616,6 +618,12 @@ fn check_shape_caps(cfg: &PipelineConfig, errors: &mut Vec<ConfigError>) {
             format!("at most {MAX_POST_PROCESSORS} entries"),
         ));
     }
+    if cfg.audio_filter.len() > MAX_AUDIO_FILTERS {
+        errors.push(ConfigError::new(
+            "audio_filter",
+            format!("at most {MAX_AUDIO_FILTERS} entries"),
+        ));
+    }
     if cfg.client_tool.len() > MAX_STATIC_CLIENT_TOOLS {
         errors.push(ConfigError::new(
             "client_tool",
@@ -695,6 +703,49 @@ fn indexed_text_processor_field(field: &str, idx: usize) -> String {
         Some("") => format!("text_processor[{idx}]"),
         Some(rest) if rest.starts_with('.') => format!("text_processor[{idx}]{rest}"),
         _ => format!("text_processor[{idx}].{field}"),
+    }
+}
+
+/// Each `[[audio_filter]]`, through its factory.
+fn check_audio_filters(cfg: &PipelineConfig, errors: &mut Vec<ConfigError>) {
+    let filter_factories = crate::pipeline::filter::filter_factories();
+    let known_providers: Vec<String> = filter_factories
+        .iter()
+        .map(|f| format!("\"{}\"", f.name()))
+        .collect();
+    for (idx, af) in cfg.audio_filter.iter().enumerate() {
+        match filter_factories.iter().find(|f| f.matches(&af.provider)) {
+            None => errors.push(
+                ConfigError::new(
+                    format!("audio_filter[{idx}].provider"),
+                    format!(
+                        "unknown audio filter \"{}\"; this build has [{}]",
+                        af.provider,
+                        known_providers.join(", ")
+                    ),
+                )
+                .with_kind(ConfigErrorKind::UnknownName),
+            ),
+            Some(factory) => {
+                let stage_cfg = voice_pipes_sdk::FilterStageConfig::new(&af.provider)
+                    .with_model(af.model.clone())
+                    .with_options(af.options.clone());
+                errors.extend(factory.validate(&stage_cfg).into_iter().map(|mut e| {
+                    e.field = indexed_audio_filter_field(&e.field, idx);
+                    e
+                }));
+            }
+        }
+    }
+}
+
+/// `field` as reported for `audio_filter[idx]`: `audio_filter.<key>`
+/// becomes `audio_filter[idx].<key>`, and a bare key is placed under it.
+fn indexed_audio_filter_field(field: &str, idx: usize) -> String {
+    match field.strip_prefix("audio_filter") {
+        Some("") => format!("audio_filter[{idx}]"),
+        Some(rest) if rest.starts_with('.') => format!("audio_filter[{idx}]{rest}"),
+        _ => format!("audio_filter[{idx}].{field}"),
     }
 }
 

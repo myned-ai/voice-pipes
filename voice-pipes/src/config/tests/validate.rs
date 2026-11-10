@@ -224,3 +224,47 @@ fn realtime_section_is_refused_by_a_build_without_realtime() {
         "{errs:?}"
     );
 }
+
+#[test]
+fn audio_filter_validates_unknown_provider_and_indexes_errors() {
+    struct PickyFilter;
+    impl voice_pipes_sdk::filter::AudioFilterFactory for PickyFilter {
+        fn name(&self) -> &'static str {
+            "validate-filter-index-test"
+        }
+        fn validate(&self, cfg: &voice_pipes_sdk::FilterStageConfig) -> Vec<ConfigError> {
+            if cfg.options.contains_key("bad") {
+                vec![ConfigError::new("audio_filter.bad", "not allowed")]
+            } else {
+                Vec::new()
+            }
+        }
+        fn build(
+            &self,
+            _cfg: &voice_pipes_sdk::FilterStageConfig,
+            _ctx: &voice_pipes_sdk::BuildContext<'_>,
+        ) -> Result<Box<dyn voice_pipes_sdk::filter::AudioFilter>, voice_pipes_sdk::BuildError> {
+            Err(voice_pipes_sdk::BuildError::failed("never built"))
+        }
+    }
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        crate::pipeline::filter::register_filter_factory(|| Box::new(PickyFilter))
+            .expect("free name");
+    });
+
+    let unknown_errs = field_errors("[[audio_filter]]\nprovider = \"nonexistent-filter\"\n");
+    assert!(
+        unknown_errs.contains(&"audio_filter[0].provider".to_string()),
+        "{unknown_errs:?}"
+    );
+
+    let indexed_errs = field_errors(
+        "[[audio_filter]]\nprovider = \"validate-filter-index-test\"\n\n\
+         [[audio_filter]]\nprovider = \"validate-filter-index-test\"\nbad = true\n",
+    );
+    assert!(
+        indexed_errs.contains(&"audio_filter[1].bad".to_string()),
+        "{indexed_errs:?}"
+    );
+}

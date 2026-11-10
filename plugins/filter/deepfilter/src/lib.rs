@@ -26,22 +26,25 @@ use std::time::Instant;
 use rustfft::num_complex::Complex;
 use rustfft::{Fft, FftPlanner};
 
-use voice_pipes_sdk::audio::resample::StreamingResampler;
 use voice_pipes_sdk::component::{Component, ComponentCore, ComponentKind, CoreComponent};
 use voice_pipes_sdk::filter::{AudioFilter, AudioFilterFactory, FilterError, FilterMetrics};
 use voice_pipes_sdk::{BuildContext, BuildError, ConfigError, FilterStageConfig};
 
-const SAMPLE_RATE_48K: u32 = 48_000;
 const SAMPLE_RATE_16K: u32 = 16_000;
-const WINDOW_LEN: usize = 960;
-const HOP_LEN: usize = 480;
-const NUM_BINS: usize = 481;
+/// 20 ms analysis/synthesis window at 16 kHz.
+const WINDOW_LEN: usize = 320;
+/// 10 ms hop size (50% overlap) at 16 kHz.
+const HOP_LEN: usize = 160;
+/// Number of positive-frequency FFT bins (`WINDOW_LEN / 2 + 1`).
+const NUM_BINS: usize = 161;
+/// Number of Equivalent Rectangular Bandwidth (ERB) bands spanning 0..8 kHz.
 const NUM_ERB_BANDS: usize = 32;
 
 /// Default attenuation limit in dB (30.0 dB attenuation floor).
 const DEFAULT_ATTEN_LIM_DB: f32 = 30.0;
 
-/// Generates a Vorbis square-root window of length `len`.
+/// Generates a Vorbis square-root window of length `len` satisfying the
+/// Princen-Bradley perfect reconstruction condition at 50% overlap.
 fn vorbis_window(len: usize) -> Vec<f32> {
     let mut w = Vec::with_capacity(len);
     for n in 0..len {
@@ -53,25 +56,42 @@ fn vorbis_window(len: usize) -> Vec<f32> {
     w
 }
 
-/// Computes center and edge bin indices for 32 ERB bands between 0 and 24 kHz.
+/// Computes strictly monotonic edge bin indices for 32 ERB bands across 0..8 kHz.
 fn erb_band_bins() -> Vec<usize> {
     let mut bins = Vec::with_capacity(NUM_ERB_BANDS + 1);
+    let erb_max = (1.0_f32 + 0.00437 * 8_000.0).ln();
     for i in 0..=NUM_ERB_BANDS {
-        // Glasberg & Moore (1990) ERB scale mapping
+        // Glasberg & Moore (1990) ERB scale mapping over 0..8 kHz
         let fraction = (i as f32) / (NUM_ERB_BANDS as f32);
-        let freq = 1000.0 * ((fraction * 2.8).exp() - 1.0);
+        let freq = ((fraction * erb_max).exp() - 1.0) / 0.00437;
         #[expect(
             clippy::cast_possible_truncation,
-            reason = "band bin index bounded by NUM_BINS (481)"
+            reason = "band bin index bounded by NUM_BINS (161)"
         )]
-        let bin = ((freq / 24_000.0) * (NUM_BINS as f32)).round() as usize;
-        let clamped = bin.min(NUM_BINS);
-        bins.push(clamped);
+        let raw_bin = ((freq / 8_000.0) * ((NUM_BINS - 1) as f32)).round() as usize;
+        let min_bin = i.min(NUM_BINS);
+        let max_bin = NUM_BINS.saturating_sub(NUM_ERB_BANDS.saturating_sub(i));
+        bins.push(raw_bin.clamp(min_bin, max_bin));
+    }
+    if let Some(last) = bins.last_mut() {
+        *last = NUM_BINS;
     }
     bins
 }
 
-/// `DeepFilter` noise suppression processor.
+/// Estimates the broadband noise floor from the quieter half of voice bands (bands 3..32).
+fn estimate_voice_noise_floor(band_powers: &[f32; NUM_ERB_BANDS]) -> f32 {
+    let mut sorted_voice = *band_powers;
+    if let Some(voice_slice) = sorted_voice.get_mut(3..NUM_ERB_BANDS) {
+        voice_slice.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    }
+    let half_count = (NUM_ERB_BANDS - 3) / 2;
+    let lower_sum: f32 = sorted_voice.iter().skip(3).take(half_count).sum();
+    (lower_sum / (half_count.max(1) as f32)).max(1e-6)
+}
+
+/// `DeepFilter` noise suppression processor with pre-allocated zero-allocation
+/// hot-path buffers and decision-directed ERB Wiener filtering.
 struct DeepFilter {
     core: Arc<ComponentCore>,
     fft_forward: Arc<dyn Fft<f32>>,
@@ -79,15 +99,22 @@ struct DeepFilter {
     window: Vec<f32>,
     erb_edges: Vec<usize>,
     atten_lim_db: f32,
-    noise_psd: Vec<f32>,
+    min_gain: f32,
+    initialized: bool,
+    noise_psd: [f32; NUM_ERB_BANDS],
+    prev_clean_psd: [f32; NUM_ERB_BANDS],
     in_history: Vec<f32>,
     out_overlap: Vec<f32>,
-    resampler_in: StreamingResampler,
-    resampler_out: StreamingResampler,
+    fft_buf: Vec<Complex<f32>>,
+    fft_scratch: Vec<Complex<f32>>,
+    frame_buf: Vec<f32>,
+    out_hop_buf: Vec<f32>,
+    in_fifo: Vec<i16>,
+    out_fifo: Vec<i16>,
 }
 
-impl std::fmt::Debug for DeepFilter {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for DeepFilter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("DeepFilter")
             .field("atten_lim_db", &self.atten_lim_db)
             .finish_non_exhaustive()
@@ -96,137 +123,178 @@ impl std::fmt::Debug for DeepFilter {
 
 impl DeepFilter {
     /// Create a new `DeepFilter` instance with the given attenuation limit.
-    fn new(atten_lim_db: f32) -> Result<Self, FilterError> {
+    fn new(atten_lim_db: f32) -> Self {
         let mut planner = FftPlanner::<f32>::new();
         let fft_forward = planner.plan_fft_forward(WINDOW_LEN);
         let fft_inverse = planner.plan_fft_inverse(WINDOW_LEN);
+        let scratch_len = fft_forward
+            .get_inplace_scratch_len()
+            .max(fft_inverse.get_inplace_scratch_len());
         let window = vorbis_window(WINDOW_LEN);
         let erb_edges = erb_band_bins();
+        let min_gain = 10.0_f32.powf(-atten_lim_db / 20.0);
 
-        let resampler_in = StreamingResampler::new(SAMPLE_RATE_16K, SAMPLE_RATE_48K)
-            .map_err(|e| FilterError::ConfigError(e.to_string()))?;
-        let resampler_out = StreamingResampler::new(SAMPLE_RATE_48K, SAMPLE_RATE_16K)
-            .map_err(|e| FilterError::ConfigError(e.to_string()))?;
-
-        Ok(Self {
+        Self {
             core: Arc::new(ComponentCore::new("filter:deepfilter", ComponentKind::Audio)),
             fft_forward,
             fft_inverse,
             window,
             erb_edges,
             atten_lim_db,
-            noise_psd: vec![1e-4; NUM_ERB_BANDS],
+            min_gain,
+            initialized: false,
+            noise_psd: [1e-6; NUM_ERB_BANDS],
+            prev_clean_psd: [0.0; NUM_ERB_BANDS],
             in_history: vec![0.0; HOP_LEN],
             out_overlap: vec![0.0; HOP_LEN],
-            resampler_in,
-            resampler_out,
-        })
+            fft_buf: vec![Complex::new(0.0, 0.0); WINDOW_LEN],
+            fft_scratch: vec![Complex::new(0.0, 0.0); scratch_len],
+            frame_buf: vec![0.0; WINDOW_LEN],
+            out_hop_buf: vec![0.0; HOP_LEN],
+            in_fifo: Vec::with_capacity(WINDOW_LEN * 2),
+            out_fifo: Vec::with_capacity(WINDOW_LEN * 2),
+        }
     }
 
-    /// Process one 48 kHz frame (960 samples with 480 hop).
-    fn process_frame(&mut self, frame: &[f32], out_hop: &mut [f32]) -> f32 {
-        let mut complex_in = Vec::with_capacity(WINDOW_LEN);
-        for (sample, win) in frame.iter().zip(self.window.iter()) {
-            complex_in.push(Complex::new(sample * win, 0.0));
-        }
-
-        self.fft_forward.process(&mut complex_in);
-
-        // Compute power in each of the 32 ERB bands
-        let mut band_powers = [0.0f32; NUM_ERB_BANDS];
-        for b in 0..NUM_ERB_BANDS {
+    /// Compute mean power in each of the 32 ERB bands from `self.fft_buf`.
+    fn compute_band_powers(&self) -> [f32; NUM_ERB_BANDS] {
+        let mut band_powers = [0.0_f32; NUM_ERB_BANDS];
+        for (b, slot) in band_powers.iter_mut().enumerate() {
             let start = *self.erb_edges.get(b).unwrap_or(&0);
             let end = (*self.erb_edges.get(b + 1).unwrap_or(&NUM_BINS)).max(start + 1);
-            let mut sum = 0.0f32;
+            let mut sum = 0.0_f32;
             let count = (end - start).max(1) as f32;
             for bin in start..end.min(NUM_BINS) {
-                if let Some(c) = complex_in.get(bin) {
+                if let Some(c) = self.fft_buf.get(bin) {
                     sum += c.norm_sqr();
                 }
             }
-            if let Some(p) = band_powers.get_mut(b) {
-                *p = sum / count;
+            *slot = sum / count;
+        }
+        band_powers
+    }
+
+    /// Update MCRA noise floor and compute decision-directed ERB Wiener gains.
+    fn compute_erb_gains(&mut self, band_powers: &[f32; NUM_ERB_BANDS]) -> ([f32; NUM_ERB_BANDS], f32) {
+        let noise_floor_est = estimate_voice_noise_floor(band_powers);
+        if !self.initialized {
+            self.initialized = true;
+            for (b, (slot, &p)) in self.noise_psd.iter_mut().zip(band_powers.iter()).enumerate() {
+                *slot = if b < 3 || p <= 4.0 * noise_floor_est {
+                    p.max(1e-6)
+                } else {
+                    noise_floor_est
+                };
             }
         }
 
-        // Noise PSD tracker & Wiener gain calculation with attenuation limit
-        let min_gain = 10.0f32.powf(-self.atten_lim_db / 20.0);
-        let mut band_gains = [1.0f32; NUM_ERB_BANDS];
-        let mut total_snr_gain = 0.0f32;
-
-        // Minimum statistics noise floor tracking
-        let first_frame = self.noise_psd.iter().all(|&p| p <= 1e-4);
-        if first_frame {
-            for (slot, &p) in self.noise_psd.iter_mut().zip(band_powers.iter()) {
-                *slot = p.max(1e-4);
-            }
-        }
+        let mut band_gains = [1.0_f32; NUM_ERB_BANDS];
+        let mut total_in_power = 0.0_f32;
+        let mut total_out_power = 0.0_f32;
 
         for b in 0..NUM_ERB_BANDS {
-            let p_curr = *band_powers.get(b).unwrap_or(&1e-4);
-            let n_prev = *self.noise_psd.get(b).unwrap_or(&1e-4);
+            let p_curr = *band_powers.get(b).unwrap_or(&1e-6);
+            let n_prev = *self.noise_psd.get(b).unwrap_or(&1e-6);
 
-            let n_next = if p_curr < n_prev {
-                0.8 * n_prev + 0.2 * p_curr
+            let n_next = if b < 3 {
+                0.70 * n_prev + 0.30 * p_curr
+            } else if p_curr < n_prev {
+                0.80 * n_prev + 0.20 * p_curr
+            } else if p_curr > 4.0 * noise_floor_est {
+                0.9995 * n_prev + 0.0005 * noise_floor_est
             } else {
-                0.95 * n_prev + 0.05 * p_curr
+                0.85 * n_prev + 0.15 * p_curr
             };
+            let n_clamped = n_next.max(1e-6);
             if let Some(slot) = self.noise_psd.get_mut(b) {
-                *slot = n_next;
+                *slot = n_clamped;
             }
 
-            let snr = (p_curr - n_next).max(0.0) / (n_next + 1e-6);
-            let gain = (snr / (snr + 1.0)).max(min_gain);
+            let post_snr = p_curr / n_clamped;
+            let inst_snr = (post_snr - 1.0).max(0.0);
+            let prev_clean = *self.prev_clean_psd.get(b).unwrap_or(&0.0);
+            let prio_snr = 0.85 * (prev_clean / n_clamped) + 0.15 * inst_snr;
+
+            let gain = (prio_snr / (prio_snr + 1.0)).max(self.min_gain);
             if let Some(g) = band_gains.get_mut(b) {
                 *g = gain;
             }
-            total_snr_gain += (1.0 / (gain + 1e-4)).log10() * 10.0;
+            if let Some(clean_slot) = self.prev_clean_psd.get_mut(b) {
+                *clean_slot = p_curr * gain * gain;
+            }
+
+            total_in_power += p_curr;
+            total_out_power += p_curr * gain * gain;
         }
 
-        // Apply gains across frequency bins 0..NUM_BINS
+        let snr_db = if total_in_power > 1e-6 {
+            (10.0 * (total_in_power / (total_out_power + 1e-9)).log10()).max(0.0)
+        } else {
+            0.0
+        };
+        (band_gains, snr_db)
+    }
+
+    /// Process one 16 kHz frame (`self.frame_buf`, 320 samples) into
+    /// `self.out_hop_buf` (160 samples) with zero heap allocations.
+    fn process_frame(&mut self) -> f32 {
+        for ((slot, &sample), &win) in self
+            .fft_buf
+            .iter_mut()
+            .zip(self.frame_buf.iter())
+            .zip(self.window.iter())
+        {
+            *slot = Complex::new(sample * win, 0.0);
+        }
+
+        self.fft_forward
+            .process_with_scratch(&mut self.fft_buf, &mut self.fft_scratch);
+
+        let band_powers = self.compute_band_powers();
+        let (band_gains, snr_db) = self.compute_erb_gains(&band_powers);
+
         for b in 0..NUM_ERB_BANDS {
             let start = *self.erb_edges.get(b).unwrap_or(&0);
             let end = (*self.erb_edges.get(b + 1).unwrap_or(&NUM_BINS)).max(start + 1);
             let gain = *band_gains.get(b).unwrap_or(&1.0);
             for bin in start..end.min(NUM_BINS) {
-                if let Some(c) = complex_in.get_mut(bin) {
+                if let Some(c) = self.fft_buf.get_mut(bin) {
                     *c *= gain;
                 }
             }
         }
 
-        // Mirror conjugate for inverse FFT
         for bin in 1..NUM_BINS.saturating_sub(1) {
             let mirror = WINDOW_LEN - bin;
-            if let (Some(c), Some(mc)) = (complex_in.get(bin).copied(), complex_in.get_mut(mirror)) {
+            if let (Some(c), Some(mc)) = (
+                self.fft_buf.get(bin).copied(),
+                self.fft_buf.get_mut(mirror),
+            ) {
                 *mc = Complex::new(c.re, -c.im);
             }
         }
 
-        self.fft_inverse.process(&mut complex_in);
+        self.fft_inverse
+            .process_with_scratch(&mut self.fft_buf, &mut self.fft_scratch);
 
-        // Normalize iFFT by 1/N and apply synthesis window
         let norm = 1.0 / (WINDOW_LEN as f32);
-        let mut reconstructed = Vec::with_capacity(WINDOW_LEN);
-        for (c, win) in complex_in.iter().zip(self.window.iter()) {
-            reconstructed.push(c.re * norm * win);
-        }
-
-        // Overlap-add into output hop
-        for (i, out) in out_hop.iter_mut().enumerate() {
-            let rec_head = *reconstructed.get(i).unwrap_or(&0.0);
+        for (i, out) in self.out_hop_buf.iter_mut().enumerate() {
+            let c_re = self.fft_buf.get(i).map_or(0.0, |c| c.re);
+            let win = *self.window.get(i).unwrap_or(&0.0);
             let prev = *self.out_overlap.get(i).unwrap_or(&0.0);
-            *out = rec_head + prev;
+            *out = c_re * norm * win + prev;
         }
 
-        // Store tail for next overlap-add
         for i in 0..HOP_LEN {
+            let idx = i + HOP_LEN;
+            let c_re = self.fft_buf.get(idx).map_or(0.0, |c| c.re);
+            let win = *self.window.get(idx).unwrap_or(&0.0);
             if let Some(slot) = self.out_overlap.get_mut(i) {
-                *slot = *reconstructed.get(i + HOP_LEN).unwrap_or(&0.0);
+                *slot = c_re * norm * win;
             }
         }
 
-        (total_snr_gain / (NUM_ERB_BANDS as f32)).max(0.0)
+        snr_db
     }
 }
 
@@ -249,75 +317,80 @@ impl AudioFilter for DeepFilter {
             return Ok(FilterMetrics::new(started.elapsed()));
         }
 
-        // 1. Resample 16 kHz -> 48 kHz
-        let in_48k = self.resampler_in.process_chunk(samples);
+        self.in_fifo.extend_from_slice(samples);
 
-        // 2. Process 48 kHz frames using 960 window and 480 hop
-        let mut processed_48k = Vec::with_capacity(in_48k.len());
-        let mut avg_snr_improvement = 0.0f32;
-        let mut hops_processed = 0usize;
+        let mut total_snr_improvement = 0.0_f32;
+        let mut hops_processed = 0_usize;
 
-        let mut offset = 0;
-        while offset + HOP_LEN <= in_48k.len() {
-            let mut frame = Vec::with_capacity(WINDOW_LEN);
-            frame.extend_from_slice(&self.in_history);
-            if let Some(hop) = in_48k.get(offset..offset + HOP_LEN) {
-                for &s in hop {
-                    frame.push((s as f32) / 32768.0);
-                }
-                self.in_history.clear();
-                for &s in hop {
-                    self.in_history.push((s as f32) / 32768.0);
+        while self.in_fifo.len() >= HOP_LEN {
+            for (dst, &src) in self.frame_buf.iter_mut().zip(self.in_history.iter()) {
+                *dst = src;
+            }
+            if let Some((hop_in, frame_tail)) = self
+                .in_fifo
+                .get(..HOP_LEN)
+                .zip(self.frame_buf.get_mut(HOP_LEN..WINDOW_LEN))
+            {
+                for ((dst_frame, dst_hist), &s) in frame_tail
+                    .iter_mut()
+                    .zip(self.in_history.iter_mut())
+                    .zip(hop_in.iter())
+                {
+                    let norm_s = (s as f32) / 32768.0;
+                    *dst_frame = norm_s;
+                    *dst_hist = norm_s;
                 }
             }
+            self.in_fifo.drain(..HOP_LEN);
 
-            let mut out_hop = vec![0.0f32; HOP_LEN];
-            let snr_gain = self.process_frame(&frame, &mut out_hop);
-            avg_snr_improvement += snr_gain;
+            total_snr_improvement += self.process_frame();
             hops_processed += 1;
 
             #[expect(
                 clippy::cast_possible_truncation,
                 reason = "PCM samples clamped to i16 bounds"
             )]
-            for s in out_hop {
-                let clamped = (s.clamp(-1.0, 1.0) * 32767.0).round() as i16;
-                processed_48k.push(clamped);
+            for &s in &self.out_hop_buf {
+                let pcm = (s.clamp(-1.0, 1.0) * 32767.0).round() as i16;
+                self.out_fifo.push(pcm);
             }
-
-            offset += HOP_LEN;
         }
 
-        // 3. Resample 48 kHz back to 16 kHz
-        let filtered_16k = self.resampler_out.process_chunk(&processed_48k);
-
-        // 4. Overwrite samples buffer in-place
-        let copy_len = samples.len().min(filtered_16k.len());
-        for (dst, src) in samples.iter_mut().zip(filtered_16k.iter()).take(copy_len) {
-            *dst = *src;
+        let avail = self.out_fifo.len().min(samples.len());
+        let pad = samples.len().saturating_sub(avail);
+        for dst in samples.iter_mut().take(pad) {
+            *dst = 0;
         }
+        if let Some((dst_slice, src_slice)) = samples
+            .get_mut(pad..pad + avail)
+            .zip(self.out_fifo.get(..avail))
+        {
+            dst_slice.copy_from_slice(src_slice);
+        }
+        self.out_fifo.drain(..avail);
 
         let elapsed = started.elapsed();
         self.core.record_ok(elapsed);
 
-        let final_snr =
-            (hops_processed > 0).then(|| avg_snr_improvement / (hops_processed as f32));
+        let avg_snr = if hops_processed > 0 {
+            total_snr_improvement / (hops_processed as f32)
+        } else {
+            0.0
+        };
 
         Ok(FilterMetrics::new(elapsed)
-            .with_snr_improvement(final_snr.unwrap_or(12.0))
+            .with_snr_improvement(avg_snr)
             .with_suppressed(false))
     }
 
     fn reset(&mut self) {
+        self.initialized = false;
+        self.noise_psd.fill(1e-6);
+        self.prev_clean_psd.fill(0.0);
         self.in_history.fill(0.0);
         self.out_overlap.fill(0.0);
-        self.noise_psd.fill(1e-4);
-        if let Ok(r) = StreamingResampler::new(SAMPLE_RATE_16K, SAMPLE_RATE_48K) {
-            self.resampler_in = r;
-        }
-        if let Ok(r) = StreamingResampler::new(SAMPLE_RATE_48K, SAMPLE_RATE_16K) {
-            self.resampler_out = r;
-        }
+        self.in_fifo.clear();
+        self.out_fifo.clear();
     }
 
     fn name(&self) -> &'static str {
@@ -361,9 +434,7 @@ impl AudioFilterFactory for DeepFilterFactory {
         )]
         let atten_lim =
             opts.f64_in("attenuation_limit_db", 0.0..=100.0, DEFAULT_ATTEN_LIM_DB as f64) as f32;
-        let filter = DeepFilter::new(atten_lim)
-            .map_err(|e| BuildError::failed(e.to_string()))?;
-        Ok(Box::new(filter))
+        Ok(Box::new(DeepFilter::new(atten_lim)))
     }
 }
 
