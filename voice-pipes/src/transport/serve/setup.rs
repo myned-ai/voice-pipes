@@ -969,11 +969,16 @@ pub(super) fn setup_audio_pipeline(
         // Read before the VAD moves into its task: barge-in below needs to know
         // whether anything local is actually judging the audio.
         let local_vad_detects_speech = vad.name() != "passthrough";
+        let filter_chain = pipeline::build_filter_chain(&state.config, None).unwrap_or_else(|e| {
+            tracing::warn!(error = %e, "failed to build audio filter chain for transport, proceeding without filter");
+            None
+        });
         let (vad_out_tx, vad_out_rx) = mpsc::channel::<AudioChunk>(AUDIO_IN_BUF);
-        tokio::spawn(pipeline::vad_filter_task(
+        tokio::spawn(pipeline::vad_filter_task_with_filter(
             raw_audio_rx,
             vad_out_tx,
             vad,
+            filter_chain,
             silence_ms,
             pre_roll_ms,
             Some(std::sync::Arc::clone(&user_speaking)),

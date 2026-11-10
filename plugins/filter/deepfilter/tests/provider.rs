@@ -40,8 +40,8 @@ fn filter_attenuates_stationary_noise() {
     let rms: f64 = (noise_chunk.iter().map(|&s| (s as f64) * (s as f64)).sum::<f64>()
         / (noise_chunk.len() as f64))
         .sqrt();
-    assert!(rms < 1500.0, "noise must be attenuated; rms was {rms}");
-    assert!(metrics.snr_improvement_db.unwrap_or(0.0) > 0.0);
+    assert!(rms < 500.0, "noise must be attenuated; rms was {rms}");
+    assert!(metrics.snr_improvement_db.unwrap_or(0.0) > 10.0);
 }
 
 #[test]
@@ -58,8 +58,59 @@ fn filter_preserves_clean_tone() {
 
     let metrics = filter.process_chunk(&mut tone_chunk, 16_000).expect("filter process");
     let peak = tone_chunk.iter().map(|s| s.abs()).max().unwrap_or(0);
-    assert!(peak > 5000, "tone must be preserved; peak was {peak}");
+    assert!(peak > 10_000, "tone must be preserved; peak was {peak}");
     assert!(metrics.compute_duration > Duration::ZERO);
+}
+
+#[test]
+fn filter_does_not_self_suppress_continuous_speech_harmonic() {
+    let mut filter = test_filter();
+
+    // Simulate 2 seconds (100 chunks of 20 ms) of continuous harmonic voice signal
+    let mut last_peak = 0i16;
+    for chunk_idx in 0..100 {
+        let mut chunk: Vec<i16> = (0..320)
+            .map(|i| {
+                let sample_idx = chunk_idx * 320 + i;
+                let t = (sample_idx as f32) / 16_000.0;
+                // Fundamental 200 Hz + first two formants (600 Hz, 1200 Hz)
+                let val = 0.6 * (2.0 * std::f32::consts::PI * 200.0 * t).cos()
+                    + 0.3 * (2.0 * std::f32::consts::PI * 600.0 * t).cos()
+                    + 0.1 * (2.0 * std::f32::consts::PI * 1200.0 * t).cos();
+                (val * 14_000.0) as i16
+            })
+            .collect();
+        filter.process_chunk(&mut chunk, 16_000).expect("filter process");
+        last_peak = chunk.iter().map(|s| s.abs()).max().unwrap_or(0);
+    }
+
+    assert!(
+        last_peak > 10_000,
+        "continuous harmonic voice over 2s must not self-suppress; peak was {last_peak}"
+    );
+}
+
+#[test]
+fn filter_handles_non_multiple_chunk_sizes_without_sample_loss() {
+    let mut filter = test_filter();
+
+    // Feed 5 chunks of 200 samples (total 1000 samples = 6 hops of 160 + 40 remainder)
+    for chunk_idx in 0..5 {
+        let mut chunk: Vec<i16> = (0..200)
+            .map(|i| {
+                let idx = chunk_idx * 200 + i;
+                let angle = (idx as f32) * 2.0 * std::f32::consts::PI * 500.0 / 16_000.0;
+                (angle.sin() * 12_000.0) as i16
+            })
+            .collect();
+        filter
+            .process_chunk(&mut chunk, 16_000)
+            .expect("arbitrary chunk size should succeed");
+        if chunk_idx >= 1 {
+            let peak = chunk.iter().map(|s| s.abs()).max().unwrap_or(0);
+            assert!(peak > 8_000, "chunk {chunk_idx} should carry filtered signal, got {peak}");
+        }
+    }
 }
 
 #[test]

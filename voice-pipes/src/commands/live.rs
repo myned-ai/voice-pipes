@@ -157,6 +157,7 @@ pub async fn run_live(
 
     // Shared VAD filter task (same logic as the transport/serve path).
     let vad = config::build_vad(cfg, None)?;
+    let filter_chain = pipeline::build_filter_chain(cfg, None)?;
     // With recording on, the raw mic passes through a tee first: the VAD is
     // about to discard the silence between turns, which is exactly what a
     // turn-taking model reads.
@@ -181,10 +182,11 @@ pub async fn run_live(
             tee_rx
         }
     };
-    tokio::spawn(pipeline::vad_filter_task(
+    tokio::spawn(pipeline::vad_filter_task_with_filter(
         vad_input_rx,
         mic_tx,
         vad,
+        filter_chain,
         silence_ms,
         cfg.vad
             .as_ref()
@@ -622,6 +624,7 @@ pub async fn run_listen(
         audit::StreamingAuditSink::spawn(store, session_id, AUDIT_SINK_CAP)
     });
 
+    let (raw_mic_tx, raw_mic_rx) = tokio::sync::mpsc::channel::<pipeline::AudioChunk>(64);
     let (mic_tx, mic_rx) = tokio::sync::mpsc::channel::<pipeline::AudioChunk>(64);
     let (stt_tx, mut stt_rx) = tokio::sync::mpsc::channel::<pipeline::Utterance>(4);
 
@@ -644,12 +647,28 @@ pub async fn run_listen(
     ));
 
     let vad = config::build_vad(cfg, None)?;
+    let filter_chain = pipeline::build_filter_chain(cfg, None)?;
+    let pre_roll_ms = cfg
+        .vad
+        .as_ref()
+        .map_or(crate::config::DEFAULT_VAD_PRE_ROLL_MS, |v| {
+            v.effective_pre_roll_ms()
+        });
+    tokio::spawn(pipeline::vad_filter_task_with_filter(
+        raw_mic_rx,
+        mic_tx,
+        vad,
+        filter_chain,
+        silence_ms,
+        pre_roll_ms,
+        None,
+    ));
 
     let stop_mic = std::sync::Arc::clone(&stop);
     let mic_handle = tokio::task::spawn_blocking(move || {
         println!("\n🎤 Listening (STT only)... speak and pause. Ctrl+C to stop.\n");
-        if let Err(e) = audio::io::mic_stream(mic_tx, stop_mic, 20, silence_ms, vad) {
-            tracing::error!(error = %e, "mic stream error");
+        if let Err(e) = audio::io::mic_capture_raw(raw_mic_tx, stop_mic, 20) {
+            tracing::error!(error = %e, "mic capture error");
         }
     });
 
