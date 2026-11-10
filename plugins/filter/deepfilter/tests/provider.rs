@@ -114,11 +114,29 @@ fn filter_handles_non_multiple_chunk_sizes_without_sample_loss() {
 }
 
 #[test]
-fn filter_rejects_unsupported_sample_rate() {
+fn filter_supports_multiple_sample_rates_and_rejects_invalid_rates() {
     let mut filter = test_filter();
-    let mut chunk = vec![100i16; 320];
-    let err = filter.process_chunk(&mut chunk, 8_000).expect_err("should reject 8k");
-    assert!(err.to_string().contains("expects 16000 Hz, received 8000 Hz"));
+
+    // Verify 8 kHz, 16 kHz, 24 kHz, and 48 kHz all work seamlessly (20 ms chunks)
+    for &rate in &[8_000_u32, 16_000, 24_000, 48_000] {
+        let samples_20ms = (rate as usize) / 50;
+        let mut tone_chunk: Vec<i16> = (0..samples_20ms)
+            .map(|i| {
+                let angle = (i as f32) * 2.0 * std::f32::consts::PI * 500.0 / (rate as f32);
+                (angle.sin() * 14_000.0) as i16
+            })
+            .collect();
+        filter
+            .process_chunk(&mut tone_chunk, rate)
+            .unwrap_or_else(|e| panic!("rate {rate} Hz should succeed: {e}"));
+        let peak = tone_chunk.iter().map(|s| s.abs()).max().unwrap_or(0);
+        assert!(peak > 9_000, "tone at {rate} Hz must be preserved; peak was {peak}");
+    }
+
+    // Reject invalid out-of-range sample rate (< 8 kHz)
+    let mut chunk = vec![100i16; 160];
+    let err = filter.process_chunk(&mut chunk, 4_000).expect_err("should reject 4k");
+    assert!(err.to_string().contains("received 4000 Hz"));
 }
 
 #[test]
