@@ -22,7 +22,7 @@ path = "src/main.rs"
 [features]
 # The batteries: what `cargo install` and the images get without asking.
 # `--no-default-features` builds exactly the features named, nothing else.
-default = ["realtime", "stt-parakeet", "tts-piper", "vad-silero", "llm-gguf", "llm-openai-compat", "s2s-gemini", "s2s-openai", "s2s-elevenlabs", "telemetry", "wizard", "audio-device", "session-sqlite"]
+default = ["realtime", "stt-parakeet", "tts-piper", "vad-silero", "filter-deepfilter", "llm-gguf", "llm-openai-compat", "s2s-gemini", "s2s-openai", "s2s-elevenlabs", "telemetry", "wizard", "audio-device", "session-sqlite"]
 
 # The interactive S2S loop subcommand is gated on realtime (mirrors the engine).
 realtime = ["voice-pipes/realtime"]
@@ -117,6 +117,10 @@ cuda = ["llm-gguf", "voice-pipes-llm-gguf/cuda"]
 # is on disk.
 vad-silero = ["dep:voice-pipes-vad-silero"]
 
+# ── Plugin filters ───────────────────────────────────────────
+# DeepFilterNet3 noise suppression.
+filter-deepfilter = ["dep:voice-pipes-filter-deepfilter"]
+
 # ── Plugin turn detectors ────────────────────────────────────
 # Pipecat Smart Turn — audio-only semantic end-of-turn classifier (ONNX).
 turn-smart = ["dep:voice-pipes-turn-smart"]
@@ -162,6 +166,7 @@ voice-pipes-s2s-openai = { workspace = true, optional = true }
 voice-pipes-s2s-elevenlabs = { workspace = true, optional = true }
 voice-pipes-turn-smart = { workspace = true, optional = true }
 voice-pipes-turn-vap = { workspace = true, optional = true }
+voice-pipes-filter-deepfilter = { workspace = true, optional = true }
 
 mimalloc.workspace = true
 anyhow.workspace = true
@@ -188,7 +193,7 @@ voice-pipes-sdk.workspace = true
 # engine-forwarding default features must equal). Each names a feature of this
 # crate that enables a provider crate. `cargo test -p voice-pipes-cli --test
 # workspace_rules` holds `default` to exactly the two.
-default-plugins = ["stt-parakeet", "tts-piper", "vad-silero", "llm-gguf", "llm-openai-compat", "s2s-gemini", "s2s-openai", "s2s-elevenlabs"]
+default-plugins = ["stt-parakeet", "tts-piper", "vad-silero", "filter-deepfilter", "llm-gguf", "llm-openai-compat", "s2s-gemini", "s2s-openai", "s2s-elevenlabs"]
 
 # cargo-dist: this is the only crate whose binary ships as a release artifact;
 # the engine's component server says `dist = false`.

@@ -29,6 +29,7 @@ const PROVIDER_PREFIXES: &[&str] = &[
     "voice-pipes-vad-",
     "voice-pipes-turn-",
     "voice-pipes-s2s-",
+    "voice-pipes-filter-",
 ];
 
 fn root() -> PathBuf {
@@ -563,6 +564,7 @@ const CPU_ONLY_ONNX: &[&str] = &[
     "voice-pipes-turn-smart",
     "voice-pipes-turn-vap",
     "voice-pipes-vad-silero",
+
 ];
 
 /// A provider on ONNX Runtime either has an `ort-cuda` feature (which the
@@ -2444,7 +2446,7 @@ const LONG_FUNCTIONS: &[(&str, &str)] = &[
     ("voice-pipes/src/pipeline/speculative.rs", "handle_partial"),
     ("voice-pipes/src/pipeline/tts.rs", "spawn_synthesis_task"),
     ("voice-pipes/src/pipeline/tts.rs", "tts_task"),
-    ("voice-pipes/src/pipeline/vad.rs", "vad_filter_task"),
+    ("voice-pipes/src/pipeline/vad.rs", "vad_filter_task_with_filter"),
     ("voice-pipes/src/realtime/client.rs", "connect_with"),
     ("plugins/stt/moonshine/src/lib.rs", "transcribe_stream"),
     ("plugins/stt/parakeet/src/lib.rs", "transcribe_stream"),
@@ -2659,6 +2661,7 @@ const CONFORMANCE_HELPERS: &[&str] = &[
     "assert_tts_metrics_conformance",
     "assert_llm_metrics_conformance",
     "assert_vad_metrics_conformance",
+    "assert_filter_metrics_conformance",
     "assert_s2s_metrics_conformance",
     "two_utterances_on_one_stream",
     "back_to_back_utterances_stay_apart",

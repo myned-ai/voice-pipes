@@ -66,6 +66,12 @@ Not providers in the factory sense but selected the same way:
 - VAD: `silero` (feature `vad-silero`, default; CLI crate; plugin), `energy`, `passthrough`. [Guide](../vad.md).
 - Turn detection: `silence`, `provider`, `layered`, and the plugins `smart` (CLI feature `turn-smart`) and `vap` (CLI feature `turn-vap`, experimental). [Guide](../turn-detection-and-interruptions.md).
 
+## Audio filters (ingress noise suppression)
+
+Audio filters clean microphone PCM in-place before VAD and STT:
+
+- DeepFilter: `deepfilter` (feature `filter-deepfilter`, default; CLI crate; plugin). Pure-Rust DeepFilterNet noise suppression.
+
 ## Choosing
 
 - **No keys, no cloud:** Parakeet + local GGUF or `llama-server` + Kokoro.

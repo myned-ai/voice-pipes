@@ -42,9 +42,30 @@ fn vad_chunk(
 }
 
 pub async fn vad_filter_task(
+    raw_rx: mpsc::Receiver<AudioChunk>,
+    filtered_tx: mpsc::Sender<AudioChunk>,
+    vad: Box<dyn crate::vad::segmenter::VadBackend>,
+    silence_ms: u64,
+    pre_roll_ms: u32,
+    speech_probe: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+) {
+    vad_filter_task_with_filter(
+        raw_rx,
+        filtered_tx,
+        vad,
+        None,
+        silence_ms,
+        pre_roll_ms,
+        speech_probe,
+    )
+    .await;
+}
+
+pub async fn vad_filter_task_with_filter(
     mut raw_rx: mpsc::Receiver<AudioChunk>,
     filtered_tx: mpsc::Sender<AudioChunk>,
     mut vad: Box<dyn crate::vad::segmenter::VadBackend>,
+    mut filter_chain: Option<crate::pipeline::filter::FilterChain>,
     silence_ms: u64,
     pre_roll_ms: u32,
     speech_probe: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
@@ -118,7 +139,10 @@ pub async fn vad_filter_task(
         }
 
         while chunk_samples > 0 && accumulator.len() >= chunk_samples {
-            let chunk_data: Vec<i16> = accumulator.drain(..chunk_samples).collect();
+            let mut chunk_data: Vec<i16> = accumulator.drain(..chunk_samples).collect();
+            if let Some(chain) = &mut filter_chain {
+                chain.process_chunk(&mut chunk_data, sample_rate);
+            }
 
             let is_speech = match vad.process_chunk(&chunk_data, sample_rate) {
                 Ok(r) => r.is_speech,

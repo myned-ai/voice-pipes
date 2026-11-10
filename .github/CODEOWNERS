@@ -37,6 +37,7 @@
 /plugins/s2s/elevenlabs/        @goran-j
 /plugins/turn/smart/            @goran-j
 /plugins/turn/vap/              @goran-j
+/plugins/filter/deepfilter/     @goran-j
 
 # Supply-chain policy and the gates that enforce it.
 /deny.toml                      @goran-j

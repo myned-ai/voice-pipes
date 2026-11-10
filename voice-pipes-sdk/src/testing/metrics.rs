@@ -332,6 +332,27 @@ pub fn assert_s2s_metrics_conformance(
     Ok(audio_dur)
 }
 
+/// Validate audio filter duration and delay floor metrics.
+pub fn assert_filter_metrics_conformance(
+    compute_duration: Duration,
+    injected_delay: Duration,
+) -> Result<(), MetricConformanceError> {
+    if compute_duration == Duration::ZERO {
+        return Err(MetricConformanceError::ZeroWithWork {
+            name: "compute_duration_ms".into(),
+        });
+    }
+    let min_expected = injected_delay.saturating_sub(Duration::from_millis(15));
+    if compute_duration < min_expected {
+        return Err(MetricConformanceError::DelayNotReflected {
+            metric: "compute_duration_ms".into(),
+            expected: injected_delay,
+            actual: compute_duration,
+        });
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -556,6 +577,13 @@ mod tests {
     fn s2s_conformance_accepts_valid_metrics() {
         let res = assert_s2s_metrics_conformance(24_000, 24_000, Duration::from_millis(150));
         assert_eq!(res, Ok(Duration::from_secs(1)));
+    }
+
+    #[test]
+    fn filter_metrics_conformance_checks_duration_and_floor() {
+        assert!(assert_filter_metrics_conformance(Duration::ZERO, Duration::ZERO).is_err());
+        assert!(assert_filter_metrics_conformance(Duration::from_millis(50), Duration::from_millis(50)).is_ok());
+        assert!(assert_filter_metrics_conformance(Duration::from_millis(10), Duration::from_millis(100)).is_err());
     }
 
     #[test]

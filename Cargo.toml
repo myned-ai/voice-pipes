@@ -27,6 +27,7 @@ members = [
     "plugins/tts/piper",         # Piper VITS TTS (ONNX), the default voice
     "plugins/vad/silero",        # Silero VAD (ONNX), the auto VAD
     "plugins/stt/moonshine",     # Moonshine STT (ONNX), English
+    "plugins/filter/deepfilter", # DeepFilterNet noise suppression
 ]
 resolver = "2"
 
@@ -60,6 +61,7 @@ voice-pipes-stt-parakeet = { path = "plugins/stt/parakeet", version = "0.1.0" }
 voice-pipes-tts-piper = { path = "plugins/tts/piper", version = "0.1.0" }
 voice-pipes-vad-silero = { path = "plugins/vad/silero", version = "0.1.0" }
 voice-pipes-stt-moonshine = { path = "plugins/stt/moonshine", version = "0.1.0" }
+voice-pipes-filter-deepfilter = { path = "plugins/filter/deepfilter", version = "0.1.0" }
 
 anyhow = "1"
 arc-swap = "1"

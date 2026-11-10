@@ -112,6 +112,7 @@ pub mod audit;
 pub mod build;
 pub mod component;
 pub mod config;
+pub mod filter;
 pub mod options;
 pub mod params;
 pub mod phonemize;
@@ -142,7 +143,7 @@ pub use component::{
 };
 pub use config::{
     ConfigError, ConfigErrorKind, SttConfig, TextChunkingConfig, TextProcessorConfig, TtsConfig,
-    VadConfig,
+    VadConfig, FilterStageConfig,
 };
 pub use params::{AtomicParamStore, AtomicParamStoreBuilder, MutableParamStore};
 pub use sanitize::{
@@ -163,6 +164,7 @@ pub use tts::{
     SynthesisHints, SynthesisRequest, TtsError, TtsFactory, TtsProvider, TtsSession,
     TtsSessionConfig, WordBoundary,
 };
+pub use filter::{AudioFilter, AudioFilterFactory, FilterError, FilterMetrics};
 pub use vad::{VadBackend, VadError, VadFactory, VadResult};
 pub use wizard::{
     WizardChoice, WizardDeploy, WizardDownload, WizardField, WizardFieldKind, WizardLayout,

@@ -4597,6 +4597,7 @@ dependencies = [
  "tracing",
  "voice-pipes",
  "voice-pipes-bench",
+ "voice-pipes-filter-deepfilter",
  "voice-pipes-llm-gguf",
  "voice-pipes-llm-openai-compat",
  "voice-pipes-net",
@@ -4619,6 +4620,17 @@ dependencies = [
  "voice-pipes-turn-smart",
  "voice-pipes-turn-vap",
  "voice-pipes-vad-silero",
+]
+
+[[package]]
+name = "voice-pipes-filter-deepfilter"
+version = "0.1.0"
+dependencies = [
+ "hound",
+ "rustfft",
+ "serde_json",
+ "tracing",
+ "voice-pipes-sdk",
 ]
 
 [[package]]

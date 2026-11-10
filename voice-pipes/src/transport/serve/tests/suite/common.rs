@@ -161,6 +161,7 @@ pub(super) fn test_state_customised(
         transport: None,
         text_processor: vec![],
         audio_post_processor: vec![],
+        audio_filter: vec![],
         realtime_provider: None,
         auth: None,
         agent,
