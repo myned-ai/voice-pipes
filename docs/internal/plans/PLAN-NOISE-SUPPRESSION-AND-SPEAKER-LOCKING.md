@@ -1,9 +1,21 @@
-# Pure-Rust Noise Suppression (DeepFilterNet3) and Primary Speaker Locking (Target Speaker Extraction)
+# Pure-Rust Noise Suppression (DeepFilterNet3) and Experimental Speaker Locking
 
-**Status:** Planned  
+**Status:** Planned (Decoupled: DeepFilterNet3 Core + Speaker Locking Experimental)  
 **Target Branch:** `feat/noise-suppression-speaker-locking`  
 **Last updated:** 2026-11-10  
 **Owner:** Core Engine + Audio Ingress Pipeline  
+
+---
+
+## 0. License, Maturity & Feasibility Audit
+
+Before implementation, an audit of open-source licenses and production readiness determined that these features should be **strictly decoupled**:
+
+| Component | License | Production Maturity | Strategy in Voice Pipes |
+| :--- | :--- | :--- | :--- |
+| **DeepFilterNet3** | **Dual MIT / Apache-2.0** | **High / Battle-Tested** (4.6k+ stars, PipeWire/PulseAudio standard, pure-Rust `tract` inference). | **Core Release**: Ship built-in as the default offline, pure-Rust noise suppression engine. |
+| **Cam++ / WeSpeaker** (Embedding) | **Apache-2.0** (Code), **CC-BY-4.0** (Weights) | **High** (Standard in speaker verification & `sherpa-onnx`). | **Auxiliary**: Available for voiceprint extraction if speaker lock is enabled. |
+| **VoxLock / REAL-TSE** (Target Speaker Extraction) | **Apache-2.0** | ⚠️ **Experimental Research** (2025–2026 IEEE SLT research, ~98 stars, 39 commits, risk of metallic gating artifacts). | **Experimental Plugin**: Isolated behind `voice-pipes-filter-speakerlock` and optional feature flag `experimental-speakerlock`. Does not block or destabilize core noise suppression. |
 
 ---
 
