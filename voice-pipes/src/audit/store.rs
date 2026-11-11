@@ -19,6 +19,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use voice_pipes_sdk::TenantId;
 
 use crate::api::types::{SessionRecord, SessionStatus, TurnRecord};
 
@@ -83,6 +84,7 @@ pub type BlobReader = Box<dyn tokio::io::AsyncRead + Send + Unpin>;
 /// ([`SessionStore::sessions_page`]).
 #[derive(Debug, Default, Clone)]
 pub struct SessionFilter {
+    pub tenant_id: Option<TenantId>,
     pub status: Option<SessionStatus>,
     pub worker_id: Option<String>,
     pub pipeline_name: Option<String>,
@@ -105,7 +107,10 @@ impl SessionFilter {
     /// `SqliteSessionStore::sessions_page`; used by the default trait
     /// implementation. Keep the two in sync.
     fn matches(&self, s: &SessionRecord) -> bool {
-        self.status.is_none_or(|st| s.status == st)
+        self.tenant_id
+            .as_ref()
+            .is_none_or(|t| s.tenant_id.as_ref() == Some(t))
+            && self.status.is_none_or(|st| s.status == st)
             && self.worker_id.as_deref().is_none_or(|w| s.worker_id == w)
             && self
                 .pipeline_name
@@ -947,6 +952,7 @@ mod sqlite {
             conn.execute_batch(
                 "CREATE TABLE IF NOT EXISTS sessions (
                  id                   TEXT PRIMARY KEY,
+                 tenant_id            TEXT,
                  worker_id            TEXT NOT NULL,
                  started_at           TEXT NOT NULL,
                  ended_at             TEXT,
@@ -960,6 +966,7 @@ mod sqlite {
              CREATE INDEX IF NOT EXISTS idx_sessions_started ON sessions(started_at DESC);
              CREATE INDEX IF NOT EXISTS idx_sessions_status  ON sessions(status);
              CREATE INDEX IF NOT EXISTS idx_sessions_worker  ON sessions(worker_id);
+             CREATE INDEX IF NOT EXISTS idx_sessions_tenant  ON sessions(tenant_id);
 
              CREATE TABLE IF NOT EXISTS turns (
                  id          TEXT PRIMARY KEY,
@@ -973,6 +980,9 @@ mod sqlite {
              CREATE INDEX IF NOT EXISTS idx_turns_started ON turns(started_at DESC);
              CREATE INDEX IF NOT EXISTS idx_turns_status  ON turns(status);",
             )?;
+
+            // Idempotent column addition for existing sqlite databases created before multi-tenancy.
+            let _ = conn.execute("ALTER TABLE sessions ADD COLUMN tenant_id TEXT", []);
 
             let (sessions, turns): (i64, i64) = {
                 let s = conn
@@ -1036,10 +1046,11 @@ mod sqlite {
                 let conn = conn.lock();
                 let res = conn.execute(
                     "INSERT INTO sessions
-                     (id, worker_id, started_at, ended_at, status, pipeline_name,
+                     (id, tenant_id, worker_id, started_at, ended_at, status, pipeline_name,
                       pipeline_config_hash, tags, turn_count, data)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
                  ON CONFLICT(id) DO UPDATE SET
+                     tenant_id = excluded.tenant_id,
                      worker_id = excluded.worker_id,
                      started_at = excluded.started_at,
                      ended_at = excluded.ended_at,
@@ -1051,6 +1062,7 @@ mod sqlite {
                      data = excluded.data",
                     params![
                         record.id,
+                        record.tenant_id.as_ref().map(voice_pipes_sdk::TenantId::as_str),
                         record.worker_id,
                         record.started_at.to_rfc3339(),
                         record.ended_at.map(|t| t.to_rfc3339()),
@@ -1107,6 +1119,10 @@ mod sqlite {
             tokio::task::spawn_blocking(move || {
                 let mut clauses: Vec<&'static str> = Vec::new();
                 let mut args: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+                if let Some(t) = filter.tenant_id {
+                    clauses.push("tenant_id = ?");
+                    args.push(Box::new(t.to_string()));
+                }
                 if let Some(st) = filter.status {
                     clauses.push("status = ?");
                     args.push(Box::new(status_str(st).to_string()));
@@ -1460,8 +1476,41 @@ pub async fn reconcile_sessions_from_captures(
         if store.find_session(&session_id).await.is_some() {
             continue; // already indexed
         }
+        if !dir.join("metadata.json").is_file() {
+            // Check for tenant-partitioned capture directories: captures/<tenant_id>/<session_id>/
+            if let Ok(sub_rd) = std::fs::read_dir(&dir) {
+                for sub_entry in sub_rd.flatten() {
+                    let sub_dir = sub_entry.path();
+                    if !sub_dir.is_dir() {
+                        continue;
+                    }
+                    let sub_session_id = match sub_dir.file_name().and_then(|n| n.to_str()) {
+                        Some(s) => s.to_string(),
+                        None => continue,
+                    };
+                    if store.find_session(&sub_session_id).await.is_some() {
+                        continue;
+                    }
+                    let Ok(bytes) = std::fs::read(sub_dir.join("metadata.json")) else {
+                        continue;
+                    };
+                    let Ok(meta) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
+                        continue;
+                    };
+                    store
+                        .push_session(session_record_from_capture_meta(
+                            &sub_session_id,
+                            &meta,
+                            &sub_dir,
+                        ))
+                        .await;
+                    recovered += 1;
+                }
+            }
+            continue;
+        }
         let Ok(bytes) = std::fs::read(dir.join("metadata.json")) else {
-            continue; // not a session capture dir (no metadata)
+            continue;
         };
         let Ok(meta) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
             continue;
@@ -1514,8 +1563,12 @@ fn session_record_from_capture_meta(
         tags.push("recovered".to_string());
     }
 
+    let tenant_id = str_field("tenant_id")
+        .and_then(|t| voice_pipes_sdk::TenantId::new(t).ok());
+
     SessionRecord {
         id: session_id.to_string(),
+        tenant_id,
         worker_id: String::new(),
         started_at,
         ended_at: None,

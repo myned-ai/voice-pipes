@@ -136,6 +136,7 @@ async fn huge_page_numbers_yield_an_empty_page() {
         Query(crate::api::types::SessionsQuery {
             page: Some(usize::MAX),
             per_page: Some(200),
+            tenant_id: None,
             status: None,
             since: None,
             until: None,

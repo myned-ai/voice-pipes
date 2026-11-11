@@ -1113,6 +1113,8 @@ impl From<crate::pipeline::TurnState> for PipelineState {
 pub struct SessionMetadata {
     /// Unique session identifier.
     pub session_id: String,
+    /// Tenant identifier if running multi-tenant.
+    pub tenant_id: Option<voice_pipes_sdk::TenantId>,
     /// Which transport protocol is in use.
     pub transport_type: TransportType,
     /// Remote address of the client, if available.

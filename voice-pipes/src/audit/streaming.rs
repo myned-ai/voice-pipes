@@ -24,6 +24,7 @@ use tracing::{info, warn};
 
 use crate::audio::AudioFrame;
 use crate::audio::wav_writer;
+use voice_pipes_sdk::TenantId;
 
 use super::store::AuditStore;
 
@@ -208,14 +209,38 @@ impl StreamingAuditSink {
         buffer_size: usize,
         max_session_bytes: u64,
     ) -> Self {
+        Self::spawn_with_tenant(
+            store,
+            None,
+            session_id,
+            buffer_size,
+            max_session_bytes,
+            false,
+        )
+    }
+
+    /// Spawn with tenant partitioning and privacy controls (ZDR).
+    pub fn spawn_with_tenant(
+        store: Arc<dyn AuditStore>,
+        tenant_id: Option<TenantId>,
+        session_id: String,
+        buffer_size: usize,
+        max_session_bytes: u64,
+        zero_data_retention: bool,
+    ) -> Self {
         let (tx, rx) = mpsc::channel(buffer_size);
         tokio::spawn(streaming_audit_writer(
             rx,
             store,
+            tenant_id.clone(),
             session_id.clone(),
             max_session_bytes,
+            zero_data_retention,
         ));
-        info!(session_id, "streaming audit sink started");
+        info!(
+            ?tenant_id,
+            session_id, zero_data_retention, "streaming audit sink started"
+        );
         Self { tx }
     }
 
@@ -262,14 +287,24 @@ fn is_audio_event(event: &AuditEvent) -> bool {
 async fn streaming_audit_writer(
     mut rx: mpsc::Receiver<AuditEvent>,
     store: Arc<dyn AuditStore>,
+    tenant_id: Option<TenantId>,
     session_id: String,
     max_session_bytes: u64,
+    zero_data_retention: bool,
 ) {
+    let key_prefix = match &tenant_id {
+        Some(t) => format!("{t}/{session_id}"),
+        None => session_id.clone(),
+    };
     let mut health = WriterHealth::default();
     let mut written: u64 = 0;
     let mut budget_warned = false;
     while let Some(event) = rx.recv().await {
         if health.disabled() {
+            continue;
+        }
+        // Zero Data Retention (ZDR): discard all audio immediately, retain only telemetry/events
+        if zero_data_retention && is_audio_event(&event) {
             continue;
         }
         // Text artefacts are small and stay useful past the budget, so
@@ -291,7 +326,7 @@ async fn streaming_audit_writer(
         written = written.saturating_add(cost);
 
         if let AuditEvent::Trace(trace_event) = event {
-            let key = format!("{session_id}/events.jsonl");
+            let key = format!("{key_prefix}/events.jsonl");
             let mut buf = match serde_json::to_vec(&trace_event) {
                 Ok(b) => b,
                 Err(e) => {
@@ -307,7 +342,7 @@ async fn streaming_audit_writer(
             continue;
         }
 
-        let result = write_event(&event, &*store, &session_id).await;
+        let result = write_event(&event, &*store, &key_prefix).await;
         health.observe("streaming audit write", &result);
     }
 
@@ -317,14 +352,14 @@ async fn streaming_audit_writer(
 async fn write_event(
     event: &AuditEvent,
     store: &dyn AuditStore,
-    session_id: &str,
+    key_prefix: &str,
 ) -> anyhow::Result<()> {
     match event {
         AuditEvent::MicRaw {
             utterance_id,
             audio,
         } => {
-            let key = format!("{session_id}/{utterance_id:03}_mic_raw.wav");
+            let key = format!("{key_prefix}/{utterance_id:03}_mic_raw.wav");
             store.put(&key, &wav_writer::encode_wav(audio)?).await?;
         }
         AuditEvent::MicDropped {
@@ -337,9 +372,9 @@ async fn write_event(
             // own recording must not be overwritten, and by the next dropped
             // utterance, whose recording must not overwrite this one.
             let key = if *attempt <= 1 {
-                format!("{session_id}/{utterance_id:03}_dropped_{reason}_mic_raw.wav")
+                format!("{key_prefix}/{utterance_id:03}_dropped_{reason}_mic_raw.wav")
             } else {
-                format!("{session_id}/{utterance_id:03}_dropped_{reason}_{attempt}_mic_raw.wav")
+                format!("{key_prefix}/{utterance_id:03}_dropped_{reason}_{attempt}_mic_raw.wav")
             };
             store.put(&key, &wav_writer::encode_wav(audio)?).await?;
         }
@@ -347,7 +382,7 @@ async fn write_event(
             utterance_id,
             audio,
         } => {
-            let key = format!("{session_id}/{utterance_id:03}_mic_16k.wav");
+            let key = format!("{key_prefix}/{utterance_id:03}_mic_16k.wav");
             store.put(&key, &wav_writer::encode_wav(audio)?).await?;
         }
         AuditEvent::SttResult {
@@ -355,7 +390,7 @@ async fn write_event(
             text,
             latency,
         } => {
-            let key = format!("{session_id}/{utterance_id:03}_stt.json");
+            let key = format!("{key_prefix}/{utterance_id:03}_stt.json");
             let json = serde_json::json!({
                 "utterance_id": utterance_id,
                 "text": text,
@@ -366,7 +401,7 @@ async fn write_event(
                 .await?;
         }
         AuditEvent::LlmInput { utterance_id, text } => {
-            let key = format!("{session_id}/{utterance_id:03}_llm_input.txt");
+            let key = format!("{key_prefix}/{utterance_id:03}_llm_input.txt");
             store.put(&key, text.as_bytes()).await?;
         }
         AuditEvent::LlmOutput {
@@ -378,7 +413,7 @@ async fn write_event(
             latency,
             is_partial,
         } => {
-            let key = format!("{session_id}/{utterance_id:03}_llm_output.json");
+            let key = format!("{key_prefix}/{utterance_id:03}_llm_output.json");
             let mut json = serde_json::json!({
                 "utterance_id": utterance_id,
                 "text": text,
@@ -405,15 +440,15 @@ async fn write_event(
             spoken_text,
             audio,
         } => {
-            let wav_key = format!("{session_id}/{utterance_id:03}_tts_frag_{fragment_idx:03}.wav");
+            let wav_key = format!("{key_prefix}/{utterance_id:03}_tts_frag_{fragment_idx:03}.wav");
             store.put(&wav_key, &wav_writer::encode_wav(audio)?).await?;
-            let txt_key = format!("{session_id}/{utterance_id:03}_tts_frag_{fragment_idx:03}.txt");
+            let txt_key = format!("{key_prefix}/{utterance_id:03}_tts_frag_{fragment_idx:03}.txt");
             store.put(&txt_key, text.as_bytes()).await?;
             if let Some(spoken) = spoken_text
                 && spoken != text
             {
                 let spoken_key =
-                    format!("{session_id}/{utterance_id:03}_tts_frag_{fragment_idx:03}_spoken.txt");
+                    format!("{key_prefix}/{utterance_id:03}_tts_frag_{fragment_idx:03}_spoken.txt");
                 store.put(&spoken_key, spoken.as_bytes()).await?;
             }
         }
@@ -426,7 +461,7 @@ async fn write_event(
         } => {
             // Lifecycle metadata only — per-turn latencies live in the
             // canonical TurnMetricsSnapshot (pipeline_events.jsonl).
-            let key = format!("{session_id}/{utterance_id:03}_turn_resolved.json");
+            let key = format!("{key_prefix}/{utterance_id:03}_turn_resolved.json");
             let json = serde_json::json!({
                 "utterance_id": utterance_id,
                 "interrupted": interrupted,
@@ -447,7 +482,7 @@ async fn write_event(
         }
         AuditEvent::Pipeline(pe, at) => {
             // Append the PipelineEvent as a JSON line to a shared events log.
-            let key = format!("{session_id}/pipeline_events.jsonl");
+            let key = format!("{key_prefix}/pipeline_events.jsonl");
             let mut buf = match pipeline_event_line(pe, *at) {
                 Ok(b) => b,
                 Err(e) => {
@@ -462,7 +497,7 @@ async fn write_event(
             utterance_id,
             payload,
         } => {
-            let key = format!("{session_id}/{utterance_id:03}_realtime_usage.json");
+            let key = format!("{key_prefix}/{utterance_id:03}_realtime_usage.json");
             store
                 .put(&key, serde_json::to_string_pretty(&payload)?.as_bytes())
                 .await?;
@@ -471,7 +506,7 @@ async fn write_event(
             utterance_id,
             health,
         } => {
-            let key = format!("{session_id}/{utterance_id:03}_playback.json");
+            let key = format!("{key_prefix}/{utterance_id:03}_playback.json");
             store
                 .put(&key, serde_json::to_string_pretty(&health)?.as_bytes())
                 .await?;
@@ -486,7 +521,7 @@ async fn write_event(
             // implicit (= next entry's `audio_ms`, or the turn's total
             // audio_ms for the last entry). Keeps the on-disk cost to
             // a single u64 per delta as planned.
-            let key = format!("{session_id}/{utterance_id:03}_transcript_deltas.jsonl");
+            let key = format!("{key_prefix}/{utterance_id:03}_transcript_deltas.jsonl");
             let line = serde_json::json!({
                 "utterance_id": utterance_id,
                 "delta_idx": delta_idx,

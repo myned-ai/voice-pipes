@@ -379,6 +379,7 @@ async fn sqlite_turn_queries() {
 fn mk_session(id: &str, status: SessionStatus) -> SessionRecord {
     SessionRecord {
         id: id.into(),
+        tenant_id: None,
         worker_id: "w1".into(),
         started_at: Utc::now(),
         ended_at: None,
@@ -675,4 +676,79 @@ async fn appended_records_are_whole_and_in_order() {
     assert_eq!(String::from_utf8(written).unwrap(), expected);
 
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
+async fn session_filter_isolates_by_tenant() {
+    let store = InMemorySessionStore::new(100);
+
+    let mut s1 = mk_session("sess-1", SessionStatus::Completed);
+    s1.tenant_id = Some(voice_pipes_sdk::TenantId::new("tenant-alpha").unwrap());
+    store.push_session(s1).await;
+
+    let mut s2 = mk_session("sess-2", SessionStatus::Completed);
+    s2.tenant_id = Some(voice_pipes_sdk::TenantId::new("tenant-beta").unwrap());
+    store.push_session(s2).await;
+
+    let s3 = mk_session("sess-3", SessionStatus::Completed);
+    store.push_session(s3).await;
+
+    // Filter by tenant-alpha
+    let filter_alpha = SessionFilter {
+        tenant_id: Some(voice_pipes_sdk::TenantId::new("tenant-alpha").unwrap()),
+        ..Default::default()
+    };
+    let (items_alpha, total_alpha) = store.sessions_page(&filter_alpha, 50, 0).await;
+    assert_eq!(total_alpha, 1);
+    assert_eq!(items_alpha.first().map(|s| s.id.as_str()), Some("sess-1"));
+
+    // Filter by tenant-beta
+    let filter_beta = SessionFilter {
+        tenant_id: Some(voice_pipes_sdk::TenantId::new("tenant-beta").unwrap()),
+        ..Default::default()
+    };
+    let (items_beta, total_beta) = store.sessions_page(&filter_beta, 50, 0).await;
+    assert_eq!(total_beta, 1);
+    assert_eq!(items_beta.first().map(|s| s.id.as_str()), Some("sess-2"));
+
+    // Filter with no tenant_id: sees all 3
+    let filter_all = SessionFilter::default();
+    let (_, total_all) = store.sessions_page(&filter_all, 50, 0).await;
+    assert_eq!(total_all, 3);
+}
+
+#[cfg(feature = "session-sqlite")]
+#[tokio::test]
+async fn sqlite_session_filter_isolates_by_tenant() {
+    let path = std::env::temp_dir().join(format!("vp_tenant_sqlite_test_{}.db", std::process::id()));
+    rm_db(&path);
+    let store = SqliteSessionStore::new(path.clone(), 100).unwrap();
+
+    let mut s1 = mk_session("sess-1", SessionStatus::Completed);
+    s1.tenant_id = Some(voice_pipes_sdk::TenantId::new("tenant-alpha").unwrap());
+    store.push_session(s1).await;
+
+    let mut s2 = mk_session("sess-2", SessionStatus::Completed);
+    s2.tenant_id = Some(voice_pipes_sdk::TenantId::new("tenant-beta").unwrap());
+    store.push_session(s2).await;
+
+    // Query tenant-alpha
+    let filter_alpha = SessionFilter {
+        tenant_id: Some(voice_pipes_sdk::TenantId::new("tenant-alpha").unwrap()),
+        ..Default::default()
+    };
+    let (items_alpha, total_alpha) = store.sessions_page(&filter_alpha, 50, 0).await;
+    assert_eq!(total_alpha, 1);
+    assert_eq!(items_alpha.first().map(|s| s.id.as_str()), Some("sess-1"));
+
+    // Query tenant-beta
+    let filter_beta = SessionFilter {
+        tenant_id: Some(voice_pipes_sdk::TenantId::new("tenant-beta").unwrap()),
+        ..Default::default()
+    };
+    let (items_beta, total_beta) = store.sessions_page(&filter_beta, 50, 0).await;
+    assert_eq!(total_beta, 1);
+    assert_eq!(items_beta.first().map(|s| s.id.as_str()), Some("sess-2"));
+
+    rm_db(&path);
 }

@@ -180,3 +180,33 @@ fn zero_days_disables_and_missing_dir_is_fine() {
         SweepReport::default()
     );
 }
+
+#[test]
+fn sweeps_tenant_partitioned_captures() {
+    let now = SystemTime::now();
+    let root = fresh_dir("tenant_retention");
+
+    // Tenant A: has one expired session and one young session
+    let tenant_a = root.join("tenant-a");
+    std::fs::create_dir_all(&tenant_a).unwrap();
+    let old_a = session(&tenant_a, "sess-old-a", days(14), now);
+    let young_a = session(&tenant_a, "sess-young-a", days(2), now);
+
+    // Tenant B: has only expired sessions
+    let tenant_b = root.join("tenant-b");
+    std::fs::create_dir_all(&tenant_b).unwrap();
+    let old_b = session(&tenant_b, "sess-old-b", days(20), now);
+
+    let report = sweep_expired_captures_at(&root, 7, now);
+
+    assert!(!old_a.exists(), "expired session in tenant A must be removed");
+    assert!(young_a.exists(), "young session in tenant A must be kept");
+    assert!(tenant_a.exists(), "tenant A dir must survive since it has young sessions");
+
+    assert!(!old_b.exists(), "expired session in tenant B must be removed");
+    assert!(!tenant_b.exists(), "tenant B dir must be removed when all sessions are purged");
+
+    assert_eq!(report.removed, 2);
+    assert_eq!(report.kept, 1);
+    let _ = std::fs::remove_dir_all(&root);
+}
