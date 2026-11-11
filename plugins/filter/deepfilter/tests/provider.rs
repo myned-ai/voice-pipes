@@ -41,7 +41,7 @@ fn filter_attenuates_stationary_noise() {
         .expect("filter process");
 
     // Energy should be significantly reduced compared to input 2000
-    let rms: f64 = (noise_chunk
+    let rms = (noise_chunk
         .iter()
         .map(|&s| (s as f64) * (s as f64))
         .sum::<f64>()

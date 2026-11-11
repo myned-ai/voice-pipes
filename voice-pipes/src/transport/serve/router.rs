@@ -235,14 +235,8 @@ async fn handle_ws_connection(
             .as_ref()
             .map_or(5_000, |t| t.write_timeout_ms),
     );
-    let session = WsSession::new(
-        socket,
-        session_id,
-        Some(addr),
-        health,
-        write_timeout,
-    )
-    .with_tenant(tenant_id);
+    let session = WsSession::new(socket, session_id, Some(addr), health, write_timeout)
+        .with_tenant(tenant_id);
 
     run_session(Box::new(session), state).await;
 }

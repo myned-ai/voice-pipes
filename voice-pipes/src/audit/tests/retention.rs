@@ -199,12 +199,24 @@ fn sweeps_tenant_partitioned_captures() {
 
     let report = sweep_expired_captures_at(&root, 7, now);
 
-    assert!(!old_a.exists(), "expired session in tenant A must be removed");
+    assert!(
+        !old_a.exists(),
+        "expired session in tenant A must be removed"
+    );
     assert!(young_a.exists(), "young session in tenant A must be kept");
-    assert!(tenant_a.exists(), "tenant A dir must survive since it has young sessions");
+    assert!(
+        tenant_a.exists(),
+        "tenant A dir must survive since it has young sessions"
+    );
 
-    assert!(!old_b.exists(), "expired session in tenant B must be removed");
-    assert!(!tenant_b.exists(), "tenant B dir must be removed when all sessions are purged");
+    assert!(
+        !old_b.exists(),
+        "expired session in tenant B must be removed"
+    );
+    assert!(
+        !tenant_b.exists(),
+        "tenant B dir must be removed when all sessions are purged"
+    );
 
     assert_eq!(report.removed, 2);
     assert_eq!(report.kept, 1);

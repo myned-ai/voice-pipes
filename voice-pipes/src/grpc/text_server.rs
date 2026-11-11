@@ -102,6 +102,10 @@ impl TextProcessorServiceImpl {
         self
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "tonic::Status is the framework error type on this boundary"
+    )]
     fn resolve_processor(
         &self,
         metadata: &tonic::metadata::MetadataMap,

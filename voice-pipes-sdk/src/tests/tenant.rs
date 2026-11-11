@@ -1,10 +1,16 @@
 use std::str::FromStr;
 
-use crate::tenant::{TenantId, TenantIdError, TenantRetentionPolicy, MAX_TENANT_ID_LEN};
+use crate::tenant::{MAX_TENANT_ID_LEN, TenantId, TenantIdError, TenantRetentionPolicy};
 
 #[test]
 fn valid_tenant_ids_are_accepted() {
-    let ids = ["default", "tenant-1", "org_abc_123", "AcmeCorp-Production", "a"];
+    let ids = [
+        "default",
+        "tenant-1",
+        "org_abc_123",
+        "AcmeCorp-Production",
+        "a",
+    ];
     for id in ids {
         let tenant = TenantId::new(id).expect("valid tenant id");
         assert_eq!(tenant.as_str(), id);

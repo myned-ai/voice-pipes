@@ -1062,7 +1062,10 @@ mod sqlite {
                      data = excluded.data",
                     params![
                         record.id,
-                        record.tenant_id.as_ref().map(voice_pipes_sdk::TenantId::as_str),
+                        record
+                            .tenant_id
+                            .as_ref()
+                            .map(voice_pipes_sdk::TenantId::as_str),
                         record.worker_id,
                         record.started_at.to_rfc3339(),
                         record.ended_at.map(|t| t.to_rfc3339()),
@@ -1563,8 +1566,7 @@ fn session_record_from_capture_meta(
         tags.push("recovered".to_string());
     }
 
-    let tenant_id = str_field("tenant_id")
-        .and_then(|t| voice_pipes_sdk::TenantId::new(t).ok());
+    let tenant_id = str_field("tenant_id").and_then(|t| voice_pipes_sdk::TenantId::new(t).ok());
 
     SessionRecord {
         id: session_id.to_string(),

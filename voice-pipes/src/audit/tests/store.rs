@@ -720,7 +720,8 @@ async fn session_filter_isolates_by_tenant() {
 #[cfg(feature = "session-sqlite")]
 #[tokio::test]
 async fn sqlite_session_filter_isolates_by_tenant() {
-    let path = std::env::temp_dir().join(format!("vp_tenant_sqlite_test_{}.db", std::process::id()));
+    let path =
+        std::env::temp_dir().join(format!("vp_tenant_sqlite_test_{}.db", std::process::id()));
     rm_db(&path);
     let store = SqliteSessionStore::new(path.clone(), 100).unwrap();
 
