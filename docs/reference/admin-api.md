@@ -474,6 +474,7 @@ Paginated list of sessions across ALL workers (newest first). This is the centra
 | `until` | string | (none) | ISO 8601 — only sessions before this time |
 | `search` | string | (none) | Full-text search in transcribed text |
 | `worker_id` | string | (all) | Filter by specific worker |
+| `tenant_id` | string | (none) | Filter sessions by tenant identifier (also accepts `X-Tenant-Id` request header) |
 
 **Response** `200 OK`
 
@@ -505,6 +506,8 @@ Paginated list of sessions across ALL workers (newest first). This is the centra
 #### `GET /api/v1/sessions/{id}`
 
 Full detail for a single session.
+
+When requested with an `X-Tenant-Id` header or `?tenant_id=` query parameter, resolution is strictly scoped to that tenant's captures partition (`captures/<tenant_id>/<session_id>/`). If the session exists under another tenant, a `404 Not Found` is returned. Unscoped requests (e.g. platform admin) discover sessions across all partitions transparently.
 
 **Response** `200 OK`
 
