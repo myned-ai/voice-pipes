@@ -42,7 +42,7 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 # on Linux in CI, and a Windows-only pattern silently excludes nothing there —
 # which is how the archive came to be scanned in CI but not on a developer's
 # machine, and how a clean local run stopped meaning a clean gate.
-$excludeRe = '[\\/](node_modules|target|\.git|\.cache|VibeVoice|models[\\/]\.cache|archive)[\\/]'
+$excludeRe = '[\\/](node_modules|target|\.git|\.cache|VibeVoice|vendor|models[\\/]\.cache|archive)[\\/]'
 
 function Rel([string]$full) { $full.Substring($repoRoot.Length + 1).Replace('\','/') }
 
@@ -56,7 +56,7 @@ function Get-Anchors([string]$path) {
     $seen = @{}
     $anchors = @{}
     $inFence = $false
-    foreach ($line in (Get-Content -LiteralPath $path -ErrorAction SilentlyContinue)) {
+    foreach ($line in (Get-Content -LiteralPath $path -Encoding utf8 -ErrorAction SilentlyContinue)) {
         if ($line -match '^\s*(```|~~~)') { $inFence = -not $inFence; continue }
         if ($inFence) { continue }
         if ($line -match '^#{1,6}\s+(.+?)\s*#*\s*$') {

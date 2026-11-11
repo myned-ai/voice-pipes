@@ -788,14 +788,14 @@ fn manifest_renders_reserved_keys_and_env() {
         profiles: vec!["llama".into(), "vibevoice".into()],
         services: vec!["llama-server".into(), "vibevoice".into()],
         requires_gpu: vec!["vibevoice".into()],
-        ensure_dirs: vec!["VibeVoice/demo/voices/streaming_model".into()],
+        ensure_dirs: vec!["vendor/vibevoice/demo/voices/streaming_model".into()],
         env: vec![("LLAMA_MODEL".into(), "gemma4-e2b/g.gguf".into())],
     };
     let rendered = manifest.render();
     assert!(rendered.contains("COMPOSE_PROFILES=\"llama,vibevoice\"\n"));
     assert!(rendered.contains("SIDECAR_SERVICES=\"llama-server vibevoice\"\n"));
     assert!(rendered.contains("REQUIRES_GPU=\"vibevoice\"\n"));
-    assert!(rendered.contains("ENSURE_DIRS=\"VibeVoice/demo/voices/streaming_model\"\n"));
+    assert!(rendered.contains("ENSURE_DIRS=\"vendor/vibevoice/demo/voices/streaming_model\"\n"));
     assert!(rendered.contains("LLAMA_MODEL=\"gemma4-e2b/g.gguf\"\n"));
 
     // Empty manifest still renders every reserved key so the launchers can

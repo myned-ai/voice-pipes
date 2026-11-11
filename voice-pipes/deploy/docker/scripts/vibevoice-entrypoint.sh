@@ -2,7 +2,7 @@
 # VibeVoice-Realtime GPU TTS sidecar entrypoint.
 #
 # The model weights (models/vibevoice, ~1.1 GB) and reference voice .pt prompts
-# (VibeVoice/demo/voices/streaming_model, ~95 MB) are VOLUME-MOUNTED from the repo
+# (vendor/vibevoice/demo/voices/streaming_model, ~95 MB) are VOLUME-MOUNTED from the repo
 # and are empty on a fresh checkout. Download them once into the mounted dirs
 # before serving; both persist on the host, so later starts skip straight to the
 # server. Downloads need network, so HF offline mode is enabled only for the
@@ -11,7 +11,7 @@ set -e
 cd /app
 
 MODEL_DIR=/app/models/vibevoice
-VOICES_DIR=/app/VibeVoice/demo/voices/streaming_model
+VOICES_DIR=/app/vendor/vibevoice/demo/voices/streaming_model
 
 # 1. Model weights — public HF repo, no token needed. config.json is the
 #    "already downloaded" marker.

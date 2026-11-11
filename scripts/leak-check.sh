@@ -34,7 +34,7 @@ PATTERNS=(
 # Paths that are internal by design and never copied to the public repo,
 # plus the files that legitimately contain the patterns (this script, the
 # migration tool, lockfiles).
-EXCLUDE_RE='^(docs/internal/|marketing/|voice-pipes/VibeVoice/|scripts/leak-check\.sh$|scripts/assemble-public\.sh$|scripts/move-docs.py$|.*/Cargo\.lock$|.*/package-lock\.json$|Cargo\.lock$)'
+EXCLUDE_RE='^(docs/internal/|marketing/|vendor/vibevoice/|scripts/leak-check\.sh$|scripts/assemble-public\.sh$|scripts/move-docs.py$|.*/Cargo\.lock$|.*/package-lock\.json$|Cargo\.lock$)'
 
 # Text that ships.
 INCLUDE_RE='\.(md|toml|ya?ml|json|rs|py|tsx?|jsx?|sh|ps1|html|txt|env\.example)$|(^|/)Dockerfile[^/]*$'

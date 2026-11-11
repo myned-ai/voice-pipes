@@ -33,10 +33,10 @@ VOICES = [
 
 BASE_URL = "https://raw.githubusercontent.com/microsoft/VibeVoice/main/demo/voices/streaming_model/"
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-_VP = os.path.join(_ROOT, 'voice-pipes') if os.path.isdir(os.path.join(_ROOT, 'voice-pipes')) else _ROOT
 TARGET_DIR = os.path.join(
-    _VP,
-    "VibeVoice",
+    _ROOT,
+    "vendor",
+    "vibevoice",
     "demo",
     "voices",
     "streaming_model",

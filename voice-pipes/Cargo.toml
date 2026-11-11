@@ -9,9 +9,9 @@ repository.workspace = true
 keywords.workspace = true
 categories.workspace = true
 readme = "README.md"
-# What the crate builds from. The rest of this directory (the VibeVoice
-# sidecar, deploy files, Dockerfiles, scripts, examples, fixtures) belongs to
-# the repository, not to the published crate.
+# What the crate builds from. The rest of this directory (deploy files,
+# Dockerfiles, scripts, examples, fixtures) belongs to the repository, not to
+# the published crate.
 include = ["src/**", "proto/**", "build.rs", "config/wizard_models.json", "README.md"]
 
 # ── Static verification (M-STATIC-VERIFICATION) ─────────────

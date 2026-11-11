@@ -60,6 +60,6 @@ The project is pre-1.0: security fixes land on the latest `main` only.
   URL-shaped strings. It does not redact: keys ending in `_env` (they name a
   variable, not a value), `max_tokens`-style counters, secrets hidden in
   free text such as a system prompt, or files on disk (captures, `.env`).
-- This repository vendors Microsoft VibeVoice (`voice-pipes/VibeVoice/`);
+- This repository vendors Microsoft VibeVoice (`vendor/vibevoice/`);
   vulnerabilities in VibeVoice itself should also be reported upstream to
   Microsoft.

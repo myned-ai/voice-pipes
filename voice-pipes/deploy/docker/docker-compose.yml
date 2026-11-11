@@ -657,7 +657,7 @@ services:
   # reaches it at http://vibevoice:8091 on the shared compose network (like
   # pocket-tts), so the pipeline config's TTS endpoint is `http://vibevoice:8091/v1`.
   #
-  # Weights (models/vibevoice) and voice .pt prompts (VibeVoice/demo/voices) are
+  # Weights (models/vibevoice) and voice .pt prompts (vendor/vibevoice/demo/voices) are
   # volume-mounted from the repo and downloaded on first boot by the entrypoint,
   # so they persist on the host across restarts and the image stays lean. Reserves
   # an nvidia device like llama-server; server.py auto-detects cuda.
@@ -671,7 +671,7 @@ services:
       - "127.0.0.1:8091:8091"
     volumes:
       - ../../models:/app/models
-      - ../../VibeVoice/demo/voices:/app/VibeVoice/demo/voices
+      - ../../../vendor/vibevoice/demo/voices:/app/vendor/vibevoice/demo/voices
     environment:
       # Public repos, so no token is strictly required; passed through for parity
       # with the other sidecars and in case of HF rate limits on first download.

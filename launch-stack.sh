@@ -175,10 +175,14 @@ if [ -n "$REQUIRES_GPU" ] && [ "$gpu_supported" != true ]; then
     echo "   NVIDIA Container Toolkit / WSL GPU support for usable latency."
 fi
 
-# Pre-create bind-mount source dirs (relative to voice-pipes/) so Docker
-# doesn't create them as root-owned paths.
+# Pre-create bind-mount source dirs so Docker doesn't create them as
+# root-owned paths.
 for dir in $ENSURE_DIRS; do
-    mkdir -p "voice-pipes/$dir"
+    if [ "${dir#vendor/}" != "$dir" ]; then
+        mkdir -p "$dir"
+    else
+        mkdir -p "voice-pipes/$dir"
+    fi
 done
 
 # Containers run unprivileged. On Linux the bind-mounted data dirs

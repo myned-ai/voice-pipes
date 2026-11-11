@@ -162,10 +162,10 @@ if ($needsGpu.Count -gt 0 -and -not $gpu_supported) {
     Write-Host "   NVIDIA Container Toolkit / WSL GPU support for usable latency." -ForegroundColor Yellow
 }
 
-# Pre-create bind-mount source dirs (relative to voice-pipes/) so Docker
-# doesn't create them as root-owned paths.
+# Pre-create bind-mount source dirs so Docker doesn't create them as
+# root-owned paths.
 foreach ($dir in $ensureDirs) {
-    $hostDir = Join-Path "voice-pipes" $dir
+    $hostDir = if ($dir -like "vendor/*") { $dir } else { Join-Path "voice-pipes" $dir }
     if (-not (Test-Path $hostDir)) { New-Item -ItemType Directory -Force -Path $hostDir | Out-Null }
 }
 

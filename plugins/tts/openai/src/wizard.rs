@@ -33,7 +33,7 @@ pub fn wizard_choices() -> Vec<voice_pipes_sdk::WizardChoice> {
                 service: "vibevoice".into(),
                 model_env: None,
                 requires_gpu: true,
-                ensure_dirs: vec!["VibeVoice/demo/voices/streaming_model".into()],
+                ensure_dirs: vec!["vendor/vibevoice/demo/voices/streaming_model".into()],
             },
         )
         .with_feature(Some("tts-openai".into()))

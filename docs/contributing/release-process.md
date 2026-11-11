@@ -147,7 +147,7 @@ to change in a config or client.
   *packages* job runs `cargo publish --workspace --dry-run` on every change,
   so a crate that does not build from its published files fails before a
   release does. The engine crate ships only what it builds from (its
-  `include` list); the VibeVoice sidecar, deploy files and fixtures stay in
+  `include` list); deploy files, sidecars and fixtures stay in
   the repository.
 
 This page stays "draft" until a tag has run through both workflows end to
