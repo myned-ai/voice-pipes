@@ -753,3 +753,54 @@ async fn sqlite_session_filter_isolates_by_tenant() {
 
     rm_db(&path);
 }
+
+#[cfg(feature = "session-sqlite")]
+#[tokio::test]
+async fn sqlite_session_store_migrates_legacy_database_without_tenant_id() {
+    let path =
+        std::env::temp_dir().join(format!("vp_legacy_sqlite_test_{}.db", std::process::id()));
+    rm_db(&path);
+
+    // Create a legacy schema database WITHOUT tenant_id column
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE sessions (
+                 id                   TEXT PRIMARY KEY,
+                 worker_id            TEXT NOT NULL,
+                 started_at           TEXT NOT NULL,
+                 ended_at             TEXT,
+                 status               TEXT NOT NULL,
+                 pipeline_name        TEXT,
+                 pipeline_config_hash TEXT,
+                 tags                 TEXT NOT NULL DEFAULT '[]',
+                 turn_count           INTEGER NOT NULL DEFAULT 0,
+                 data                 TEXT NOT NULL
+             );
+             CREATE INDEX idx_sessions_started ON sessions(started_at DESC);
+             CREATE INDEX idx_sessions_status  ON sessions(status);
+             CREATE INDEX idx_sessions_worker  ON sessions(worker_id);",
+        )
+        .unwrap();
+    }
+
+    // Opening with SqliteSessionStore must succeed and migrate the schema
+    let store = SqliteSessionStore::new(path.clone(), 100).unwrap();
+
+    let mut s = mk_session("sess-legacy-migrated", SessionStatus::Completed);
+    s.tenant_id = Some(voice_pipes_sdk::TenantId::new("tenant-new").unwrap());
+    store.push_session(s).await;
+
+    let filter = SessionFilter {
+        tenant_id: Some(voice_pipes_sdk::TenantId::new("tenant-new").unwrap()),
+        ..Default::default()
+    };
+    let (items, total) = store.sessions_page(&filter, 50, 0).await;
+    assert_eq!(total, 1);
+    assert_eq!(
+        items.first().map(|s| s.id.as_str()),
+        Some("sess-legacy-migrated")
+    );
+
+    rm_db(&path);
+}

@@ -966,7 +966,6 @@ mod sqlite {
              CREATE INDEX IF NOT EXISTS idx_sessions_started ON sessions(started_at DESC);
              CREATE INDEX IF NOT EXISTS idx_sessions_status  ON sessions(status);
              CREATE INDEX IF NOT EXISTS idx_sessions_worker  ON sessions(worker_id);
-             CREATE INDEX IF NOT EXISTS idx_sessions_tenant  ON sessions(tenant_id);
 
              CREATE TABLE IF NOT EXISTS turns (
                  id          TEXT PRIMARY KEY,
@@ -981,8 +980,12 @@ mod sqlite {
              CREATE INDEX IF NOT EXISTS idx_turns_status  ON turns(status);",
             )?;
 
-            // Idempotent column addition for existing sqlite databases created before multi-tenancy.
+            // Idempotent column addition and index for existing sqlite databases created before multi-tenancy.
             let _ = conn.execute("ALTER TABLE sessions ADD COLUMN tenant_id TEXT", []);
+            let _ = conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_sessions_tenant ON sessions(tenant_id)",
+                [],
+            );
 
             let (sessions, turns): (i64, i64) = {
                 let s = conn
