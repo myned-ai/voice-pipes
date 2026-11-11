@@ -8,9 +8,10 @@ migration note.
 
 ## [Unreleased]
 
-Nothing has been released yet. The first release will carry everything
-below: the state of the tree at the public launch, not a diff against an
-earlier release.
+## [0.1.0] - 2026-11-11
+
+The initial release of Voice Pipes: an ultra-low-latency, modular conversational
+voice pipeline runtime written in safe Rust.
 
 ### Added
 
@@ -1790,9 +1791,5 @@ earlier release.
   Playground's system-prompt field should keep working (the wizard does this
   for the dev profile).
 
-[Unreleased]: https://github.com/myned-ai/voice-pipes/commits/main
-<!-- At the first release, as docs/contributing/release-process.md says: rename
-     the section above to `## [0.1.0] - YYYY-MM-DD`, add a fresh empty
-     `## [Unreleased]` over it, and point the links at the tag:
-     [Unreleased]: https://github.com/myned-ai/voice-pipes/compare/v0.1.0...HEAD
-     [0.1.0]: https://github.com/myned-ai/voice-pipes/releases/tag/v0.1.0 -->
+[Unreleased]: https://github.com/myned-ai/voice-pipes/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/myned-ai/voice-pipes/releases/tag/v0.1.0
