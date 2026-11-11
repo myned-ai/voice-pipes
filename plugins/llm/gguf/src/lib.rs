@@ -37,10 +37,10 @@ use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 
 use arc_swap::ArcSwap;
 use async_trait::async_trait;
-use parking_lot::Mutex;
 use tokenizers::Tokenizer;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
+use voice_pipes_onnx::SessionPool;
 
 pub(crate) use backend::LlmBackend;
 pub(crate) use chat_template::ChatTemplate;
@@ -80,6 +80,8 @@ pub(crate) struct LlmConfig {
     pub top_p: Option<f64>,
     /// RNG seed for sampling.
     pub seed: u64,
+    /// Number of independent backend instances in the session pool.
+    pub pool_size: usize,
 }
 
 impl Default for LlmConfig {
@@ -96,6 +98,7 @@ impl Default for LlmConfig {
             repeat_penalty: 1.1,
             top_p: None,
             seed: 42,
+            pool_size: 1,
         }
     }
 }
@@ -118,12 +121,11 @@ impl Default for LlmConfig {
 /// which costs both the memory and a model load on the connect path.
 #[derive(Clone)]
 pub(crate) struct LlmProcessor {
-    // Backend, tokenizer, and template are shared with the blocking-pool
+    // Backend pool, tokenizer, and template are shared with the blocking-pool
     // closure that runs each generation (see `process_inner` /
-    // `process_stream_inner`), hence the `Arc`s. The mutex is `parking_lot`
-    // so a panic inside inference cannot poison it and take down every
-    // subsequent turn.
-    backend: Arc<Mutex<Box<dyn LlmBackend>>>,
+    // `process_stream_inner`), hence the `Arc`s.
+    pool: Arc<SessionPool<Box<dyn LlmBackend>>>,
+    context_tokens: usize,
     tokenizer: Arc<Tokenizer>,
     template: Arc<dyn ChatTemplate>,
     config: LlmConfig,
@@ -233,39 +235,62 @@ impl LlmProcessor {
     pub(crate) fn token_budget(&self) -> memory::TokenBudget {
         memory::TokenBudget {
             tokenizer: Arc::clone(&self.tokenizer),
-            context: self.backend.lock().context_tokens(),
+            context: self.context_tokens,
             max_tokens: Arc::clone(&self.max_tokens_cell),
         }
     }
 
     /// Construct from an already-built backend and tokenizer.
     /// Prefer [`LlmProcessor::from_config`] for the standard GGUF path.
+    #[cfg(test)]
     pub fn new(
-        mut backend: Box<dyn LlmBackend>,
+        backend: Box<dyn LlmBackend>,
         tokenizer: Tokenizer,
         template: Box<dyn ChatTemplate>,
         config: LlmConfig,
         text_chunking: voice_pipes_sdk::TextChunkingConfig,
     ) -> Result<Self, TextProcessorError> {
-        let prefill = config.prefill_cache && backend.continues_batches();
+        Self::with_backends(vec![backend], tokenizer, template, config, text_chunking)
+    }
+
+    /// Construct from a pool of already-built backends and a tokenizer.
+    pub fn with_backends(
+        mut backends: Vec<Box<dyn LlmBackend>>,
+        tokenizer: Tokenizer,
+        template: Box<dyn ChatTemplate>,
+        config: LlmConfig,
+        text_chunking: voice_pipes_sdk::TextChunkingConfig,
+    ) -> Result<Self, TextProcessorError> {
+        let Some(first) = backends.first() else {
+            return Err(TextProcessorError::new(
+                "llm",
+                "at least one LLM backend is required",
+            ));
+        };
+        let context_tokens = first.context_tokens();
+        let prefill = config.prefill_cache && first.continues_batches();
         if config.prefill_cache && !prefill {
             tracing::warn!(
                 "prefill_cache is not supported for this model architecture; the system prompt is computed with each turn"
             );
         }
-        let prefilled = if prefill {
-            prefill::prefill_system_prompt(
-                backend.as_mut(),
-                &tokenizer,
-                template.as_ref(),
-                &config.system_prompt,
-            )?
-        } else {
-            Vec::new()
-        };
+        let mut prefilled = Vec::new();
+        if prefill {
+            for backend in &mut backends {
+                prefilled = prefill::prefill_system_prompt(
+                    backend.as_mut(),
+                    &tokenizer,
+                    template.as_ref(),
+                    &config.system_prompt,
+                )?;
+            }
+        }
+        let pool = SessionPool::new(backends, "GGUF LLM backends")
+            .map_err(|e| TextProcessorError::new("llm", e.to_string()))?;
 
         Ok(Self {
-            backend: Arc::new(Mutex::new(backend)),
+            pool: Arc::new(pool),
+            context_tokens,
             tokenizer: Arc::new(tokenizer),
             template: Arc::from(template),
             prefilled: Arc::new(prefilled),
@@ -301,10 +326,14 @@ impl LlmProcessor {
         config: LlmConfig,
         text_chunking: voice_pipes_sdk::TextChunkingConfig,
     ) -> Result<Self, TextProcessorError> {
-        let device = Self::resolve_device(&config.device)?;
-
-        let backend = candle_gguf::CandleGgufBackend::load(&config.model_path, device)
-            .map_err(|e| TextProcessorError::new("llm", e.message))?;
+        let pool_size = config.pool_size.max(1);
+        let mut backends: Vec<Box<dyn LlmBackend>> = Vec::with_capacity(pool_size);
+        for _ in 0..pool_size {
+            let device = Self::resolve_device(&config.device)?;
+            let backend = candle_gguf::CandleGgufBackend::load(&config.model_path, device)
+                .map_err(|e| TextProcessorError::new("llm", e.message))?;
+            backends.push(Box::new(backend));
+        }
 
         // Load tokenizer -- look next to the GGUF or at explicit path
         let tokenizer_path = config.tokenizer_path.clone().unwrap_or_else(|| {
@@ -325,18 +354,13 @@ impl LlmProcessor {
         tracing::info!(
             model = %config.model_path.display(),
             device = %config.device,
+            pool_size,
             chat_template = %config.chat_template,
             prefill_cache = config.prefill_cache,
             "LLM loaded (quantized GGUF)"
         );
 
-        Self::new(
-            Box::new(backend),
-            tokenizer,
-            template,
-            config,
-            text_chunking,
-        )
+        Self::with_backends(backends, tokenizer, template, config, text_chunking)
     }
 
     /// Resolve a candle `Device` from a config string.

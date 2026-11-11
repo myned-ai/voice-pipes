@@ -152,4 +152,8 @@ When implementing a new AI model provider (e.g. STT, TTS, or LLM):
 - **WebSocket Close Code 4502**: Target worker process is unreachable; verify worker transport bind address and network connectivity.
 - **SSE Stream Freezing (GZip Buffering)**: a gzipped `text/event-stream` freezes in the browser (zlib buffers the small frames). The admin backend uses Starlette's own `GZipMiddleware`, which excludes `text/event-stream` by default; do not add a custom gzip middleware or an SSE exemption of your own. Serve every SSE route with `media_type="text/event-stream"`. `app/test_sse_not_compressed.py` pins both halves (large JSON gzipped, SSE not).
 - **STT Recovery Cascades**: Always respect `RecognitionRequest.slot_wait` when checking out sessions from `SessionPool` (`pool.checkout_within(wait)`).
+- **High-Concurrency CPU Scaling (100+ Sessions)**:
+  - Never hold a `SessionPool` `PooledSlot` across `audio_rx.recv().await` in streaming STT plugins; hold per-session audio/decoder state on the task and check out a `PooledSlot` only inside each `spawn_blocking` inference step.
+  - Per-session factories (`VadFactory`, `TurnDetectorFactory`, `TextProcessorFactory`) that load heavy model files must share a process-wide `SessionPool` or weight cache so WebSocket handshakes do not reload models from disk.
+  - Set `VP_ORT_THREADS=1..2` and `VP_PHONEMIZE_JOBS=16` on high-density CPU hosts to prevent OpenMP thread-spinning and `espeak-ng` fork-storm contention.
 - **Model Cold-Start Latency Spike**: Local ONNX models (2+ GB) may be paged out by the OS during idle periods. Configure `keep_warm_interval_s = 60..300` in deployment configurations.

@@ -12,7 +12,9 @@ impl AudioFilter for MockFilter {
         sample_rate: u32,
     ) -> Result<FilterMetrics, FilterError> {
         if self.should_fail {
-            return Err(FilterError::InferenceFailed("simulated inference error".into()));
+            return Err(FilterError::InferenceFailed(
+                "simulated inference error".into(),
+            ));
         }
         if sample_rate != 16_000 {
             return Err(FilterError::UnsupportedSampleRate {
@@ -79,7 +81,9 @@ fn filter_process_chunk_in_place_and_reset() {
         should_fail: false,
     };
     let mut chunk = vec![100, -200, 300, -400];
-    let metrics = filter.process_chunk(&mut chunk, 16_000).expect("filter succeeds");
+    let metrics = filter
+        .process_chunk(&mut chunk, 16_000)
+        .expect("filter succeeds");
     assert_eq!(chunk, vec![50, -100, 150, -200]);
     assert_eq!(filter.samples_seen, 4);
     assert_eq!(metrics.snr_improvement_db, Some(12.5));
@@ -95,13 +99,23 @@ fn filter_reports_expected_errors() {
         should_fail: true,
     };
     let mut chunk = vec![100, 200];
-    let err = filter.process_chunk(&mut chunk, 16_000).expect_err("should fail");
+    let err = filter
+        .process_chunk(&mut chunk, 16_000)
+        .expect_err("should fail");
     assert!(matches!(err, FilterError::InferenceFailed(_)));
     assert!(err.to_string().contains("simulated inference error"));
 
     filter.should_fail = false;
-    let rate_err = filter.process_chunk(&mut chunk, 48_000).expect_err("bad rate");
-    assert!(matches!(rate_err, FilterError::UnsupportedSampleRate { expected: 16_000, actual: 48_000 }));
+    let rate_err = filter
+        .process_chunk(&mut chunk, 48_000)
+        .expect_err("bad rate");
+    assert!(matches!(
+        rate_err,
+        FilterError::UnsupportedSampleRate {
+            expected: 16_000,
+            actual: 48_000
+        }
+    ));
 }
 
 #[test]

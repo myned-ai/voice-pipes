@@ -273,6 +273,28 @@ fn the_schema_describes_every_setting_as_restart_only() {
     assert!(schema.iter().all(|d| !d.mutable), "{schema:?}");
 }
 
+#[test]
+fn pool_size_and_threads_out_of_range_are_reported() {
+    let mut c = cfg();
+    c.options
+        .insert("vap_pool_size".into(), serde_json::json!(0));
+    c.options
+        .insert("vap_threads".into(), serde_json::json!(300));
+    let errors = VapTurnFactory.validate(&c);
+    assert!(
+        errors
+            .iter()
+            .any(|e| e.field == "turn_detection.vap_pool_size"),
+        "{errors:?}"
+    );
+    assert!(
+        errors
+            .iter()
+            .any(|e| e.field == "turn_detection.vap_threads"),
+        "{errors:?}"
+    );
+}
+
 // ── Against a real exported model ───────────────────────────
 
 /// Load and run an actual export, when one is available.

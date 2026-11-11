@@ -582,8 +582,17 @@ mod tests {
     #[test]
     fn filter_metrics_conformance_checks_duration_and_floor() {
         assert!(assert_filter_metrics_conformance(Duration::ZERO, Duration::ZERO).is_err());
-        assert!(assert_filter_metrics_conformance(Duration::from_millis(50), Duration::from_millis(50)).is_ok());
-        assert!(assert_filter_metrics_conformance(Duration::from_millis(10), Duration::from_millis(100)).is_err());
+        assert!(
+            assert_filter_metrics_conformance(Duration::from_millis(50), Duration::from_millis(50))
+                .is_ok()
+        );
+        assert!(
+            assert_filter_metrics_conformance(
+                Duration::from_millis(10),
+                Duration::from_millis(100)
+            )
+            .is_err()
+        );
     }
 
     #[test]

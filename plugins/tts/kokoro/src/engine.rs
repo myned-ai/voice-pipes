@@ -30,11 +30,12 @@ impl KokoroEngine {
     pub fn load(
         model_path: &std::path::Path,
         target: voice_pipes_onnx::ExecutionTarget,
+        threads: usize,
     ) -> Result<Self, TtsError> {
         use ort::session::builder::GraphOptimizationLevel;
         use voice_pipes_onnx::{SessionOptions, open_session};
 
-        let options = SessionOptions::new(4).with_target(target);
+        let options = SessionOptions::new(threads).with_target(target);
         // The graph is optimised once and saved beside the model; later
         // loads take the saved graph as it is.
         let optimized_path = model_path.with_extension("optimized.onnx");

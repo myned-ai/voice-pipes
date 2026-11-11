@@ -21,11 +21,11 @@ impl std::fmt::Debug for PiperEngine {
 }
 
 impl PiperEngine {
-    /// Load the `.onnx` model file through the shared opener: four threads
-    /// per operator, on the device `VP_ORT_EP` names (the CPU unless it asks
-    /// for CUDA in a CUDA build).
-    pub fn load(model_path: &std::path::Path) -> Result<Self, TtsError> {
-        let options = voice_pipes_onnx::SessionOptions::new(4)
+    /// Load the `.onnx` model file through the shared opener: `threads`
+    /// threads per operator, on the device `VP_ORT_EP` names (the CPU unless
+    /// it asks for CUDA in a CUDA build).
+    pub fn load(model_path: &std::path::Path, threads: usize) -> Result<Self, TtsError> {
+        let options = voice_pipes_onnx::SessionOptions::new(threads)
             .with_target(voice_pipes_onnx::ExecutionTarget::from_env());
         let session = voice_pipes_onnx::open_session(model_path, &options)
             .map_err(|e| TtsError::ModelLoadFailed(e.to_string()))?;

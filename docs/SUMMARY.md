@@ -43,6 +43,7 @@
 - [Benchmarking and evals](guides/benchmarking-and-evals.md)
 - [Voice Pipes Gym (RL & evals)](guides/voice-pipes-gym.md)
 - [Performance tuning & optimization](guides/performance-and-optimization.md)
+- [High-density CPU deployment (100+ sessions)](guides/high-density-cpu-deployment.md)
 - [Fleet: orchestrator and workers](guides/fleet.md)
 - [Deployment](guides/deployment.md)
 - [GPU and CUDA](guides/gpu-and-cuda.md)

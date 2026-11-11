@@ -1,9 +1,9 @@
 //! The two-channel VAP detector: the ONNX floor model, the aligned rings and the evaluation gates.
 
-use std::collections::VecDeque;
-use std::path::Path;
-use std::sync::Arc;
+use std::collections::{HashMap, VecDeque};
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
@@ -11,8 +11,11 @@ use ort::session::Session;
 use ort::value::Tensor;
 use parking_lot::Mutex;
 
+use voice_pipes_onnx::SessionPool;
 use voice_pipes_sdk::TranscriptionResult;
 use voice_pipes_sdk::turn::{TurnDetector, TurnSignal};
+
+use crate::config::{DEFAULT_POOL_SIZE, DEFAULT_THREADS};
 
 /// Rate the exported graph expects.
 const TARGET_SAMPLE_RATE: u32 = 16_000;
@@ -59,6 +62,112 @@ impl FloorModel for OnnxFloorModel {
         let p_future = last_frame(&outputs, 1)?;
         Ok(Prediction { p_now, p_future })
     }
+}
+
+/// Shared pool wrapper around [`OnnxFloorModel`] so per-session [`VapTurnDetector`]
+/// instances check out a pooled ONNX session only during `evaluate`.
+struct PooledFloorModel(Arc<SessionPool<OnnxFloorModel>>);
+
+impl FloorModel for PooledFloorModel {
+    fn predict(&mut self, stereo: &[f32]) -> anyhow::Result<Prediction> {
+        let mut slot = self
+            .0
+            .checkout_blocking()
+            .map_err(|e| anyhow::anyhow!("vap session pool: {e}"))?;
+        slot.get_mut().predict(stereo)
+    }
+}
+
+type VapPoolKey = (PathBuf, usize, usize);
+type VapPoolValue = (Arc<SessionPool<OnnxFloorModel>>, usize);
+type VapPoolCache = Mutex<HashMap<VapPoolKey, VapPoolValue>>;
+
+fn shared_vap_pools() -> &'static VapPoolCache {
+    static POOLS: OnceLock<VapPoolCache> = OnceLock::new();
+    POOLS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn load_single_vap_model(
+    model_path: &Path,
+    threads: usize,
+    run_probe: bool,
+) -> anyhow::Result<(OnnxFloorModel, usize)> {
+    // CPU only, whatever VP_ORT_EP says: a small model run a few times a
+    // second, where a GPU round trip costs more than the inference.
+    let session =
+        voice_pipes_onnx::open_session(model_path, &voice_pipes_onnx::SessionOptions::new(threads))
+            .map_err(|e| anyhow::anyhow!("vap: {e}"))?;
+
+    let input = session
+        .inputs()
+        .first()
+        .ok_or_else(|| anyhow::anyhow!("vap model {} has no inputs", model_path.display()))?;
+    let input_name = input.name().to_string();
+    let shape = match input.dtype() {
+        ort::value::ValueType::Tensor { shape, .. } => Some(shape.clone()),
+        _ => None,
+    };
+    let window_samples = shape
+        .as_deref()
+        .and_then(window_from_input)
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "vap model at {} does not declare a fixed stereo input [1, 2, N]; \
+                 the window must be baked in at export time (see \
+                 scripts/export-vap-onnx.py)",
+                model_path.display()
+            )
+        })?;
+
+    let mut model = OnnxFloorModel {
+        session,
+        input_name,
+        window_samples,
+    };
+
+    if run_probe {
+        // Fail loud at startup. A graph with the wrong input rank or output
+        // set would otherwise fail every inference for a whole session and
+        // degrade silently to the silence-timeout fallback.
+        model
+            .predict(&vec![0.0f32; window_samples * 2])
+            .map_err(|e| {
+                anyhow::anyhow!(
+                    "vap model at {} rejected a [1, 2, {}] probe -- incompatible export. {e}",
+                    model_path.display(),
+                    window_samples
+                )
+            })?;
+    }
+    Ok((model, window_samples))
+}
+
+fn get_or_build_vap_pool(
+    model_path: &Path,
+    pool_size: usize,
+    threads: usize,
+) -> anyhow::Result<(Arc<SessionPool<OnnxFloorModel>>, usize)> {
+    let key = (model_path.to_path_buf(), pool_size, threads);
+    if let Some((pool, window)) = shared_vap_pools().lock().get(&key) {
+        return Ok((Arc::clone(pool), *window));
+    }
+
+    let mut models = Vec::with_capacity(pool_size);
+    let mut window_samples = 0;
+    for idx in 0..pool_size {
+        let (model, w) = load_single_vap_model(model_path, threads, idx == 0)?;
+        window_samples = w;
+        models.push(model);
+    }
+    let pool = Arc::new(
+        SessionPool::new(models, "VAP turn sessions")
+            .map_err(|e| anyhow::anyhow!("vap pool: {e}"))?,
+    );
+    let mut cache = shared_vap_pools().lock();
+    let entry = cache
+        .entry(key)
+        .or_insert_with(|| (Arc::clone(&pool), window_samples));
+    Ok((Arc::clone(&entry.0), entry.1))
 }
 
 /// Two-channel anticipatory turn detector.
@@ -178,60 +287,38 @@ impl std::fmt::Debug for VapTurnDetector {
 }
 
 impl VapTurnDetector {
-    /// Load an exported VAP graph and size the rings to its fixed window.
+    /// Load an exported VAP graph (or reuse the process-wide session pool) and
+    /// size the rings to its fixed window.
     pub fn new(
         model_path: &Path,
         threshold: f32,
         min_interval_ms: u64,
         fallback_timeout_ms: u64,
     ) -> anyhow::Result<Self> {
-        // CPU only, whatever VP_ORT_EP says: a small model run a few times a
-        // second, where a GPU round trip costs more than the inference.
-        let session =
-            voice_pipes_onnx::open_session(model_path, &voice_pipes_onnx::SessionOptions::new(2))
-                .map_err(|e| anyhow::anyhow!("vap: {e}"))?;
+        let threads = voice_pipes_onnx::intra_threads_from_env(DEFAULT_THREADS);
+        Self::with_pool_config(
+            model_path,
+            DEFAULT_POOL_SIZE,
+            threads,
+            threshold,
+            min_interval_ms,
+            fallback_timeout_ms,
+        )
+    }
 
-        let input = session
-            .inputs()
-            .first()
-            .ok_or_else(|| anyhow::anyhow!("vap model {} has no inputs", model_path.display()))?;
-        let input_name = input.name().to_string();
-        let shape = match input.dtype() {
-            ort::value::ValueType::Tensor { shape, .. } => Some(shape.clone()),
-            _ => None,
-        };
-        let window_samples = shape
-            .as_deref()
-            .and_then(window_from_input)
-            .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "vap model at {} does not declare a fixed stereo input [1, 2, N]; \
-                     the window must be baked in at export time (see \
-                     scripts/export-vap-onnx.py)",
-                    model_path.display()
-                )
-            })?;
-
-        let mut model = OnnxFloorModel {
-            session,
-            input_name,
-            window_samples,
-        };
-
-        // Fail loud at startup. A graph with the wrong input rank or output
-        // set would otherwise fail every inference for a whole session and
-        // degrade silently to the silence-timeout fallback.
-        model
-            .predict(&vec![0.0f32; window_samples * 2])
-            .map_err(|e| {
-                anyhow::anyhow!(
-                    "vap model at {} rejected a [1, 2, {}] probe -- incompatible export. {e}",
-                    model_path.display(),
-                    window_samples
-                )
-            })?;
+    /// Build a detector backed by the shared [`SessionPool`] for
+    /// `(model_path, pool_size, threads)`.
+    pub(crate) fn with_pool_config(
+        model_path: &Path,
+        pool_size: usize,
+        threads: usize,
+        threshold: f32,
+        min_interval_ms: u64,
+        fallback_timeout_ms: u64,
+    ) -> anyhow::Result<Self> {
+        let (pool, window_samples) = get_or_build_vap_pool(model_path, pool_size, threads)?;
         Ok(Self::with_model(
-            Box::new(model),
+            Box::new(PooledFloorModel(pool)),
             window_samples,
             threshold,
             min_interval_ms,

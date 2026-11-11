@@ -137,3 +137,75 @@ async fn a_mute_endpoint_fails_the_connect_at_its_bound() {
     );
     held.abort();
 }
+
+struct SessionEchoService;
+
+#[tonic::async_trait]
+impl TextProcessorService for SessionEchoService {
+    async fn process(
+        &self,
+        request: Request<proto::ProcessRequest>,
+    ) -> Result<Response<proto::ProcessResponse>, Status> {
+        let sid = request
+            .metadata()
+            .get(crate::grpc::client::SESSION_ID_HEADER)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("missing")
+            .to_string();
+        let req = request.into_inner();
+        Ok(Response::new(proto::ProcessResponse {
+            text: format!("{sid}:{}", req.text),
+        }))
+    }
+
+    type ProcessStreamStream = Fragments;
+
+    async fn process_stream(
+        &self,
+        _request: Request<proto::ProcessRequest>,
+    ) -> Result<Response<Self::ProcessStreamStream>, Status> {
+        Err(Status::unimplemented("batch only"))
+    }
+
+    async fn get_info(
+        &self,
+        _request: Request<proto::Empty>,
+    ) -> Result<Response<proto::TextProcessorInfo>, Status> {
+        Ok(Response::new(proto::TextProcessorInfo {
+            name: "session-echo".into(),
+            ..Default::default()
+        }))
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn cached_endpoint_assigns_distinct_session_ids_and_balances_multi_endpoint() {
+    let l1 = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let a1 = l1.local_addr().unwrap();
+    tokio::spawn(
+        tonic::transport::Server::builder()
+            .add_service(TextProcessorServiceServer::new(SessionEchoService))
+            .serve_with_incoming(TcpListenerStream::new(l1)),
+    );
+
+    let l2 = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let a2 = l2.local_addr().unwrap();
+    tokio::spawn(
+        tonic::transport::Server::builder()
+            .add_service(TextProcessorServiceServer::new(SessionEchoService))
+            .serve_with_incoming(TcpListenerStream::new(l2)),
+    );
+
+    let multi = format!("http://{a1}, http://{a2}");
+    let p1 = GrpcTextProcessor::connect_cached_blocking(&multi).expect("p1");
+    let p2 = GrpcTextProcessor::connect_cached_blocking(&multi).expect("p2");
+
+    let r1 = p1.process("hi").await.expect("r1");
+    let r2 = p2.process("hi").await.expect("r2");
+    assert!(r1.starts_with("vp-grpc-sess-"), "{r1}");
+    assert!(r2.starts_with("vp-grpc-sess-"), "{r2}");
+    assert_ne!(
+        r1, r2,
+        "each processor instance must carry a distinct session ID"
+    );
+}

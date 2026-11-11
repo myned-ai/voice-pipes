@@ -15,11 +15,11 @@ pub mod session;
 
 #[cfg(feature = "session")]
 pub use session::{
-    EXECUTION_PROVIDER_VAR, ExecutionTarget, ModelOutputError, SessionOpenError, SessionOptions,
-    dim, nth_output, open_session,
+    EXECUTION_PROVIDER_VAR, ExecutionTarget, INTRA_THREADS_VAR, ModelOutputError, SessionOpenError,
+    SessionOptions, dim, intra_threads_from_env, nth_output, open_session, parse_intra_threads,
 };
 
-use parking_lot::Mutex;
+use parking_lot::{Condvar, Mutex};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 /// How long a caller waits for a free pool item before giving up.
@@ -108,6 +108,7 @@ impl std::error::Error for EmptyPool {}
 /// reports a `PoolExhausted` the caller can turn into a busy response.
 pub struct SessionPool<T> {
     free: Mutex<Vec<T>>,
+    returned: Condvar,
     semaphore: Arc<Semaphore>,
     size: usize,
     label: &'static str,
@@ -137,6 +138,7 @@ impl<T> SessionPool<T> {
         let size = items.len();
         Ok(Self {
             free: Mutex::new(items),
+            returned: Condvar::new(),
             semaphore: Arc::new(Semaphore::new(size)),
             size,
             label,
@@ -179,13 +181,66 @@ impl<T> SessionPool<T> {
         Ok(PooledSlot {
             pool: Arc::clone(self),
             item: Some(item),
-            _permit: permit,
+            permit: Some(permit),
         })
     }
 
     /// Wait up to [`DEFAULT_POOL_WAIT`] for a free item.
     pub async fn checkout(self: &Arc<Self>) -> Result<PooledSlot<T>, PoolExhausted> {
         self.checkout_within(DEFAULT_POOL_WAIT).await
+    }
+
+    /// Block the current thread for up to `wait` waiting for a free item.
+    ///
+    /// Intended for synchronous trait boundaries (such as per-chunk VAD steps
+    /// running for ~150 µs) where an async checkout is not available.
+    pub fn checkout_blocking_within(
+        self: &Arc<Self>,
+        wait: Duration,
+    ) -> Result<PooledSlot<T>, PoolExhausted> {
+        let deadline = std::time::Instant::now() + wait;
+        let permit = loop {
+            if let Ok(permit) = Arc::clone(&self.semaphore).try_acquire_owned() {
+                break permit;
+            }
+            let mut guard = self.free.lock();
+            if let Ok(permit) = Arc::clone(&self.semaphore).try_acquire_owned() {
+                drop(guard);
+                break permit;
+            }
+            if std::time::Instant::now() >= deadline {
+                drop(guard);
+                let exhausted = PoolExhausted {
+                    label: self.label,
+                    size: self.size,
+                    waited: wait,
+                };
+                tracing::warn!(
+                    pool = self.label,
+                    pool_size = self.size,
+                    waited_ms = wait.as_millis() as u64,
+                    "inference pool exhausted; rejecting the request instead of waiting"
+                );
+                return Err(exhausted);
+            }
+            let _timed_out = self.returned.wait_until(&mut guard, deadline);
+        };
+        let item = self
+            .free
+            .lock()
+            .pop()
+            .expect("a permit guarantees a free item");
+        Ok(PooledSlot {
+            pool: Arc::clone(self),
+            item: Some(item),
+            permit: Some(permit),
+        })
+    }
+
+    /// Block the current thread for up to [`DEFAULT_POOL_WAIT`] waiting for a
+    /// free item.
+    pub fn checkout_blocking(self: &Arc<Self>) -> Result<PooledSlot<T>, PoolExhausted> {
+        self.checkout_blocking_within(DEFAULT_POOL_WAIT)
     }
 
     /// Take a free item now, or `None` if every item is checked out.
@@ -196,7 +251,7 @@ impl<T> SessionPool<T> {
         Some(PooledSlot {
             pool: Arc::clone(self),
             item: Some(item),
-            _permit: permit,
+            permit: Some(permit),
         })
     }
 
@@ -221,7 +276,7 @@ pub struct PooledSlot<T> {
     item: Option<T>,
     /// Held for as long as the item is out; released on drop, after the
     /// item is back.
-    _permit: OwnedSemaphorePermit,
+    permit: Option<OwnedSemaphorePermit>,
 }
 
 impl<T> std::fmt::Debug for PooledSlot<T> {
@@ -256,10 +311,13 @@ impl<T> std::ops::DerefMut for PooledSlot<T> {
 
 impl<T> Drop for PooledSlot<T> {
     fn drop(&mut self) {
-        // The item goes back before the permit is released (fields drop
-        // after this body), so a waiter the permit lets through finds it.
+        // The item goes back before the permit is released and waiters are
+        // notified, so any waiter that wakes finds the item in `free`.
         if let Some(item) = self.item.take() {
-            self.pool.free.lock().push(item);
+            let mut free = self.pool.free.lock();
+            free.push(item);
+            drop(self.permit.take());
+            self.pool.returned.notify_one();
         }
     }
 }

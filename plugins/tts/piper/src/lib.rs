@@ -46,13 +46,20 @@ use voice_pipes_sdk::{
 /// Default number of engine copies in the pool.
 const DEFAULT_POOL_SIZE: usize = 2;
 
+/// Default ONNX intra-op thread count per engine session.
+const DEFAULT_THREADS: usize = 4;
+
 /// Build the bounded pool of [`PiperEngine`]s used for concurrent inference.
-fn build_pool(model_path: &Path, pool_size: usize) -> Result<SessionPool<PiperEngine>, TtsError> {
+fn build_pool(
+    model_path: &Path,
+    pool_size: usize,
+    threads: usize,
+) -> Result<SessionPool<PiperEngine>, TtsError> {
     let mut engines = Vec::with_capacity(pool_size);
     for _ in 0..pool_size {
-        engines.push(PiperEngine::load(model_path)?);
+        engines.push(PiperEngine::load(model_path, threads)?);
     }
-    info!(pool_size, "Piper engine pool created");
+    info!(pool_size, threads, "Piper engine pool created");
     SessionPool::new(engines, "Piper engines").map_err(|e| TtsError::ConfigError(e.to_string()))
 }
 
@@ -82,6 +89,7 @@ impl PiperTts {
     pub(crate) fn with_pool_size(
         model_path: &Path,
         pool_size: usize,
+        threads: usize,
         text_chunking: TextChunkingConfig,
     ) -> Result<Self, TtsError> {
         let core = Arc::new(ComponentCore::new("tts:piper", ComponentKind::Tts));
@@ -93,7 +101,7 @@ impl PiperTts {
                 return Err(e);
             }
         };
-        let pool = match build_pool(model_path, pool_size) {
+        let pool = match build_pool(model_path, pool_size, threads) {
             Ok(p) => p,
             Err(e) => {
                 core.mark_unhealthy(format!("model load failed: {e}"));
@@ -105,6 +113,7 @@ impl PiperTts {
             model = %model_path.display(),
             sample_rate = config.audio.sample_rate,
             pool_size,
+            threads,
             "Piper TTS loaded"
         );
 
@@ -330,12 +339,14 @@ pub fn factory() -> Box<dyn TtsFactory> {
 #[derive(Debug)]
 struct PiperFactory;
 
-/// Piper's one option, the session pool's size; any other key is refused.
-fn piper_pool_size(cfg: &TtsConfig) -> Result<usize, Vec<ConfigError>> {
+/// Piper's options (`pool_size` and `threads`); any other key is refused.
+fn piper_options(cfg: &TtsConfig) -> Result<(usize, usize), Vec<ConfigError>> {
     let mut o = cfg.options();
-    let pool_size = o.usize_in("pool_size", 1..=64, DEFAULT_POOL_SIZE);
+    let pool_size = o.usize_in("pool_size", 1..=128, DEFAULT_POOL_SIZE);
+    let default_threads = voice_pipes_onnx::intra_threads_from_env(DEFAULT_THREADS);
+    let threads = o.usize_in("threads", 0..=256, default_threads);
     o.finish()?;
-    Ok(pool_size)
+    Ok((pool_size, threads))
 }
 
 impl TtsFactory for PiperFactory {
@@ -364,7 +375,7 @@ impl TtsFactory for PiperFactory {
                 "model path required for piper",
             ));
         }
-        if let Err(problems) = piper_pool_size(cfg) {
+        if let Err(problems) = piper_options(cfg) {
             errs.extend(problems);
         }
         errs
@@ -379,9 +390,10 @@ impl TtsFactory for PiperFactory {
         let model_path = cfg.model.as_ref().ok_or_else(|| {
             BuildError::failed("[tts] provider = \"piper\" requires a model path (set tts.model)")
         })?;
-        let pool_size = piper_pool_size(cfg).map_err(voice_pipes_sdk::options::refused)?;
+        let (pool_size, threads) = piper_options(cfg).map_err(voice_pipes_sdk::options::refused)?;
 
-        let mut tts = PiperTts::with_pool_size(model_path, pool_size, ctx.text_chunking.clone())?;
+        let mut tts =
+            PiperTts::with_pool_size(model_path, pool_size, threads, ctx.text_chunking.clone())?;
         tts.audit_tx.clone_from(&ctx.audit_tx);
         Ok(Box::new(tts))
     }

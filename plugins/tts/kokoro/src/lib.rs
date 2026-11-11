@@ -48,6 +48,9 @@ const DEFAULT_SPEED: f32 = 1.0;
 /// Default number of engine copies in the pool.
 const DEFAULT_POOL_SIZE: usize = 2;
 
+/// Default ONNX intra-op thread count per engine session.
+const DEFAULT_THREADS: usize = 4;
+
 /// Chunk size for streaming output (~170 ms at 24 kHz).
 const STREAM_CHUNK_SAMPLES: usize = 4096;
 
@@ -81,12 +84,13 @@ fn build_pool(
     model_path: &Path,
     pool_size: usize,
     target: ExecutionTarget,
+    threads: usize,
 ) -> Result<SessionPool<KokoroEngine>, TtsError> {
     let mut engines = Vec::with_capacity(pool_size);
     for _ in 0..pool_size {
-        engines.push(KokoroEngine::load(model_path, target)?);
+        engines.push(KokoroEngine::load(model_path, target, threads)?);
     }
-    info!(pool_size, "Kokoro engine pool created");
+    info!(pool_size, threads, "Kokoro engine pool created");
     SessionPool::new(engines, "Kokoro engines").map_err(|e| TtsError::ConfigError(e.to_string()))
 }
 
@@ -209,11 +213,13 @@ impl KokoroTts {
             target,
             setting: EXECUTION_PROVIDER_VAR,
         };
+        let threads = voice_pipes_onnx::intra_threads_from_env(DEFAULT_THREADS);
         Self::load(
             model_path,
             voices_path,
             default_voice,
             pool_size,
+            threads,
             text_chunking,
             device,
         )
@@ -225,6 +231,7 @@ impl KokoroTts {
         voices_path: &Path,
         default_voice: &str,
         pool_size: usize,
+        threads: usize,
         text_chunking: TextChunkingConfig,
         device: Device,
     ) -> Result<Self, TtsError> {
@@ -237,7 +244,7 @@ impl KokoroTts {
         );
         core.set_extra("active_provider", serde_json::json!(device.report().0));
 
-        let pool = match build_pool(model_path, pool_size, device.target) {
+        let pool = match build_pool(model_path, pool_size, device.target, threads) {
             Ok(p) => p,
             Err(e) => {
                 core.mark_unhealthy(format!("model load failed: {e}"));
@@ -542,6 +549,7 @@ impl voice_pipes_sdk::TtsFactory for KokoroFactory {
         let KokoroOptions {
             voices_path,
             pool_size,
+            threads,
             device,
         } = KokoroOptions::read(cfg).map_err(voice_pipes_sdk::options::refused)?;
         let default_voice = cfg.voice.as_deref().unwrap_or("af_heart");
@@ -551,6 +559,7 @@ impl voice_pipes_sdk::TtsFactory for KokoroFactory {
             Path::new(&voices_path),
             default_voice,
             pool_size,
+            threads,
             text_chunking.clone(),
             device,
         )?;
@@ -567,6 +576,7 @@ impl voice_pipes_sdk::TtsFactory for KokoroFactory {
 struct KokoroOptions {
     voices_path: String,
     pool_size: usize,
+    threads: usize,
     device: Device,
 }
 
@@ -578,7 +588,9 @@ impl KokoroOptions {
         if voices_path.is_none() {
             o.error("voices", "voices path required for kokoro");
         }
-        let pool_size = o.usize_in("pool_size", 1..=64, DEFAULT_POOL_SIZE);
+        let pool_size = o.usize_in("pool_size", 1..=128, DEFAULT_POOL_SIZE);
+        let default_threads = voice_pipes_onnx::intra_threads_from_env(DEFAULT_THREADS);
+        let threads = o.usize_in("threads", 0..=256, default_threads);
         let device_option = o
             .value(DEVICE_OPTION)
             .is_some()
@@ -588,6 +600,7 @@ impl KokoroOptions {
         Ok(Self {
             voices_path: voices_path.unwrap_or_default(),
             pool_size,
+            threads,
             device: Device::resolve(device_option.as_deref(), env.as_deref()),
         })
     }

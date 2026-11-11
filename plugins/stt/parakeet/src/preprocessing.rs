@@ -36,8 +36,8 @@ impl std::fmt::Debug for MelPreprocessor {
 
 impl MelPreprocessor {
     /// Load the preprocessor ONNX model.
-    pub fn new(model_path: &Path) -> Result<Self, SttError> {
-        let session = crate::open_session(model_path)?;
+    pub fn new(model_path: &Path, threads: usize) -> Result<Self, SttError> {
+        let session = crate::open_session(model_path, threads)?;
         Ok(Self { session })
     }
 

@@ -17,6 +17,27 @@ use ort::session::builder::GraphOptimizationLevel;
 /// ([`ExecutionTarget::from_env`]).
 pub const EXECUTION_PROVIDER_VAR: &str = "VP_ORT_EP";
 
+/// The environment variable that overrides the default per-session operator
+/// thread count (`intra_op_num_threads`) when a provider's configuration does
+/// not specify `threads` explicitly ([`intra_threads_from_env`]).
+pub const INTRA_THREADS_VAR: &str = "VP_ORT_THREADS";
+
+/// Parse an `intra_op_num_threads` override from an environment variable or
+/// string setting, falling back to `fallback` when unset, empty, or invalid.
+pub fn parse_intra_threads(value: Option<&str>, fallback: usize) -> usize {
+    value
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(fallback)
+}
+
+/// The `intra_op_num_threads` count `VP_ORT_THREADS` asks for, or `fallback`
+/// when `VP_ORT_THREADS` is unset or not a valid non-negative integer.
+pub fn intra_threads_from_env(fallback: usize) -> usize {
+    parse_intra_threads(std::env::var(INTRA_THREADS_VAR).ok().as_deref(), fallback)
+}
+
 /// Where a session's inference runs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[non_exhaustive]
@@ -104,6 +125,12 @@ impl SessionOptions {
             optimization: None,
             optimized_model_path: None,
         }
+    }
+
+    /// Session options resolved from `VP_ORT_THREADS` (falling back to
+    /// `default_threads`) and `VP_ORT_EP`.
+    pub fn from_env_or(default_threads: usize) -> Self {
+        Self::new(intra_threads_from_env(default_threads)).with_target(ExecutionTarget::from_env())
     }
 
     /// With the session running on `target`.

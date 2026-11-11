@@ -19,14 +19,83 @@ use crate::config::{
     DEFAULT_BLANK_ID, DEFAULT_MAX_TOKENS_PER_STEP, DEFAULT_POOL_SIZE, DEFAULT_THREADS,
 };
 use crate::streaming::{
-    self, ExportMetadata, NemotronSessions, StreamingEngine, transcribe_buffered,
+    self, CacheTensors, DecoderState, ExportMetadata, NemotronSessions, StreamingEngine,
+    transcribe_buffered,
 };
 use crate::vocab;
 
+enum SessionBackend {
+    Onnx(Box<NemotronSessions>),
+    #[cfg(test)]
+    Fake {
+        delay: std::time::Duration,
+        tokens: Vec<u32>,
+    },
+}
+
+impl SessionBackend {
+    fn transcribe_batch(
+        &mut self,
+        metadata: &ExportMetadata,
+        samples: &[f32],
+        blank_id: i32,
+        max_tokens: usize,
+    ) -> Result<Vec<u32>, SttError> {
+        match self {
+            Self::Onnx(sessions) => {
+                transcribe_buffered(sessions, metadata, samples, blank_id, max_tokens)
+            }
+            #[cfg(test)]
+            Self::Fake { delay, tokens } => {
+                if !delay.is_zero() {
+                    std::thread::sleep(*delay);
+                }
+                Ok(tokens.clone())
+            }
+        }
+    }
+
+    fn step_engine(
+        &mut self,
+        engine: &mut StreamingEngine,
+        do_flush: bool,
+    ) -> Result<Vec<u32>, SttError> {
+        match self {
+            Self::Onnx(sessions) => {
+                let mut out = if engine.has_ready_chunk() {
+                    engine.drain_ready_chunks(sessions)?
+                } else {
+                    Vec::new()
+                };
+                if do_flush {
+                    let extra = engine.flush(sessions)?;
+                    out.extend(extra);
+                    engine.reset();
+                }
+                Ok(out)
+            }
+            #[cfg(test)]
+            Self::Fake { delay, tokens } => {
+                if !delay.is_zero() {
+                    std::thread::sleep(*delay);
+                }
+                engine.chunks_processed += 1;
+                engine.end_audio();
+                if do_flush {
+                    engine.reset();
+                }
+                Ok(tokens.clone())
+            }
+        }
+    }
+}
+
 pub struct NemotronStt {
-    pool: Arc<SessionPool<NemotronSessions>>,
+    pool: Arc<SessionPool<SessionBackend>>,
     metadata: Arc<ExportMetadata>,
     vocab: Arc<HashMap<u32, String>>,
+    initial_cache: CacheTensors,
+    initial_decoder_state: DecoderState,
     model_dir: PathBuf,
     threads: i16,
     blank_id: i32,
@@ -82,16 +151,38 @@ impl NemotronStt {
             }
         };
         let pool_size = pool_size.max(1);
-        let mut sets = Vec::with_capacity(pool_size);
+        let mut raw_sets = Vec::with_capacity(pool_size);
         for _ in 0..pool_size {
             match NemotronSessions::load(model_dir, threads) {
-                Ok(s) => sets.push(s),
+                Ok(s) => raw_sets.push(s),
                 Err(e) => {
                     core.mark_unhealthy(format!("{e}"));
                     return Err(e);
                 }
             }
         }
+        let first_session = raw_sets.first().ok_or_else(|| {
+            SttError::ConfigError("Nemotron session pool requires at least one session".into())
+        })?;
+        let initial_cache =
+            match CacheTensors::new(&first_session.encoder, &metadata.cache_init_shapes) {
+                Ok(c) => c,
+                Err(e) => {
+                    core.mark_unhealthy(format!("{e}"));
+                    return Err(e);
+                }
+            };
+        let initial_decoder_state = match DecoderState::new(&first_session.decoder, blank_id) {
+            Ok(d) => d,
+            Err(e) => {
+                core.mark_unhealthy(format!("{e}"));
+                return Err(e);
+            }
+        };
+        let sets: Vec<SessionBackend> = raw_sets
+            .into_iter()
+            .map(|s| SessionBackend::Onnx(Box::new(s)))
+            .collect();
         let vocab = match vocab::load_vocab(model_dir) {
             Ok(v) => v,
             Err(e) => {
@@ -115,6 +206,8 @@ impl NemotronStt {
             ),
             metadata: Arc::new(metadata),
             vocab: Arc::new(vocab),
+            initial_cache,
+            initial_decoder_state,
             model_dir: model_dir.to_path_buf(),
             threads,
             blank_id,
@@ -123,30 +216,17 @@ impl NemotronStt {
             core,
         })
     }
-}
 
-/// A streaming engine built on a pooled session set. The engine owns the
-/// sessions while it lives; on drop they go back to the pool, keeping the
-/// provider usable even if a streaming inference step panics.
-/// Wait for a free session set and wrap it in a streaming engine. The
-/// engine holds the pooled slot, so the sessions go back to the pool when it
-/// drops, and when it fails to build.
-///
-/// A free function, not a method: the pool type lives in `voice-pipes-onnx`
-/// and a foreign type takes no inherent impl.
-async fn checkout_engine(
-    pool: &Arc<SessionPool<NemotronSessions>>,
-    metadata: &ExportMetadata,
-    blank_id: i32,
-    max_tokens_per_step: usize,
-    slot_wait: Option<std::time::Duration>,
-) -> Result<StreamingEngine, SttError> {
-    let slot = match slot_wait {
-        Some(wait) => pool.checkout_within(wait).await,
-        None => pool.checkout().await,
+    async fn checkout_slot(
+        &self,
+        slot_wait: Option<std::time::Duration>,
+    ) -> Result<voice_pipes_onnx::PooledSlot<SessionBackend>, SttError> {
+        match slot_wait {
+            Some(wait) => self.pool.checkout_within(wait).await,
+            None => self.pool.checkout().await,
+        }
+        .map_err(SttError::busy)
     }
-    .map_err(SttError::busy)?;
-    StreamingEngine::new(slot, metadata, blank_id, max_tokens_per_step)
 }
 
 /// Number of chunk drains a `StreamingEngine` has committed to its cache.
@@ -204,13 +284,9 @@ impl SttProvider for NemotronStt {
                 )
                 .map_err(|e| SttError::InvalidAudio(e.to_string()))?;
                 let total_audio_secs = samples.len() as f64 / 16_000.0;
-                let tokens = transcribe_buffered(
-                    guard.get_mut(),
-                    &metadata,
-                    &samples,
-                    blank_id,
-                    max_tokens,
-                )?;
+                let tokens = guard
+                    .get_mut()
+                    .transcribe_batch(&metadata, &samples, blank_id, max_tokens)?;
                 let text = vocab::detokenize(&vocab, &tokens);
                 let inference_metrics = build_metrics(
                     total_audio_secs,
@@ -268,24 +344,14 @@ impl SttProvider for NemotronStt {
                 .unwrap_or(u32::MAX);
         let expected_sr = self.expected_sample_rate();
 
-        // The engine owns the sessions; the guard returns them to the pool on
-        // drop (loop exit, early `?`, or a panic unwind in the blocking task).
-        // The engine moves in/out of `spawn_blocking` on every recv batch.
-        let mut engine_guard = match checkout_engine(
-            &self.pool,
+        let mut engine = StreamingEngine::from_templates(
+            self.initial_cache.clone(),
+            self.initial_decoder_state.clone(),
             &metadata,
             blank_id,
             max_tokens,
-            request.slot_wait,
-        )
-        .await
-        {
-            Ok(e) => e,
-            Err(e) => {
-                self.core.record_error(&e);
-                return Err(e);
-            }
-        };
+        );
+        let slot_wait = request.slot_wait;
 
         let mut segment_index: u32 = 0;
         let mut all_tokens: Vec<u32> = Vec::new();
@@ -338,70 +404,60 @@ impl SttProvider for NemotronStt {
                 (Vec::new(), true)
             };
             total_samples += samples_to_feed.len();
+            if !samples_to_feed.is_empty() {
+                engine.push_samples(&samples_to_feed);
+            }
 
-            // Run encoder/decoder work on a blocking thread. The guard moves
-            // in and back out so the engine stays inside it throughout -- a
-            // panic in the blocking task drops the guard there and returns the
-            // sessions to the pool.
-            let infer_start = std::time::Instant::now();
-            let do_flush = is_final;
-            let reset_metadata = Arc::clone(&metadata);
-            let (returned_guard, feed_result, ran_chunks) =
-                tokio::task::spawn_blocking(move || {
-                    let engine = &mut engine_guard;
-                    // Track how many chunk drains actually executed so
-                    // `inference_count` reflects encoder work, not loop
-                    // iterations.
-                    let before = engine_chunk_progress(engine);
-                    let mut combined: Result<Vec<u32>, SttError> = if samples_to_feed.is_empty() {
-                        Ok(Vec::new())
-                    } else {
-                        engine.feed_samples(&samples_to_feed)
-                    };
-                    if do_flush && combined.is_ok() {
-                        match engine.flush() {
-                            Ok(extra) => {
-                                if let Ok(ref mut v) = combined {
-                                    v.extend(extra);
-                                }
-                            }
-                            Err(e) => combined = Err(e),
-                        }
-                        // The utterance is done: start the next one from a
-                        // clean encoder cache and decoder state.
-                        if combined.is_ok()
-                            && let Err(e) = engine.reset(&reset_metadata)
-                        {
-                            combined = Err(e);
-                        }
-                    }
-                    let after = engine_chunk_progress(engine);
-                    let ran = u32::try_from(after.saturating_sub(before)).unwrap_or(u32::MAX);
-                    (engine_guard, combined, ran)
-                })
-                .await
-                .map_err(|e| {
-                    let err = SttError::InferenceFailed(format!("task join: {e}"));
-                    self.core.record_error(&err);
-                    err
-                })?;
-            let infer_elapsed = infer_start.elapsed();
-            engine_guard = returned_guard;
-            total_inference_wall += infer_elapsed;
-            chunks_run += ran_chunks;
+            let needs_onnx_step =
+                engine.has_ready_chunk() || (is_final && engine.has_flushable_audio());
+            if !needs_onnx_step && !is_final {
+                continue;
+            }
 
-            let new_tokens = match feed_result {
-                Ok(t) => {
-                    if !t.is_empty() || is_final {
-                        self.core.record_ok(infer_elapsed);
+            let new_tokens = if needs_onnx_step {
+                let mut slot = match self.checkout_slot(slot_wait).await {
+                    Ok(s) => s,
+                    Err(e) => {
+                        self.core.record_error(&e);
+                        return Err(e);
                     }
-                    t
+                };
+                let infer_start = std::time::Instant::now();
+                let do_flush = is_final;
+                let (returned_engine, feed_result, ran_chunks) =
+                    tokio::task::spawn_blocking(move || {
+                        let before = engine_chunk_progress(&engine);
+                        let combined = slot.get_mut().step_engine(&mut engine, do_flush);
+                        let after = engine_chunk_progress(&engine);
+                        let ran = u32::try_from(after.saturating_sub(before)).unwrap_or(u32::MAX);
+                        (engine, combined, ran)
+                    })
+                    .await
+                    .map_err(|e| {
+                        let err = SttError::InferenceFailed(format!("task join: {e}"));
+                        self.core.record_error(&err);
+                        err
+                    })?;
+                let infer_elapsed = infer_start.elapsed();
+                engine = returned_engine;
+                total_inference_wall += infer_elapsed;
+                chunks_run += ran_chunks;
+
+                match feed_result {
+                    Ok(t) => {
+                        if !t.is_empty() || is_final {
+                            self.core.record_ok(infer_elapsed);
+                        }
+                        t
+                    }
+                    Err(e) => {
+                        self.core.record_error(&e);
+                        return Err(e);
+                    }
                 }
-                Err(e) => {
-                    self.core.record_error(&e);
-                    // `engine_guard` drops on return, restoring the sessions.
-                    return Err(e);
-                }
+            } else {
+                engine.reset();
+                Vec::new()
             };
 
             if !new_tokens.is_empty() {
@@ -471,6 +527,10 @@ impl SttProvider for NemotronStt {
         Ok(())
     }
 
+    fn concurrent_capacity(&self) -> Option<usize> {
+        Some(self.pool.size())
+    }
+
     fn expected_sample_rate(&self) -> u32 {
         16_000
     }
@@ -494,3 +554,7 @@ impl SttProvider for NemotronStt {
         Some(Arc::new(CoreComponent::new(Arc::clone(&self.core))))
     }
 }
+
+#[cfg(test)]
+#[path = "tests/provider.rs"]
+mod tests;

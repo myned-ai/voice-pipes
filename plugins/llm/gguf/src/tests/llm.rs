@@ -967,3 +967,95 @@ async fn metric_conformance() {
     .unwrap();
     assert_eq!(ttft, 25.0);
 }
+
+#[tokio::test]
+async fn pooled_backends_run_concurrent_turns_in_parallel() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct ConcurrencyBackend {
+        inner: FakeBackend,
+        active: Arc<AtomicUsize>,
+        max_active: Arc<AtomicUsize>,
+        barrier: Arc<std::sync::Barrier>,
+        synced: bool,
+    }
+
+    impl LlmBackend for ConcurrencyBackend {
+        fn forward(
+            &mut self,
+            tokens: &[u32],
+            pos: usize,
+        ) -> Result<candle_core::Tensor, LlmBackendError> {
+            let now = self.active.fetch_add(1, Ordering::SeqCst) + 1;
+            self.max_active.fetch_max(now, Ordering::SeqCst);
+            if !self.synced {
+                self.synced = true;
+                self.barrier.wait();
+                let now_after = self.active.load(Ordering::SeqCst);
+                self.max_active.fetch_max(now_after, Ordering::SeqCst);
+                self.barrier.wait();
+            }
+            let res = self.inner.forward(tokens, pos);
+            self.active.fetch_sub(1, Ordering::SeqCst);
+            res
+        }
+
+        fn save_cache(&mut self) -> usize {
+            self.inner.save_cache()
+        }
+
+        fn reset_cache(&mut self) {
+            self.inner.reset_cache();
+        }
+    }
+
+    let (tokenizer, b1) = scripted(&["Hello", "one."]);
+    let (_, b2) = scripted(&["Hello", "two."]);
+    let active = Arc::new(AtomicUsize::new(0));
+    let max_active = Arc::new(AtomicUsize::new(0));
+    let barrier = Arc::new(std::sync::Barrier::new(2));
+
+    let backends: Vec<Box<dyn LlmBackend>> = vec![
+        Box::new(ConcurrencyBackend {
+            inner: b1,
+            active: Arc::clone(&active),
+            max_active: Arc::clone(&max_active),
+            barrier: Arc::clone(&barrier),
+            synced: false,
+        }),
+        Box::new(ConcurrencyBackend {
+            inner: b2,
+            active: Arc::clone(&active),
+            max_active: Arc::clone(&max_active),
+            barrier: Arc::clone(&barrier),
+            synced: false,
+        }),
+    ];
+
+    let proc = Arc::new(
+        LlmProcessor::with_backends(
+            backends,
+            tokenizer,
+            Box::new(ChatMlTemplate),
+            LlmConfig {
+                prefill_cache: false,
+                repeat_penalty: 1.0,
+                pool_size: 2,
+                ..Default::default()
+            },
+            voice_pipes_sdk::TextChunkingConfig::default(),
+        )
+        .unwrap(),
+    );
+
+    let p1 = Arc::clone(&proc);
+    let p2 = Arc::clone(&proc);
+    let (r1, r2) = tokio::join!(p1.process("turn 1"), p2.process("turn 2"));
+    assert!(r1.is_ok());
+    assert!(r2.is_ok());
+    assert_eq!(
+        max_active.load(Ordering::SeqCst),
+        2,
+        "2 pooled KV-cache slots must execute 2 concurrent turns in parallel"
+    );
+}

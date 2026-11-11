@@ -121,3 +121,20 @@ fn metric_conformance() {
     );
     assert!(res.is_ok(), "{res:?}");
 }
+
+#[test]
+fn pool_size_and_threads_bounds_are_validated() {
+    let present = std::env::current_exe().expect("the test binary");
+    let mut cfg = VadConfig::new("silero").with_model(Some(present));
+    cfg.options.insert("pool_size".to_owned(), 0_u64.into());
+    cfg.options.insert("threads".to_owned(), 300_u64.into());
+    let errs = factory().validate(&cfg);
+    assert!(
+        errs.iter().any(|e| e.field == "vad.options.pool_size"),
+        "{errs:?}"
+    );
+    assert!(
+        errs.iter().any(|e| e.field == "vad.options.threads"),
+        "{errs:?}"
+    );
+}

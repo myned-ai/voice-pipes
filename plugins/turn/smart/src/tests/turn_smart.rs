@@ -269,6 +269,29 @@ fn the_schema_offers_no_live_edits_and_matches_the_parser() {
     };
     assert_eq!(max("smart_window_secs"), Some(8.0));
     assert_eq!(max("smart_min_audio_ms"), Some(10_000.0));
+    assert_eq!(max("smart_pool_size"), Some(128.0));
+    assert_eq!(max("smart_threads"), Some(256.0));
+}
+
+#[test]
+fn pool_size_and_threads_out_of_range_are_reported() {
+    use voice_pipes_sdk::turn::TurnDetectorFactory;
+    let errors = SmartTurnFactory.validate(&settings(&[
+        ("smart_pool_size", serde_json::json!(0)),
+        ("smart_threads", serde_json::json!(300)),
+    ]));
+    assert!(
+        errors
+            .iter()
+            .any(|e| e.field == "turn_detection.smart_pool_size"),
+        "{errors:?}"
+    );
+    assert!(
+        errors
+            .iter()
+            .any(|e| e.field == "turn_detection.smart_threads"),
+        "{errors:?}"
+    );
 }
 
 /// Load a real export through the factory and ask it about one second of

@@ -5,7 +5,7 @@ use std::path::Path;
 use voice_pipes_sdk::ConfigError;
 use voice_pipes_sdk::turn::{TurnConfig, TurnDetector, TurnDetectorFactory};
 
-use crate::config::{MIN_INTERVAL_MS, VapSettings};
+use crate::config::{MIN_INTERVAL_MS, POOL_SIZE_RANGE, THREADS_RANGE, VapSettings};
 use crate::detector::VapTurnDetector;
 
 /// The factory the binary registers.
@@ -39,8 +39,10 @@ impl TurnDetectorFactory for VapTurnFactory {
                 .collect();
             anyhow::anyhow!("{}", messages.join("; "))
         })?;
-        Ok(Box::new(VapTurnDetector::new(
+        Ok(Box::new(VapTurnDetector::with_pool_config(
             Path::new(&s.model_path),
+            s.pool_size,
+            s.threads,
             s.threshold,
             s.min_interval_ms,
             cfg.silence_timeout_ms,
@@ -70,6 +72,22 @@ impl TurnDetectorFactory for VapTurnFactory {
                 "Shortest time between two model runs (default 200 ms).",
                 0,
                 i64::try_from(*MIN_INTERVAL_MS.end()).unwrap_or(i64::MAX),
+            )
+            .restart_required(),
+            ParamDescriptor::mutable_int(
+                "vap_pool_size",
+                "VAP pool size",
+                "Shared ONNX session pool size across concurrent WebSocket sessions (default 2).",
+                i64::try_from(*POOL_SIZE_RANGE.start()).unwrap_or(1),
+                i64::try_from(*POOL_SIZE_RANGE.end()).unwrap_or(128),
+            )
+            .restart_required(),
+            ParamDescriptor::mutable_int(
+                "vap_threads",
+                "VAP threads",
+                "Intra-op threads per VAP ONNX session (default 2, or VP_ORT_THREADS).",
+                i64::try_from(*THREADS_RANGE.start()).unwrap_or(0),
+                i64::try_from(*THREADS_RANGE.end()).unwrap_or(256),
             )
             .restart_required(),
         ]

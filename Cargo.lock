@@ -4665,6 +4665,7 @@ dependencies = [
  "tokio-util",
  "toml",
  "tracing",
+ "voice-pipes-onnx",
  "voice-pipes-sdk",
 ]
 
