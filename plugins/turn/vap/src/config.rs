@@ -16,12 +16,30 @@ const DEFAULT_THRESHOLD: f32 = 0.5;
 /// can usefully change.
 const DEFAULT_MIN_INTERVAL_MS: u64 = 200;
 
+/// Default shared ONNX session pool size across concurrent WebSocket sessions.
+pub(crate) const DEFAULT_POOL_SIZE: usize = 2;
+
+/// Default intra-op threads per VAP ONNX session.
+pub(crate) const DEFAULT_THREADS: usize = 2;
+
 /// Accepted `vap_min_interval_ms`: past a few seconds between runs the
 /// prediction is stale before it is used.
 pub(crate) const MIN_INTERVAL_MS: std::ops::RangeInclusive<u64> = 0..=10_000;
 
+/// Accepted `vap_pool_size`.
+pub(crate) const POOL_SIZE_RANGE: std::ops::RangeInclusive<usize> = 1..=128;
+
+/// Accepted `vap_threads` (`0` lets ONNX Runtime choose).
+pub(crate) const THREADS_RANGE: std::ops::RangeInclusive<usize> = 0..=256;
+
 /// The settings VAP reads from `[turn_detection]`.
-pub(crate) const VAP_KEYS: &[&str] = &["vap_model_path", "vap_threshold", "vap_min_interval_ms"];
+pub(crate) const VAP_KEYS: &[&str] = &[
+    "vap_model_path",
+    "vap_threshold",
+    "vap_min_interval_ms",
+    "vap_pool_size",
+    "vap_threads",
+];
 
 /// VAP's settings, parsed from the section's options.
 #[derive(Debug)]
@@ -29,6 +47,8 @@ pub(crate) struct VapSettings {
     pub(crate) model_path: String,
     pub(crate) threshold: f32,
     pub(crate) min_interval_ms: u64,
+    pub(crate) pool_size: usize,
+    pub(crate) threads: usize,
 }
 
 impl VapSettings {
@@ -74,12 +94,17 @@ impl VapSettings {
             MIN_INTERVAL_MS,
             DEFAULT_MIN_INTERVAL_MS,
         );
+        let pool_size = o.usize_in("vap_pool_size", POOL_SIZE_RANGE, DEFAULT_POOL_SIZE);
+        let default_threads = voice_pipes_onnx::intra_threads_from_env(DEFAULT_THREADS);
+        let threads = o.usize_in("vap_threads", THREADS_RANGE, default_threads);
         errors.extend(o.into_value_errors());
         if errors.is_empty() {
             Ok(Self {
                 model_path,
                 threshold,
                 min_interval_ms,
+                pool_size,
+                threads,
             })
         } else {
             Err(errors)

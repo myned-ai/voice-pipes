@@ -29,9 +29,44 @@ mod params {
 
 pub use proto::text_processor_service_server::TextProcessorServiceServer;
 
+/// Factory callback that builds a fresh per-session [`TextProcessor`] (with
+/// isolated conversation history, sharing loaded model weights).
+pub type SessionProcessorBuilder =
+    Arc<dyn Fn() -> Result<Arc<dyn TextProcessor>, String> + Send + Sync>;
+
+const MAX_SESSIONS: usize = 1024;
+
+#[derive(Default)]
+struct SessionTable {
+    order: std::collections::VecDeque<String>,
+    entries: std::collections::HashMap<String, Arc<dyn TextProcessor>>,
+}
+
+impl SessionTable {
+    fn get(&self, id: &str) -> Option<Arc<dyn TextProcessor>> {
+        self.entries.get(id).cloned()
+    }
+
+    fn insert(&mut self, id: String, proc: Arc<dyn TextProcessor>) {
+        if !self.entries.contains_key(&id) {
+            while self.entries.len() >= MAX_SESSIONS {
+                if let Some(oldest) = self.order.pop_front() {
+                    self.entries.remove(&oldest);
+                } else {
+                    break;
+                }
+            }
+            self.order.push_back(id.clone());
+        }
+        self.entries.insert(id, proc);
+    }
+}
+
 /// Wraps a local [`TextProcessor`] as a gRPC service.
 pub struct TextProcessorServiceImpl {
     processor: Arc<dyn TextProcessor>,
+    session_builder: Option<SessionProcessorBuilder>,
+    sessions: parking_lot::Mutex<SessionTable>,
     param_schema: Vec<crate::api::param_schema::ParamDescriptor>,
     current_values: serde_json::Map<String, serde_json::Value>,
 }
@@ -52,9 +87,48 @@ impl TextProcessorServiceImpl {
     ) -> Self {
         Self {
             processor,
+            session_builder: None,
+            sessions: parking_lot::Mutex::new(SessionTable::default()),
             param_schema,
             current_values,
         }
+    }
+
+    /// Attach a per-session builder so callers supplying the `x-vp-session-id`
+    /// metadata header get an isolated [`TextProcessor`] conversation history.
+    #[must_use]
+    pub fn with_session_builder(mut self, builder: SessionProcessorBuilder) -> Self {
+        self.session_builder = Some(builder);
+        self
+    }
+
+    fn resolve_processor(
+        &self,
+        metadata: &tonic::metadata::MetadataMap,
+    ) -> Result<Arc<dyn TextProcessor>, Status> {
+        let Some(ref builder) = self.session_builder else {
+            return Ok(Arc::clone(&self.processor));
+        };
+        let Some(raw_id) = metadata
+            .get(crate::grpc::client::SESSION_ID_HEADER)
+            .and_then(|v| v.to_str().ok())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        else {
+            return Ok(Arc::clone(&self.processor));
+        };
+
+        if let Some(existing) = self.sessions.lock().get(raw_id) {
+            return Ok(existing);
+        }
+
+        let built = builder().map_err(Status::internal)?;
+        let mut guard = self.sessions.lock();
+        if let Some(existing) = guard.get(raw_id) {
+            return Ok(existing);
+        }
+        guard.insert(raw_id.to_string(), Arc::clone(&built));
+        Ok(built)
     }
 }
 
@@ -68,9 +142,9 @@ impl proto::text_processor_service_server::TextProcessorService for TextProcesso
         &self,
         request: Request<proto::ProcessRequest>,
     ) -> Result<Response<proto::ProcessResponse>, Status> {
+        let processor = self.resolve_processor(request.metadata())?;
         let req = request.into_inner();
-        let result = self
-            .processor
+        let result = processor
             .process(&req.text)
             .await
             .map_err(|e| super::status::text_error_to_status(&e))?;
@@ -84,6 +158,7 @@ impl proto::text_processor_service_server::TextProcessorService for TextProcesso
         &self,
         request: Request<proto::ProcessRequest>,
     ) -> Result<Response<Self::ProcessStreamStream>, Status> {
+        let processor = self.resolve_processor(request.metadata())?;
         let req = request.into_inner();
         let (tx, rx) = mpsc::channel::<TextFragment>(64);
         let cancel = CancellationToken::new();
@@ -91,7 +166,6 @@ impl proto::text_processor_service_server::TextProcessorService for TextProcesso
         // (guard moved into the trailer below, same pattern as STT/TTS).
         let cancel_guard = cancel.clone().drop_guard();
 
-        let processor = Arc::clone(&self.processor);
         let text = req.text.clone();
         let handle = tokio::spawn(async move { processor.process_stream(&text, tx, cancel).await });
 

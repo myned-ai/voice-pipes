@@ -243,7 +243,8 @@ fn audio_filter_validates_unknown_provider_and_indexes_errors() {
             &self,
             _cfg: &voice_pipes_sdk::FilterStageConfig,
             _ctx: &voice_pipes_sdk::BuildContext<'_>,
-        ) -> Result<Box<dyn voice_pipes_sdk::filter::AudioFilter>, voice_pipes_sdk::BuildError> {
+        ) -> Result<Box<dyn voice_pipes_sdk::filter::AudioFilter>, voice_pipes_sdk::BuildError>
+        {
             Err(voice_pipes_sdk::BuildError::failed("never built"))
         }
     }

@@ -30,9 +30,9 @@ pub trait SessionsAccess {
     fn sessions(&mut self) -> &mut Sessions;
 }
 
-impl SessionsAccess for &mut Sessions {
+impl<S: SessionsAccess + ?Sized> SessionsAccess for &mut S {
     fn sessions(&mut self) -> &mut Sessions {
-        self
+        (**self).sessions()
     }
 }
 
@@ -132,7 +132,7 @@ impl Schedule {
 
 // Sessions and cache tensors carry nothing a log line could use; the
 // decoding settings do.
-impl<S: SessionsAccess> std::fmt::Debug for Engine<S> {
+impl std::fmt::Debug for Engine {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Engine")
             .field("blank_id", &self.blank_id)
@@ -143,8 +143,7 @@ impl<S: SessionsAccess> std::fmt::Debug for Engine<S> {
     }
 }
 
-pub struct Engine<S: SessionsAccess> {
-    sessions: S,
+pub struct Engine {
     schedule: Schedule,
     extractor: LogMelExtractor,
     blank_id: i64,
@@ -176,17 +175,41 @@ pub struct Engine<S: SessionsAccess> {
     tags_seen: Vec<u32>,
 }
 
-impl<S: SessionsAccess> Engine<S> {
-    pub fn new(
-        sessions: S,
+/// Primed prediction-network state `(dec_h, dec_c, dec_out)`.
+pub type PrimedDecoder = (Vec<f32>, Vec<f32>, Vec<f32>);
+
+impl Engine {
+    /// Prime the prediction network once with `blank_token_id` on zeroed hidden state.
+    pub fn prime_decoder<S: SessionsAccess + ?Sized>(
+        sessions: &mut S,
+        cfg: &ModelConfig,
+    ) -> Result<PrimedDecoder, EngineError> {
+        let hidden = cfg.decoder_hidden_size;
+        let layers = cfg.num_decoder_layers;
+        let mut e = Self::from_primed(
+            cfg,
+            cfg.default_prompt_id,
+            HashSet::new(),
+            (
+                vec![0f32; layers * hidden],
+                vec![0f32; layers * hidden],
+                Vec::new(),
+            ),
+        );
+        let dec_out = e.run_decoder(sessions.sessions(), e.blank_id)?;
+        Ok((e.dec_h, e.dec_c, dec_out))
+    }
+
+    /// Construct a per-stream engine from a pre-primed `(dec_h, dec_c, dec_out)` tuple
+    /// without checking out an ONNX session at stream start.
+    pub fn from_primed(
         cfg: &ModelConfig,
         prompt_id: i64,
         locale_tags: HashSet<u32>,
-    ) -> Result<Self, EngineError> {
-        let hidden = cfg.decoder_hidden_size;
-        let layers = cfg.num_decoder_layers;
-        let mut e = Self {
-            sessions,
+        primed_decoder: PrimedDecoder,
+    ) -> Self {
+        let (dec_h, dec_c, dec_out) = primed_decoder;
+        Self {
             schedule: Schedule::for_lookahead(cfg.lookahead()),
             extractor: LogMelExtractor::new(),
             blank_id: cfg.blank_token_id,
@@ -208,9 +231,9 @@ impl<S: SessionsAccess> Engine<S> {
                 })
                 .collect(),
             cache_valid: 0,
-            dec_h: vec![0f32; layers * hidden],
-            dec_c: vec![0f32; layers * hidden],
-            dec_out: Vec::new(),
+            dec_h,
+            dec_c,
+            dec_out,
             pcm: Vec::new(),
             pcm_start: 0,
             mel_idx: 0,
@@ -219,10 +242,17 @@ impl<S: SessionsAccess> Engine<S> {
             locale_tags,
             chunks_run: 0,
             tags_seen: Vec::new(),
-        };
-        // The prediction network is primed with the blank, as at training.
-        e.dec_out = e.run_decoder(e.blank_id)?;
-        Ok(e)
+        }
+    }
+
+    pub fn new<S: SessionsAccess + ?Sized>(
+        sessions: &mut S,
+        cfg: &ModelConfig,
+        prompt_id: i64,
+        locale_tags: HashSet<u32>,
+    ) -> Result<Self, EngineError> {
+        let primed = Self::prime_decoder(sessions.sessions(), cfg)?;
+        Ok(Self::from_primed(cfg, prompt_id, locale_tags, primed))
     }
 
     pub fn schedule(&self) -> Schedule {
@@ -244,14 +274,31 @@ impl<S: SessionsAccess> Engine<S> {
         self.chunks_run
     }
 
-    /// Give the sessions back, ending this stream.
-    pub fn into_sessions(self) -> S {
-        self.sessions
+    /// Append 16 kHz mono samples in `[-1, 1]` to the stream's PCM buffer without
+    /// running ONNX inference.
+    pub fn push_samples(&mut self, samples: &[f32]) {
+        self.pcm.extend_from_slice(samples);
+    }
+
+    /// Whether enough PCM samples have accumulated to execute at least one
+    /// encoder chunk (`samples_first` before start, `samples_steady` after).
+    pub fn has_ready_chunk(&self) -> bool {
+        if self.started {
+            let pcm_end = self.pcm_start + self.pcm.len();
+            let start = (self.mel_idx * HOP_LENGTH).saturating_sub(N_FFT / 2);
+            start + self.schedule.samples_steady <= pcm_end
+        } else {
+            self.pcm.len() >= self.schedule.samples_first
+        }
     }
 
     // ── decoder / joiner ────────────────────────────────────
 
-    fn run_decoder(&mut self, token: i64) -> Result<Vec<f32>, EngineError> {
+    fn run_decoder(
+        &mut self,
+        sessions: &mut Sessions,
+        token: i64,
+    ) -> Result<Vec<f32>, EngineError> {
         let layers_hidden = self.dec_h.len();
         let hidden = layers_hidden / 2;
         let tok =
@@ -260,9 +307,7 @@ impl<S: SessionsAccess> Engine<S> {
             .map_err(ort_err("h tensor"))?;
         let c = Tensor::from_array(([2usize, 1, hidden], std::mem::take(&mut self.dec_c)))
             .map_err(ort_err("c tensor"))?;
-        let outputs = self
-            .sessions
-            .sessions()
+        let outputs = sessions
             .decoder
             .run(ort::inputs!["token" => tok, "h_in" => h, "c_in" => c])
             .map_err(ort_err("decoder run"))?;
@@ -284,6 +329,7 @@ impl<S: SessionsAccess> Engine<S> {
     /// after `max_symbols` emissions on one frame.
     fn greedy_decode(
         &mut self,
+        sessions: &mut Sessions,
         enc_out: &[f32],
         hidden: usize,
         frames: usize,
@@ -298,9 +344,7 @@ impl<S: SessionsAccess> Engine<S> {
                     .map_err(ort_err("encoder frame tensor"))?;
                 let dec = Tensor::from_array(([1usize, hidden], self.dec_out.clone()))
                     .map_err(ort_err("decoder out tensor"))?;
-                let outputs = self
-                    .sessions
-                    .sessions()
+                let outputs = sessions
                     .joiner
                     .run(ort::inputs!["encoder_frame" => enc, "decoder_out" => dec])
                     .map_err(ort_err("joiner run"))?;
@@ -327,7 +371,7 @@ impl<S: SessionsAccess> Engine<S> {
                 } else {
                     self.tokens.push(id);
                 }
-                self.dec_out = self.run_decoder(token)?;
+                self.dec_out = self.run_decoder(sessions, token)?;
                 symbols += 1;
                 if symbols >= self.max_symbols {
                     break;
@@ -344,6 +388,7 @@ impl<S: SessionsAccess> Engine<S> {
     /// hidden size.
     fn run_encoder(
         &mut self,
+        sessions: &mut Sessions,
         features: Vec<f32>,
         first: bool,
     ) -> Result<(Vec<f32>, usize), EngineError> {
@@ -390,7 +435,6 @@ impl<S: SessionsAccess> Engine<S> {
                 .map_err(ort_err("cache tensor"))?;
             named.push((name.clone(), t.into_dyn()));
         }
-        let sessions = self.sessions.sessions();
         let session = if first {
             &mut sessions.encoder_first
         } else {
@@ -427,6 +471,7 @@ impl<S: SessionsAccess> Engine<S> {
 
     fn produce_first(
         &mut self,
+        sessions: &mut Sessions,
         decode_frames: Option<usize>,
         valid_mel: Option<usize>,
     ) -> Result<(), EngineError> {
@@ -438,12 +483,12 @@ impl<S: SessionsAccess> Engine<S> {
             feats.truncate(v * N_MELS);
         }
         let feats = Self::fit(feats, self.schedule.mel_first);
-        let (enc_out, hidden) = self.run_encoder(feats, true)?;
+        let (enc_out, hidden) = self.run_encoder(sessions, feats, true)?;
         self.started = true;
         self.mel_idx = self.schedule.mel_first;
         let frames = decode_frames.unwrap_or(self.schedule.enc_frames);
         if frames > 0 {
-            self.greedy_decode(&enc_out, hidden, frames)?;
+            self.greedy_decode(sessions, &enc_out, hidden, frames)?;
         }
         self.discard_consumed();
         Ok(())
@@ -451,6 +496,7 @@ impl<S: SessionsAccess> Engine<S> {
 
     fn produce_steady(
         &mut self,
+        sessions: &mut Sessions,
         window: &[f32],
         valid_mel: Option<usize>,
     ) -> Result<(), EngineError> {
@@ -461,13 +507,13 @@ impl<S: SessionsAccess> Engine<S> {
             feats.truncate(v * N_MELS);
         }
         let feats = Self::fit(feats, self.schedule.mel_steady);
-        let (enc_out, hidden) = self.run_encoder(feats, false)?;
+        let (enc_out, hidden) = self.run_encoder(sessions, feats, false)?;
         let frames = match valid_mel {
             None => self.schedule.enc_frames,
             Some(v) => self.schedule.enc_frames.min(v.div_ceil(SUBSAMPLING).max(1)),
         };
         self.mel_idx += self.schedule.mel_steady;
-        self.greedy_decode(&enc_out, hidden, frames)?;
+        self.greedy_decode(sessions, &enc_out, hidden, frames)?;
         self.discard_consumed();
         Ok(())
     }
@@ -484,16 +530,18 @@ impl<S: SessionsAccess> Engine<S> {
 
     // ── public ──────────────────────────────────────────────
 
-    /// Feed 16 kHz mono samples in `[-1, 1]`; every complete chunk they
-    /// allow is run.
-    pub fn accept(&mut self, samples: &[f32]) -> Result<(), EngineError> {
-        self.pcm.extend_from_slice(samples);
+    /// Run all complete chunks currently buffered in `self.pcm`.
+    pub fn drain_ready<S: SessionsAccess + ?Sized>(
+        &mut self,
+        sessions: &mut S,
+    ) -> Result<(), EngineError> {
+        let sessions = sessions.sessions();
         let pcm_end = self.pcm_start + self.pcm.len();
         if !self.started {
             if self.pcm.len() < self.schedule.samples_first {
                 return Ok(());
             }
-            self.produce_first(None, None)?;
+            self.produce_first(sessions, None, None)?;
         }
         loop {
             let start = (self.mel_idx * HOP_LENGTH).saturating_sub(N_FFT / 2);
@@ -506,9 +554,20 @@ impl<S: SessionsAccess> Engine<S> {
                 .get(offset..offset + self.schedule.samples_steady)
                 .ok_or_else(|| EngineError::ShortOutput("buffered audio".into()))?
                 .to_vec();
-            self.produce_steady(&window, None)?;
+            self.produce_steady(sessions, &window, None)?;
         }
         Ok(())
+    }
+
+    /// Feed 16 kHz mono samples in `[-1, 1]`; every complete chunk they
+    /// allow is run.
+    pub fn accept<S: SessionsAccess + ?Sized>(
+        &mut self,
+        sessions: &mut S,
+        samples: &[f32],
+    ) -> Result<(), EngineError> {
+        self.push_samples(samples);
+        self.drain_ready(sessions)
     }
 
     /// Close an utterance without closing the stream: silence is appended
@@ -522,7 +581,10 @@ impl<S: SessionsAccess> Engine<S> {
     /// engine per utterance decodes each one from nothing, and a segment
     /// cut by a VAD right at speech onset can then decode to nothing at
     /// all.
-    pub fn end_utterance(&mut self) -> Result<(Vec<u32>, Vec<u32>, usize), EngineError> {
+    pub fn end_utterance<S: SessionsAccess + ?Sized>(
+        &mut self,
+        sessions: &mut S,
+    ) -> Result<(Vec<u32>, Vec<u32>, usize), EngineError> {
         let pcm_end = self.pcm_start + self.pcm.len();
         let target = if self.started {
             (self.mel_idx * HOP_LENGTH).saturating_sub(N_FFT / 2) + self.schedule.samples_steady
@@ -532,7 +594,7 @@ impl<S: SessionsAccess> Engine<S> {
         let mut padded = 0;
         if target > pcm_end {
             padded = target - pcm_end;
-            self.accept(&vec![0.0; padded])?;
+            self.accept(sessions, &vec![0.0; padded])?;
         }
         Ok((
             std::mem::take(&mut self.tokens),
@@ -543,7 +605,11 @@ impl<S: SessionsAccess> Engine<S> {
 
     /// Run the audio tail as a final, zero-padded chunk. Call once, at the
     /// end of the stream. Returns the number of padding samples added.
-    pub fn finish(&mut self) -> Result<usize, EngineError> {
+    pub fn finish<S: SessionsAccess + ?Sized>(
+        &mut self,
+        sessions: &mut S,
+    ) -> Result<usize, EngineError> {
+        let sessions = sessions.sessions();
         let pcm_end = self.pcm_start + self.pcm.len();
         let mut padded = 0;
         if !self.started {
@@ -565,7 +631,7 @@ impl<S: SessionsAccess> Engine<S> {
             } else {
                 Some(0)
             };
-            self.produce_first(frames, Some(valid_mel))?;
+            self.produce_first(sessions, frames, Some(valid_mel))?;
             return Ok(padded);
         }
         let start = (self.mel_idx * HOP_LENGTH).saturating_sub(N_FFT / 2);
@@ -583,7 +649,7 @@ impl<S: SessionsAccess> Engine<S> {
                 .map(<[f32]>::to_vec)
                 .unwrap_or_default();
             window.resize(self.schedule.samples_steady, 0.0);
-            self.produce_steady(&window, Some(valid_mel))?;
+            self.produce_steady(sessions, &window, Some(valid_mel))?;
         }
         Ok(padded)
     }
@@ -600,21 +666,5 @@ fn cache_output_name(input: &str) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn output_names_follow_the_export_convention() {
-        assert_eq!(cache_output_name("k_cache_0"), "k_cache_out_0");
-        assert_eq!(cache_output_name("conv1d_cache_23"), "conv1d_cache_out_23");
-        assert_eq!(cache_output_name("conv2d_cache_2"), "conv2d_cache_out_2");
-    }
-
-    #[test]
-    fn the_320ms_schedule_is_the_one_wp_a_measured() {
-        let s = Schedule::for_lookahead(3);
-        assert_eq!((s.enc_frames, s.mel_first, s.mel_steady), (4, 25, 32));
-        assert_eq!(s.samples_first, 24 * 160 + 200);
-        assert_eq!(s.samples_steady, 32 * 160 + 400);
-    }
-}
+#[path = "tests/engine.rs"]
+mod tests;

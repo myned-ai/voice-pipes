@@ -85,10 +85,20 @@ impl crate::engine::SessionsAccess for PooledSlot<Sessions> {
     }
 }
 
+enum SessionSlot {
+    Real(Sessions),
+    #[cfg(test)]
+    Fake {
+        delay: Duration,
+        tokens: Vec<u32>,
+    },
+}
+
 pub struct Nemotron35Stt {
-    pool: Arc<SessionPool<Sessions>>,
+    pool: Arc<SessionPool<SessionSlot>>,
     cfg: Arc<ModelConfig>,
     tokens: Arc<Tokens>,
+    primed_decoder: (Vec<f32>, Vec<f32>, Vec<f32>),
     default_prompt: i64,
     default_locale: String,
     core: Arc<ComponentCore>,
@@ -119,9 +129,16 @@ impl Nemotron35Stt {
                 SttError::ConfigError(format!("the model has no locale {locale:?}"))
             })?;
             let mut sets = Vec::with_capacity(pool_size);
+            let mut primed_decoder = None;
             for _ in 0..pool_size {
-                sets.push(Sessions::open(model_dir, &cfg, threads)?);
+                let mut s = Sessions::open(model_dir, &cfg, threads)?;
+                if primed_decoder.is_none() {
+                    primed_decoder = Some(Engine::prime_decoder(&mut s, &cfg)?);
+                }
+                sets.push(SessionSlot::Real(s));
             }
+            let primed_decoder = primed_decoder
+                .ok_or_else(|| SttError::ConfigError("pool_size must be at least 1".to_string()))?;
             tracing::info!(
                 model_dir = %model_dir.display(),
                 pool_size,
@@ -137,6 +154,7 @@ impl Nemotron35Stt {
                 ),
                 cfg: Arc::new(cfg),
                 tokens: Arc::new(tokens),
+                primed_decoder,
                 default_prompt,
                 default_locale: locale.to_string(),
                 core: Arc::clone(&core),
@@ -146,6 +164,17 @@ impl Nemotron35Stt {
             core.mark_unhealthy(format!("model load failed: {e}"));
         }
         loaded
+    }
+
+    async fn checkout_slot(
+        &self,
+        request: &RecognitionRequest,
+    ) -> Result<PooledSlot<SessionSlot>, SttError> {
+        match request.slot_wait {
+            Some(wait) => self.pool.checkout_within(wait).await,
+            None => self.pool.checkout().await,
+        }
+        .map_err(SttError::busy)
     }
 
     /// The prompt id for a session: its requested locale when the model has
@@ -216,23 +245,31 @@ impl SttProvider for Nemotron35Stt {
                 audio.sample_rate, audio.channels
             )));
         }
-        let slot = self.pool.checkout().await.map_err(SttError::busy)?;
+        let mut slot = self.pool.checkout().await.map_err(SttError::busy)?;
         let pcm = to_f32(&audio.samples);
         let pcm_len = pcm.len();
         let cfg = Arc::clone(&self.cfg);
         let tags = self.tokens.locale_tag_ids();
         let prompt = self.default_prompt;
-        let run = tokio::task::spawn_blocking(
-            move || -> Result<(Engine<PooledSlot<Sessions>>, usize), EngineError> {
-                let mut engine = Engine::new(slot, &cfg, prompt, tags)?;
-                engine.accept(&pcm)?;
-                let tail = tail_silence();
-                let tail_len = tail.len();
-                engine.accept(&tail)?;
-                let pad = engine.finish()?;
-                Ok((engine, tail_len + pad))
-            },
-        )
+        let primed = self.primed_decoder.clone();
+        let run = tokio::task::spawn_blocking(move || -> Result<(Engine, usize), EngineError> {
+            let mut engine = Engine::from_primed(&cfg, prompt, tags, primed);
+            match slot.get_mut() {
+                SessionSlot::Real(sessions) => {
+                    engine.accept(sessions, &pcm)?;
+                    let tail = tail_silence();
+                    let tail_len = tail.len();
+                    engine.accept(sessions, &tail)?;
+                    let pad = engine.finish(sessions)?;
+                    Ok((engine, tail_len + pad))
+                }
+                #[cfg(test)]
+                SessionSlot::Fake { delay, .. } => {
+                    std::thread::sleep(*delay);
+                    Ok((engine, tail_silence().len()))
+                }
+            }
+        })
         .await
         .map_err(|e| SttError::InferenceFailed(format!("task join: {e}")))?;
         match run {
@@ -267,24 +304,18 @@ impl SttProvider for Nemotron35Stt {
         tx: tokio::sync::mpsc::Sender<TranscriptionResult>,
         cancel: tokio_util::sync::CancellationToken,
     ) -> Result<(), SttError> {
-        // One set of sessions and one engine for the whole stream; the
-        // engine owns the slot and moves into each blocking run and back,
-        // so a panic there drops it and returns the sessions to the pool.
-        // The engine is never reset between utterances: its caches carry
-        // each utterance into the next as acoustic context, and only the
-        // token stream is cut at a boundary.
-        let slot = match request.slot_wait {
-            Some(wait) => self.pool.checkout_within(wait).await,
-            None => self.pool.checkout().await,
-        }
-        .map_err(SttError::busy)?;
+        // One per-stream `Engine` owns the lightweight encoder caches and
+        // decoder state for the whole stream, while ONNX `SessionSlot`s are
+        // checked out from the pool ONLY during active 320 ms chunk inference
+        // inside `spawn_blocking` and returned immediately between steps.
         let (prompt, locale) = self.prompt_for_session(request.language.as_deref());
         let tags = self.tokens.locale_tag_ids();
-        let cfg = Arc::clone(&self.cfg);
-        let mut engine = Some(Engine::new(slot, &cfg, prompt, tags.clone()).map_err(|e| {
-            self.core.record_error(&e);
-            SttError::from(e)
-        })?);
+        let mut engine = Some(Engine::from_primed(
+            &self.cfg,
+            prompt,
+            tags,
+            self.primed_decoder.clone(),
+        ));
         let mut segment_index: u32 = 0;
         let mut last_emitted = String::new();
         let mut audio_samples: usize = 0;
@@ -297,7 +328,7 @@ impl SttProvider for Nemotron35Stt {
                 () = cancel.cancelled() => break,
                 r = audio_rx.recv() => r,
             };
-            let (mut pcm, is_final) = if let Some(chunk) = recv {
+            let (pcm, is_final) = if let Some(chunk) = recv {
                 // Take what is already queued, so a slow decode catches up,
                 // but only that: a sender that refills the queue as fast as
                 // it drains would otherwise hand over a whole utterance in
@@ -331,25 +362,46 @@ impl SttProvider for Nemotron35Stt {
                     "the stream lost its engine between runs".into(),
                 ));
             };
+            if !pcm.is_empty() {
+                eng.push_samples(&pcm);
+            }
+            if !is_final && !eng.has_ready_chunk() {
+                engine = Some(eng);
+                continue;
+            }
+            let mut slot = self.checkout_slot(&request).await?;
             let before_chunks = eng.chunks_run();
             let t0 = Instant::now();
             let (eng, res) = tokio::task::spawn_blocking(move || {
                 let res = (|| -> Result<Option<(Vec<u32>, Vec<u32>, usize)>, EngineError> {
-                    if !pcm.is_empty() {
-                        eng.accept(&pcm)?;
+                    match slot.get_mut() {
+                        SessionSlot::Real(sessions) => {
+                            eng.drain_ready(sessions)?;
+                            if is_final {
+                                // Silence behind the speech is what lets the model
+                                // emit its last word; then the utterance closes on
+                                // a chunk boundary and its tokens come out.
+                                let tail = tail_silence();
+                                let tail_len = tail.len();
+                                eng.accept(sessions, &tail)?;
+                                let (tokens, tags, pad) = eng.end_utterance(sessions)?;
+                                return Ok(Some((tokens, tags, tail_len + pad)));
+                            }
+                            Ok(None)
+                        }
+                        #[cfg(test)]
+                        SessionSlot::Fake { delay, tokens } => {
+                            std::thread::sleep(*delay);
+                            if is_final {
+                                return Ok(Some((
+                                    tokens.clone(),
+                                    Vec::new(),
+                                    tail_silence().len(),
+                                )));
+                            }
+                            Ok(None)
+                        }
                     }
-                    pcm.clear();
-                    if is_final {
-                        // Silence behind the speech is what lets the model
-                        // emit its last word; then the utterance closes on
-                        // a chunk boundary and its tokens come out.
-                        let tail = tail_silence();
-                        let tail_len = tail.len();
-                        eng.accept(&tail)?;
-                        let (tokens, tags, pad) = eng.end_utterance()?;
-                        return Ok(Some((tokens, tags, tail_len + pad)));
-                    }
-                    Ok(None)
                 })();
                 (eng, res)
             })
@@ -490,12 +542,13 @@ struct N35Options {
 impl N35Options {
     fn read(cfg: &SttConfig) -> Result<Self, Vec<ConfigError>> {
         let mut o = cfg.options();
+        let default_threads = voice_pipes_onnx::intra_threads_from_env(DEFAULT_THREADS);
         let options = Self {
             language: o.string("language"),
             // Session sets loaded, at least one.
-            pool_size: o.usize_in("pool_size", 1..=64, DEFAULT_POOL_SIZE),
+            pool_size: o.usize_in("pool_size", 1..=128, DEFAULT_POOL_SIZE),
             // Threads per ONNX session, 0 for ONNX Runtime's own choice.
-            threads: o.usize_in("threads", 0..=256, DEFAULT_THREADS),
+            threads: o.usize_in("threads", 0..=256, default_threads),
         };
         o.finish()?;
         Ok(options)
@@ -685,54 +738,5 @@ fn _assert_send() {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::without_carried_punctuation;
-
-    /// The live shape: the previous question's "?" and the two spaces the
-    /// decoder puts after it open the next utterance.
-    #[test]
-    fn a_closing_mark_carried_from_the_previous_utterance_is_dropped() {
-        assert_eq!(
-            without_carried_punctuation("?  Can you take me to the settings page"),
-            "Can you take me to the settings page"
-        );
-        assert_eq!(without_carried_punctuation("?"), "");
-        assert_eq!(without_carried_punctuation(". , hello"), "hello");
-    }
-
-    #[test]
-    fn an_opening_mark_and_a_mark_inside_the_text_stay() {
-        assert_eq!(
-            without_carried_punctuation("¿Qué hora es?"),
-            "¿Qué hora es?"
-        );
-        assert_eq!(without_carried_punctuation("Yes, I do."), "Yes, I do.");
-        assert_eq!(without_carried_punctuation(""), "");
-    }
-
-    #[test]
-    fn inference_metrics_computes_effective_latency_and_uses_total_audio_time() {
-        use crate::model::CHUNK_MS;
-        use std::time::Duration;
-        use voice_pipes_sdk::InferenceMetrics;
-
-        // 1.0s speech + 0.4s tail silence = 1.4s total processed in 350ms wall time
-        let total_audio_secs = 1.4;
-        let inference_wall = Duration::from_millis(350);
-        let chunks_run = 4;
-        let m = InferenceMetrics::measured(total_audio_secs, inference_wall, chunks_run)
-            .with_delay_floor_ms(u64::from(CHUNK_MS))
-            .with_streaming_window_ms(Some(CHUNK_MS));
-
-        assert_eq!(m.audio_duration_ms, Some(1400));
-        assert_eq!(m.inference_count, Some(4));
-        assert_eq!(m.algorithmic_delay_ms, Some(u64::from(CHUNK_MS)));
-        assert_eq!(m.streaming_window_ms, Some(CHUNK_MS));
-        assert!(m.rtfx.is_some());
-        let rtfx = m.rtfx.unwrap();
-        // 1.4 / 0.35 = 4.0
-        assert!((rtfx - 4.0).abs() < 1e-4);
-        // effective latency = delay * (1 + 1/rtfx) = 320 * (1 + 0.25) = 400
-        assert_eq!(m.effective_latency_ms, Some(400));
-    }
-}
+#[path = "tests/provider.rs"]
+mod tests;

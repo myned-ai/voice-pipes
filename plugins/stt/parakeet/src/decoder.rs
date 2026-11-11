@@ -67,8 +67,8 @@ impl std::fmt::Debug for TdtDecoder {
 
 impl TdtDecoder {
     /// Load the decoder+joint ONNX model and BPE vocabulary.
-    pub fn new(model_path: &Path, vocab_path: &Path) -> Result<Self, SttError> {
-        let session = crate::open_session(model_path)?;
+    pub fn new(model_path: &Path, vocab_path: &Path, threads: usize) -> Result<Self, SttError> {
+        let session = crate::open_session(model_path, threads)?;
 
         let vocab = load_vocab(vocab_path)?;
         let vocab_size = vocab.len();

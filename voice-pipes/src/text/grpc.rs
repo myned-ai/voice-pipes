@@ -38,6 +38,28 @@ mod proto {
 
 // ── Provider ────────────────────────────────────────────────
 
+static NEXT_SESSION_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
+fn next_session_id() -> String {
+    let n = NEXT_SESSION_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    format!("vp-grpc-sess-{}-{n}", std::process::id())
+}
+
+#[derive(Clone)]
+struct SharedGrpcTextEndpoint {
+    client: proto::text_processor_service_client::TextProcessorServiceClient<AuthedChannel>,
+    processor_name: String,
+    core: Arc<ComponentCore>,
+}
+
+fn endpoint_cache()
+-> &'static parking_lot::Mutex<std::collections::HashMap<String, SharedGrpcTextEndpoint>> {
+    static CACHE: std::sync::OnceLock<
+        parking_lot::Mutex<std::collections::HashMap<String, SharedGrpcTextEndpoint>>,
+    > = std::sync::OnceLock::new();
+    CACHE.get_or_init(|| parking_lot::Mutex::new(std::collections::HashMap::new()))
+}
+
 /// gRPC-backed text processor that delegates to a remote [`TextProcessorService`].
 #[derive(Debug)]
 pub struct GrpcTextProcessor {
@@ -45,6 +67,7 @@ pub struct GrpcTextProcessor {
     #[expect(dead_code, reason = "retained for diagnostics and reconnection")]
     endpoint: String,
     processor_name: String,
+    session_id: String,
     core: Arc<ComponentCore>,
     /// Longest wait for the next streamed fragment.
     stream_idle: std::time::Duration,
@@ -53,6 +76,36 @@ pub struct GrpcTextProcessor {
 impl GrpcTextProcessor {
     /// Connect to the remote text processor service and query its name.
     pub async fn connect(endpoint: &str) -> Result<Self, anyhow::Error> {
+        let shared = Self::open_endpoint(endpoint).await?;
+        Ok(Self::from_shared(endpoint, shared))
+    }
+
+    /// Connect or reuse a cached HTTP/2 channel for `endpoint`, assigning a
+    /// fresh per-session ID so the remote component server isolates history.
+    pub fn connect_cached_blocking(endpoint: &str) -> Result<Self, anyhow::Error> {
+        if let Some(shared) = endpoint_cache().lock().get(endpoint).cloned() {
+            return Ok(Self::from_shared(endpoint, shared));
+        }
+        let rt = tokio::runtime::Handle::current();
+        let shared = tokio::task::block_in_place(|| rt.block_on(Self::open_endpoint(endpoint)))?;
+        endpoint_cache()
+            .lock()
+            .insert(endpoint.to_string(), shared.clone());
+        Ok(Self::from_shared(endpoint, shared))
+    }
+
+    fn from_shared(endpoint: &str, shared: SharedGrpcTextEndpoint) -> Self {
+        Self {
+            client: shared.client,
+            endpoint: endpoint.to_string(),
+            processor_name: shared.processor_name,
+            session_id: next_session_id(),
+            core: shared.core,
+            stream_idle: client::STREAM_IDLE_TIMEOUT,
+        }
+    }
+
+    async fn open_endpoint(endpoint: &str) -> Result<SharedGrpcTextEndpoint, anyhow::Error> {
         let channel = client::connect(endpoint, client::CONNECT_TIMEOUT, "TextProcessor").await?;
 
         let mut client = proto::text_processor_service_client::TextProcessorServiceClient::new(
@@ -118,13 +171,19 @@ impl GrpcTextProcessor {
         ));
         core.set_dynamic_schema(dynamic_schema);
 
-        Ok(Self {
+        Ok(SharedGrpcTextEndpoint {
             client,
-            endpoint: endpoint.to_string(),
-            processor_name: info.name.clone(),
+            processor_name: info.name,
             core,
-            stream_idle: client::STREAM_IDLE_TIMEOUT,
         })
+    }
+
+    fn attach_session<T>(&self, payload: T) -> tonic::Request<T> {
+        let mut req = tonic::Request::new(payload);
+        if let Ok(val) = tonic::metadata::MetadataValue::try_from(self.session_id.as_str()) {
+            req.metadata_mut().insert(client::SESSION_ID_HEADER, val);
+        }
+        req
     }
 }
 
@@ -136,9 +195,9 @@ impl TextProcessor for GrpcTextProcessor {
 
     async fn process(&self, input: &str) -> Result<String, TextProcessorError> {
         let start = std::time::Instant::now();
-        let request = proto::ProcessRequest {
+        let request = self.attach_session(proto::ProcessRequest {
             text: input.to_string(),
-        };
+        });
 
         let mut client = self.client.clone();
         let response = match client
@@ -163,9 +222,9 @@ impl TextProcessor for GrpcTextProcessor {
         cancel: CancellationToken,
     ) -> Result<(), TextProcessorError> {
         let start = std::time::Instant::now();
-        let request = proto::ProcessRequest {
+        let request = self.attach_session(proto::ProcessRequest {
             text: input.to_string(),
-        };
+        });
 
         let mut client = self.client.clone();
         let response = match client
@@ -268,9 +327,7 @@ impl crate::text::TextProcessorFactory for GrpcTextProcessorFactory {
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("gRPC text processor requires `endpoint` in options"))?;
 
-        let rt = tokio::runtime::Handle::current();
-        let processor =
-            tokio::task::block_in_place(|| rt.block_on(GrpcTextProcessor::connect(endpoint)))?;
+        let processor = GrpcTextProcessor::connect_cached_blocking(endpoint)?;
         Ok(Box::new(processor))
     }
 

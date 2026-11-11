@@ -17,7 +17,9 @@ fn test_filter() -> Box<dyn AudioFilter> {
 fn provider_metrics_conformance() {
     let mut filter = test_filter();
     let mut chunk = vec![500i16; 320]; // 20 ms at 16 kHz
-    let metrics = filter.process_chunk(&mut chunk, 16_000).expect("chunk process");
+    let metrics = filter
+        .process_chunk(&mut chunk, 16_000)
+        .expect("chunk process");
     assert_filter_metrics_conformance(metrics.compute_duration, Duration::ZERO)
         .expect("conformance passes");
 }
@@ -34,10 +36,15 @@ fn filter_attenuates_stationary_noise() {
 
     // Now measure attenuation on subsequent noise chunk
     let mut noise_chunk = vec![2000i16; 320];
-    let metrics = filter.process_chunk(&mut noise_chunk, 16_000).expect("filter process");
+    let metrics = filter
+        .process_chunk(&mut noise_chunk, 16_000)
+        .expect("filter process");
 
     // Energy should be significantly reduced compared to input 2000
-    let rms: f64 = (noise_chunk.iter().map(|&s| (s as f64) * (s as f64)).sum::<f64>()
+    let rms: f64 = (noise_chunk
+        .iter()
+        .map(|&s| (s as f64) * (s as f64))
+        .sum::<f64>()
         / (noise_chunk.len() as f64))
         .sqrt();
     assert!(rms < 500.0, "noise must be attenuated; rms was {rms}");
@@ -56,7 +63,9 @@ fn filter_preserves_clean_tone() {
         })
         .collect();
 
-    let metrics = filter.process_chunk(&mut tone_chunk, 16_000).expect("filter process");
+    let metrics = filter
+        .process_chunk(&mut tone_chunk, 16_000)
+        .expect("filter process");
     let peak = tone_chunk.iter().map(|s| s.abs()).max().unwrap_or(0);
     assert!(peak > 10_000, "tone must be preserved; peak was {peak}");
     assert!(metrics.compute_duration > Duration::ZERO);
@@ -80,7 +89,9 @@ fn filter_does_not_self_suppress_continuous_speech_harmonic() {
                 (val * 14_000.0) as i16
             })
             .collect();
-        filter.process_chunk(&mut chunk, 16_000).expect("filter process");
+        filter
+            .process_chunk(&mut chunk, 16_000)
+            .expect("filter process");
         last_peak = chunk.iter().map(|s| s.abs()).max().unwrap_or(0);
     }
 
@@ -108,7 +119,10 @@ fn filter_handles_non_multiple_chunk_sizes_without_sample_loss() {
             .expect("arbitrary chunk size should succeed");
         if chunk_idx >= 1 {
             let peak = chunk.iter().map(|s| s.abs()).max().unwrap_or(0);
-            assert!(peak > 8_000, "chunk {chunk_idx} should carry filtered signal, got {peak}");
+            assert!(
+                peak > 8_000,
+                "chunk {chunk_idx} should carry filtered signal, got {peak}"
+            );
         }
     }
 }
@@ -130,12 +144,17 @@ fn filter_supports_multiple_sample_rates_and_rejects_invalid_rates() {
             .process_chunk(&mut tone_chunk, rate)
             .unwrap_or_else(|e| panic!("rate {rate} Hz should succeed: {e}"));
         let peak = tone_chunk.iter().map(|s| s.abs()).max().unwrap_or(0);
-        assert!(peak > 9_000, "tone at {rate} Hz must be preserved; peak was {peak}");
+        assert!(
+            peak > 9_000,
+            "tone at {rate} Hz must be preserved; peak was {peak}"
+        );
     }
 
     // Reject invalid out-of-range sample rate (< 8 kHz)
     let mut chunk = vec![100i16; 160];
-    let err = filter.process_chunk(&mut chunk, 4_000).expect_err("should reject 4k");
+    let err = filter
+        .process_chunk(&mut chunk, 4_000)
+        .expect_err("should reject 4k");
     assert!(err.to_string().contains("received 4000 Hz"));
 }
 

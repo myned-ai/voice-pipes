@@ -1,10 +1,10 @@
 //! Ingress audio filtering chain -- runs on microphone PCM before VAD and STT.
 
+use crate::config::PipelineConfig;
 use std::sync::Arc;
 use std::time::Instant;
-use voice_pipes_sdk::filter::{AudioFilter, AudioFilterFactory, FilterMetrics};
 use voice_pipes_sdk::FilterStageConfig;
-use crate::config::PipelineConfig;
+use voice_pipes_sdk::filter::{AudioFilter, AudioFilterFactory, FilterMetrics};
 
 /// A sequence of audio filters executed in order on each audio chunk.
 pub struct FilterChain {
@@ -14,7 +14,9 @@ pub struct FilterChain {
 impl std::fmt::Debug for FilterChain {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let names: Vec<&str> = self.filters.iter().map(|f| f.name()).collect();
-        f.debug_struct("FilterChain").field("filters", &names).finish()
+        f.debug_struct("FilterChain")
+            .field("filters", &names)
+            .finish()
     }
 }
 
@@ -112,8 +114,9 @@ pub fn build_filter_chain(
     let mut built_filters = Vec::new();
 
     for stage_cfg in &cfg.audio_filter {
-        let factory = lookup_filter_factory(&stage_cfg.provider)
-            .ok_or_else(|| anyhow::anyhow!("unknown audio filter provider: \"{}\"", stage_cfg.provider))?;
+        let factory = lookup_filter_factory(&stage_cfg.provider).ok_or_else(|| {
+            anyhow::anyhow!("unknown audio filter provider: \"{}\"", stage_cfg.provider)
+        })?;
         let backend_cfg = FilterStageConfig::new(&stage_cfg.provider)
             .with_model(stage_cfg.model.clone())
             .with_options(stage_cfg.options.clone());

@@ -100,7 +100,7 @@ All sections reject unknown keys except the open option maps noted.
 | `api_key` | string | — | Hosted providers; prefer the env var the provider names |
 | `endpoint` | string | — | Remote endpoint override |
 | `sample_rate` | integer | provider default | Input rate the provider expects |
-| `[stt.options]` | table | `{}` | Provider-specific; nested sub-table, open. Local ONNX providers (`parakeet-tdt`, `nemotron-streaming`) take `pool_size` (default 2: session sets loaded, one per concurrent session); hosted streaming providers take `max_reconnect_attempts`, `reconnect_delay_ms`, `reconnect_delay_max_ms` (see the provider pages) |
+| `[stt.options]` | table | `{}` | Provider-specific; nested sub-table, open. Local ONNX providers (`parakeet-tdt`, `moonshine`, `nemotron`, `nemotron35`) take `pool_size` (`1..=128`, default `2`) and `threads` (`0..=256`, default `VP_ORT_THREADS`); hosted streaming providers take `max_reconnect_attempts`, `reconnect_delay_ms`, `reconnect_delay_max_ms` (see the provider pages) |
 
 ## `[tts]`
 
@@ -186,7 +186,7 @@ All fields optional; effective defaults are resolved by accessors.
 | `min_silence_ms` | integer | — | Consumed by the segmenter |
 | `pre_roll_ms` | integer | `300` | Audio kept from before the detected onset and handed to the recogniser with the utterance. Rounded up to whole 20 ms chunks, one chunk at least |
 | `threshold` | float | — | Deprecated fallback for both thresholds |
-| `options` | table | — | Settings for a plugin backend (`[vad.options]`); the built-in backends read none. See [Plugin SDK › VAD plugins](../extending/plugin-sdk.md#5a-vad-plugins) |
+| `options` | table | — | Settings for a plugin backend (`[vad.options]`); `silero` accepts `pool_size` (`1..=128`, default `4`) and `threads` (`0..=256`, default `VP_ORT_THREADS` / `1`). See [Plugin SDK › VAD plugins](../extending/plugin-sdk.md#5a-vad-plugins) |
 
 ## `[turn_detection]`
 
@@ -205,9 +205,13 @@ plugin detectors read:
 | `smart_threshold` | float | `0.5` | `0.0..=1.0` |
 | `smart_window_secs` | integer | `8` | 1–8: the model reads the last 8 s |
 | `smart_min_audio_ms` | integer | `500` | |
+| `smart_pool_size` | integer | `4` | `1..=128`; shared ONNX session pool size across connections |
+| `smart_threads` | integer | `VP_ORT_THREADS` (`1`) | `0..=256`; ONNX intra-op threads per session |
 | `vap_model_path` | string | — | `vap` only (experimental); export one with `scripts/export-vap-onnx.py` |
 | `vap_threshold` | float | `0.5` | `0.0..=1.0`; confidence that the user has yielded, above which the turn commits |
 | `vap_min_interval_ms` | integer | `200` | shortest gap between inferences |
+| `vap_pool_size` | integer | `4` | `1..=128`; shared ONNX session pool size across connections |
+| `vap_threads` | integer | `VP_ORT_THREADS` (`1`) | `0..=256`; ONNX intra-op threads per session |
 
 `smart` classifies whether the turn has *already* ended, from the user's
 channel, and only once a pause has been paid for. `vap` (**experimental**)

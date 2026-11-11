@@ -5,8 +5,8 @@
 
 pub mod annotate;
 pub mod events;
-pub mod filter;
 pub mod extras;
+pub mod filter;
 mod interrupt;
 mod llm;
 pub mod metrics;
@@ -36,6 +36,7 @@ pub use annotate::{
     AnnotatorCommand, AnnotatorError, AnnotatorHubs, AnnotatorSpec, AudioAnnotation,
     AudioAnnotator, AudioSegment, build_audio_annotators,
 };
+pub use filter::{FilterChain, build_filter_chain};
 pub use interrupt::mic_audio_splitter;
 pub use llm::llm_task;
 pub use orchestrate::process_utterance;
@@ -48,7 +49,6 @@ pub use post_audio::{
 pub use stt::stt_task;
 pub use throughput::{CallOutcome, ChainStats, OutputThroughput};
 pub use tts::tts_task;
-pub use filter::{FilterChain, build_filter_chain};
 pub use vad::{vad_filter_task, vad_filter_task_with_filter};
 
 #[cfg(test)]

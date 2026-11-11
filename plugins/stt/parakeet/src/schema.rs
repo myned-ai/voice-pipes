@@ -36,11 +36,21 @@ pub fn schema(cfg: &SttConfig) -> ProviderSchema {
             v.clone(),
         );
     }
+    if let Some(v) = cfg.options.get("threads") {
+        s.push(
+            ParamDescriptor::static_int_display(
+                "threads",
+                "Intra-op threads",
+                "Number of CPU operator threads per ONNX session (overrides VP_ORT_THREADS).",
+            ),
+            v.clone(),
+        );
+    }
 
     // Pass through any other Parakeet tunables (initial_buffer_ms, inference_step_ms, ...)
     s.passthrough_options(
         &cfg.options,
-        &["pool_size"],
+        &["pool_size", "threads"],
         "Parakeet provider-specific option.",
     );
 

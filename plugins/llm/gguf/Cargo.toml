@@ -15,6 +15,7 @@ workspace = true
 
 [dependencies]
 voice-pipes-sdk.workspace = true
+voice-pipes-onnx.workspace = true
 anyhow.workspace = true
 arc-swap.workspace = true
 async-trait.workspace = true

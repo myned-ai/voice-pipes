@@ -19,14 +19,14 @@ impl NemotronOptions {
         cfg: &voice_pipes_sdk::SttConfig,
     ) -> Result<Self, Vec<voice_pipes_sdk::ConfigError>> {
         let mut o = cfg.options();
+        let default_threads = u64::try_from(voice_pipes_onnx::intra_threads_from_env(
+            usize::try_from(DEFAULT_THREADS).unwrap_or(4),
+        ))
+        .unwrap_or(4);
         let options = Self {
             // 0 leaves the count to ONNX Runtime.
-            threads: i16::try_from(o.u64_in(
-                "threads",
-                0..=256,
-                DEFAULT_THREADS.unsigned_abs().into(),
-            ))
-            .unwrap_or(DEFAULT_THREADS),
+            threads: i16::try_from(o.u64_in("threads", 0..=256, default_threads))
+                .unwrap_or(DEFAULT_THREADS),
             blank_id: i32::try_from(o.u64_in(
                 "blank_id",
                 0..=1_000_000,
@@ -38,7 +38,7 @@ impl NemotronOptions {
                 1..=100,
                 DEFAULT_MAX_TOKENS_PER_STEP,
             ),
-            pool_size: o.usize_in("pool_size", 1..=64, DEFAULT_POOL_SIZE),
+            pool_size: o.usize_in("pool_size", 1..=128, DEFAULT_POOL_SIZE),
         };
         o.finish()?;
         Ok(options)

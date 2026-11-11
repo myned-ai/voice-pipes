@@ -20,15 +20,17 @@ mod wizard;
 
 pub use wizard::wizard_choices;
 
-use std::path::Path;
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 
 use ort::session::Session;
 use ort::value::Tensor;
 use tracing::debug;
 
+use voice_pipes_onnx::SessionPool;
 use voice_pipes_sdk::audio::i16_to_f32;
 use voice_pipes_sdk::audio::resample::StreamingResampler;
 use voice_pipes_sdk::component::{Component, ComponentCore, ComponentKind, CoreComponent};
@@ -46,6 +48,12 @@ const STATE_SIZE: usize = 2 * 128;
 
 /// The end-of-speech probability when `[vad]` sets none.
 const DEFAULT_NEG_THRESHOLD: f32 = 0.35;
+
+/// Default shared ONNX session pool size across concurrent WebSocket sessions.
+const DEFAULT_POOL_SIZE: usize = 4;
+
+/// Default intra-op threads per Silero ONNX session.
+const DEFAULT_THREADS: usize = 1;
 
 /// Two-threshold hysteresis decision: entering speech requires
 /// `prob >= threshold`; once speaking, stay speaking until `prob < neg_threshold`.
@@ -76,10 +84,15 @@ trait SileroModel: Send {
     fn step(&mut self, input: Vec<f32>, state: Vec<f32>) -> Result<(f32, Vec<f32>), VadError>;
 }
 
-/// The Silero network as an ONNX Runtime session.
-struct OrtSilero(Session);
+/// The Silero network backed by a shared ONNX Runtime session pool.
+///
+/// Recurrent LSTM state (`[2, 1, 128]`) and the 64-sample context window live
+/// on each session's [`SileroVad`] struct and are passed in and out explicitly
+/// on every step, so the underlying ONNX [`Session`] is stateless and can be
+/// checked out from the pool for the ~150 µs inference call.
+struct PooledSilero(Arc<SessionPool<Session>>);
 
-impl SileroModel for OrtSilero {
+impl SileroModel for PooledSilero {
     fn step(&mut self, input: Vec<f32>, state: Vec<f32>) -> Result<(f32, Vec<f32>), VadError> {
         let input_tensor = Tensor::from_array(([1usize, input.len()], input))
             .map_err(|e| VadError::InferenceFailed(format!("vad input tensor: {e}")))?;
@@ -90,8 +103,12 @@ impl SileroModel for OrtSilero {
         let sr_tensor = Tensor::from_array(([] as [usize; 0], vec![i64::from(SILERO_SR)]))
             .map_err(|e| VadError::InferenceFailed(format!("vad sr tensor: {e}")))?;
 
-        let outputs = self
+        let mut slot = self
             .0
+            .checkout_blocking()
+            .map_err(|e| VadError::InferenceFailed(format!("vad session pool: {e}")))?;
+        let outputs = slot
+            .get_mut()
             .run(ort::inputs![input_tensor, state_tensor, sr_tensor])
             .map_err(|e| VadError::InferenceFailed(format!("vad inference: {e}")))?;
         let mut values = outputs.values();
@@ -114,6 +131,58 @@ impl SileroModel for OrtSilero {
             .map_err(|e| VadError::InferenceFailed(format!("vad state extract: {e}")))?;
         Ok((prob, state_tensor.1.to_vec()))
     }
+}
+
+type PoolKey = (PathBuf, usize, usize);
+type PoolCache = Mutex<HashMap<PoolKey, (Arc<SessionPool<Session>>, Arc<ComponentCore>)>>;
+
+fn shared_pools() -> &'static PoolCache {
+    static POOLS: OnceLock<PoolCache> = OnceLock::new();
+    POOLS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn get_or_build_pool(
+    model_path: &Path,
+    pool_size: usize,
+    threads: usize,
+) -> Result<(Arc<SessionPool<Session>>, Arc<ComponentCore>), VadError> {
+    let key = (model_path.to_path_buf(), pool_size, threads);
+    if let Ok(guard) = shared_pools().lock()
+        && let Some(found) = guard.get(&key)
+    {
+        return Ok((Arc::clone(&found.0), Arc::clone(&found.1)));
+    }
+
+    let core = Arc::new(ComponentCore::new("vad:silero", ComponentKind::Vad));
+    let options = voice_pipes_onnx::SessionOptions::new(threads);
+    let mut sessions = Vec::with_capacity(pool_size);
+    for _ in 0..pool_size {
+        match voice_pipes_onnx::open_session(model_path, &options) {
+            Ok(s) => sessions.push(s),
+            Err(e) => {
+                let e = VadError::ModelLoadFailed(format!("silero vad: {e}"));
+                core.mark_unhealthy(format!("model load failed: {e}"));
+                return Err(e);
+            }
+        }
+    }
+    let pool = Arc::new(
+        SessionPool::new(sessions, "Silero VAD sessions")
+            .map_err(|e| VadError::ModelLoadFailed(format!("silero vad pool: {e}")))?,
+    );
+    debug!(
+        model = %model_path.display(),
+        pool_size,
+        threads,
+        "silero vad session pool loaded"
+    );
+    if let Ok(mut guard) = shared_pools().lock() {
+        let entry = guard
+            .entry(key)
+            .or_insert_with(|| (Arc::clone(&pool), Arc::clone(&core)));
+        return Ok((Arc::clone(&entry.0), Arc::clone(&entry.1)));
+    }
+    Ok((pool, core))
 }
 
 /// Silero VAD ONNX wrapper.
@@ -146,24 +215,18 @@ impl std::fmt::Debug for SileroVad {
 }
 
 impl SileroVad {
-    /// Load the Silero VAD ONNX model: one thread per operator, on the CPU
-    /// (a window is 32 ms of audio; a GPU round trip costs more than it).
-    fn new(model_path: &Path, threshold: f32, neg_threshold: f32) -> Result<Self, VadError> {
-        let core = Arc::new(ComponentCore::new("vad:silero", ComponentKind::Vad));
-        let options = voice_pipes_onnx::SessionOptions::new(1);
-        let session = match voice_pipes_onnx::open_session(model_path, &options) {
-            Ok(s) => s,
-            Err(e) => {
-                let e = VadError::ModelLoadFailed(format!("silero vad: {e}"));
-                core.mark_unhealthy(format!("model load failed: {e}"));
-                return Err(e);
-            }
-        };
-
-        debug!("silero vad loaded from {}", model_path.display());
-
+    /// Obtain a per-session Silero VAD detector backed by the shared ONNX
+    /// session pool for `(model_path, pool_size, threads)`.
+    fn new(
+        model_path: &Path,
+        pool_size: usize,
+        threads: usize,
+        threshold: f32,
+        neg_threshold: f32,
+    ) -> Result<Self, VadError> {
+        let (pool, core) = get_or_build_pool(model_path, pool_size, threads)?;
         Ok(Self::with_model(
-            Box::new(OrtSilero(session)),
+            Box::new(PooledSilero(pool)),
             core,
             threshold,
             neg_threshold,
@@ -322,6 +385,15 @@ pub fn factory() -> Box<dyn VadFactory> {
 #[derive(Debug)]
 struct SileroVadFactory;
 
+fn silero_options(cfg: &VadConfig) -> Result<(usize, usize), Vec<ConfigError>> {
+    let mut o = cfg.options();
+    let pool_size = o.usize_in("pool_size", 1..=128, DEFAULT_POOL_SIZE);
+    let default_threads = voice_pipes_onnx::intra_threads_from_env(DEFAULT_THREADS);
+    let threads = o.usize_in("threads", 0..=256, default_threads);
+    o.finish()?;
+    Ok((pool_size, threads))
+}
+
 impl VadFactory for SileroVadFactory {
     fn name(&self) -> &'static str {
         "silero"
@@ -335,7 +407,9 @@ impl VadFactory for SileroVadFactory {
                 "silero mode requires a model path",
             ));
         }
-        errs.extend(cfg.options().into_errors());
+        if let Err(problems) = silero_options(cfg) {
+            errs.extend(problems);
+        }
         errs
     }
 
@@ -354,8 +428,12 @@ impl VadFactory for SileroVadFactory {
             .model
             .as_ref()
             .ok_or_else(|| BuildError::failed("vad.model required for silero"))?;
+        let (pool_size, threads) =
+            silero_options(cfg).map_err(voice_pipes_sdk::options::refused)?;
         let mut vad = SileroVad::new(
             model_path,
+            pool_size,
+            threads,
             cfg.speech_prob,
             cfg.neg_threshold.unwrap_or(DEFAULT_NEG_THRESHOLD),
         )?;

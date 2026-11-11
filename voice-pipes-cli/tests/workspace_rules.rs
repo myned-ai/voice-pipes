@@ -564,7 +564,6 @@ const CPU_ONLY_ONNX: &[&str] = &[
     "voice-pipes-turn-smart",
     "voice-pipes-turn-vap",
     "voice-pipes-vad-silero",
-
 ];
 
 /// A provider on ONNX Runtime either has an `ort-cuda` feature (which the
@@ -2430,7 +2429,6 @@ const LONG_FUNCTIONS: &[(&str, &str)] = &[
     ("voice-pipes/src/api/probe.rs", "probe_vad"),
     ("voice-pipes/src/audio/io.rs", "run_mic_stream_loop"),
     ("voice-pipes/src/audit/streaming.rs", "write_event"),
-    ("voice-pipes/src/bin/component_server.rs", "main"),
     ("voice-pipes/src/commands/check.rs", "check_stt"),
     ("voice-pipes/src/commands/interactive.rs", "run_client_loop"),
     ("voice-pipes/src/commands/live.rs", "run_live"),
@@ -2446,7 +2444,10 @@ const LONG_FUNCTIONS: &[(&str, &str)] = &[
     ("voice-pipes/src/pipeline/speculative.rs", "handle_partial"),
     ("voice-pipes/src/pipeline/tts.rs", "spawn_synthesis_task"),
     ("voice-pipes/src/pipeline/tts.rs", "tts_task"),
-    ("voice-pipes/src/pipeline/vad.rs", "vad_filter_task_with_filter"),
+    (
+        "voice-pipes/src/pipeline/vad.rs",
+        "vad_filter_task_with_filter",
+    ),
     ("voice-pipes/src/realtime/client.rs", "connect_with"),
     ("plugins/stt/moonshine/src/lib.rs", "transcribe_stream"),
     ("plugins/stt/parakeet/src/lib.rs", "transcribe_stream"),

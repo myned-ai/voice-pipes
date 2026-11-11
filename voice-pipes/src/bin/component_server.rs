@@ -131,35 +131,10 @@ async fn main() -> Result<()> {
     }
 
     // ── Text processors ─────────────────────────────────────
-    if !cfg.text_processor.is_empty() {
-        use voice_pipes::api::param_schema::ComponentParamSchema;
-        info!("building text processors for component server");
-        // Pre-register stores so the factory adopts cells.
-        let total = cfg.text_processor.len();
-        for (idx, tp_cfg) in cfg.text_processor.iter().enumerate() {
-            let id = config::text_processor_id(&tp_cfg.processor_type, idx, total);
-            let store = config::build_text_processor_param_store(tp_cfg);
-            param_registry.register(&id, tp_cfg.param_schema(), store);
-        }
-
-        let processors = config::build_text_processors(&cfg, None, Some(&param_registry))?;
-        // Wrap only the first processor -- each component server hosts one.
-        if let Some(proc) = processors.into_iter().next() {
-            let proc = Arc::from(proc);
-            let tp_cfg = cfg.text_processor.first().unwrap();
-            let svc = voice_pipes::grpc::text_server::TextProcessorServiceImpl::new(
-                proc,
-                tp_cfg.param_schema(),
-                tp_cfg.current_values(),
-            );
-            let grpc_svc = voice_pipes::grpc::text_server::TextProcessorServiceServer::new(svc);
-            routes.add_service(tonic::service::interceptor::InterceptedService::new(
-                grpc_svc,
-                bearer_check.clone(),
-            ));
-            services_added += 1;
-            info!("TextProcessor service registered (with ParamService cells)");
-        }
+    if !cfg.text_processor.is_empty()
+        && register_text_service(&cfg, &param_registry, &bearer_check, &mut routes)?
+    {
+        services_added += 1;
     }
 
     if services_added == 0 {
@@ -186,4 +161,56 @@ async fn main() -> Result<()> {
         .await?;
 
     Ok(())
+}
+
+fn register_text_service(
+    cfg: &PipelineConfig,
+    param_registry: &Arc<voice_pipes::api::param_store::ParamRegistry>,
+    bearer_check: &voice_pipes::grpc::auth::ServerBearerCheck,
+    routes: &mut tonic::service::RoutesBuilder,
+) -> Result<bool> {
+    use voice_pipes::api::param_schema::ComponentParamSchema;
+    info!("building text processors for component server");
+    let total = cfg.text_processor.len();
+    for (idx, tp_cfg) in cfg.text_processor.iter().enumerate() {
+        let id = config::text_processor_id(&tp_cfg.processor_type, idx, total);
+        let store = config::build_text_processor_param_store(tp_cfg);
+        param_registry.register(&id, tp_cfg.param_schema(), store);
+    }
+
+    let processors = config::build_text_processors(cfg, None, Some(param_registry))?;
+    let Some(proc) = processors.into_iter().next() else {
+        return Ok(false);
+    };
+    let proc = Arc::from(proc);
+    let tp_cfg = cfg
+        .text_processor
+        .first()
+        .ok_or_else(|| anyhow::anyhow!("missing text_processor config"))?;
+    let cfg_for_sessions = cfg.clone();
+    let reg_for_sessions = Arc::clone(param_registry);
+    let builder: voice_pipes::grpc::text_server::SessionProcessorBuilder = Arc::new(move || {
+        let mut built =
+            config::build_text_processors(&cfg_for_sessions, None, Some(&reg_for_sessions))
+                .map_err(|e| e.to_string())?;
+        built
+            .drain(..)
+            .next()
+            .map(Arc::from)
+            .ok_or_else(|| "no text processor built for session".to_string())
+    });
+
+    let svc = voice_pipes::grpc::text_server::TextProcessorServiceImpl::new(
+        proc,
+        tp_cfg.param_schema(),
+        tp_cfg.current_values(),
+    )
+    .with_session_builder(builder);
+    let grpc_svc = voice_pipes::grpc::text_server::TextProcessorServiceServer::new(svc);
+    routes.add_service(tonic::service::interceptor::InterceptedService::new(
+        grpc_svc,
+        bearer_check.clone(),
+    ));
+    info!("TextProcessor service registered (with ParamService cells and per-session state)");
+    Ok(true)
 }

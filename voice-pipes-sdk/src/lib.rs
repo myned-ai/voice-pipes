@@ -142,9 +142,10 @@ pub use component::{
     HealthStatus, LatencyStats, ModelIdentity,
 };
 pub use config::{
-    ConfigError, ConfigErrorKind, SttConfig, TextChunkingConfig, TextProcessorConfig, TtsConfig,
-    VadConfig, FilterStageConfig,
+    ConfigError, ConfigErrorKind, FilterStageConfig, SttConfig, TextChunkingConfig,
+    TextProcessorConfig, TtsConfig, VadConfig,
 };
+pub use filter::{AudioFilter, AudioFilterFactory, FilterError, FilterMetrics};
 pub use params::{AtomicParamStore, AtomicParamStoreBuilder, MutableParamStore};
 pub use sanitize::{
     DualTrackText, SanitizeConfig, StrippedDirectiveRecord, ThinkTagFilter, TtsDirectiveRecord,
@@ -164,7 +165,6 @@ pub use tts::{
     SynthesisHints, SynthesisRequest, TtsError, TtsFactory, TtsProvider, TtsSession,
     TtsSessionConfig, WordBoundary,
 };
-pub use filter::{AudioFilter, AudioFilterFactory, FilterError, FilterMetrics};
 pub use vad::{VadBackend, VadError, VadFactory, VadResult};
 pub use wizard::{
     WizardChoice, WizardDeploy, WizardDownload, WizardField, WizardFieldKind, WizardLayout,

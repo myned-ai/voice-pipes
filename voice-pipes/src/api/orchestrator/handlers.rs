@@ -1078,6 +1078,33 @@ pub async fn get_turn(
 
 // ── GET /api/v1/dispatch ────────────────────────────────────
 
+static ROUND_ROBIN_COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+fn select_dispatch_index<T>(
+    candidates: &[(String, u32, T, String, Option<String>)],
+    policy: &str,
+) -> usize {
+    match policy {
+        "round-robin" => {
+            ROUND_ROBIN_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                % candidates.len()
+        }
+        "random" => {
+            let seq = ROUND_ROBIN_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let nanos = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .subsec_nanos() as usize;
+            nanos.wrapping_add(seq.wrapping_mul(0x9E37_79B9)) % candidates.len()
+        }
+        _ => candidates
+            .iter()
+            .enumerate()
+            .min_by_key(|(_, c)| c.1)
+            .map_or(0, |(i, _)| i),
+    }
+}
+
 pub async fn dispatch(
     State(state): State<Arc<OrchestratorState>>,
     Query(q): Query<DispatchQuery>,
@@ -1105,7 +1132,6 @@ pub async fn dispatch(
 
     let policy = q.policy.as_deref().unwrap_or(&state.config.dispatch.policy);
 
-    // Collect eligible workers
     #[expect(
         clippy::type_complexity,
         reason = "candidate tuple is consumed a few lines below; an alias would relocate, not simplify"
@@ -1113,10 +1139,9 @@ pub async fn dispatch(
     let mut candidates: Vec<(String, u32, Option<String>, String, Option<String>)> = Vec::new();
     for entry in state.workers.iter() {
         let w = entry.value();
-        if w.status != WorkerStatus::Active {
-            continue;
-        }
-        if w.capacity.active_sessions >= w.capacity.max_concurrent {
+        if w.status != WorkerStatus::Active
+            || w.capacity.active_sessions >= w.capacity.max_concurrent
+        {
             continue;
         }
         if let Some(ref name) = q.pipeline_name
@@ -1132,15 +1157,12 @@ pub async fn dispatch(
         if !required_tags.is_empty() && !required_tags.iter().all(|t| w.tags.contains(t)) {
             continue;
         }
-        // Browsers get the public address when the worker registered one;
-        // otherwise the internal bind address, made connectable.
         let raw_addr = w
             .public_transport_address
             .as_deref()
             .or(w.transport_address.as_deref())
             .unwrap_or(&w.address);
-        let addr = connectable_addr(raw_addr);
-        let ws_url = format!("ws://{addr}/ws");
+        let ws_url = format!("ws://{}/ws", connectable_addr(raw_addr));
         candidates.push((
             w.id.clone(),
             w.capacity.active_sessions,
@@ -1160,22 +1182,13 @@ pub async fn dispatch(
             .into_response();
     }
 
-    // Apply routing policy
-    let selected = match policy {
-        "round-robin" | "random" => {
-            // Simple random selection for both (true round-robin needs state)
-            let idx = (std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .subsec_nanos() as usize)
-                % candidates.len();
-            &candidates[idx]
-        }
-        _ => {
-            // Default: least-connections
-            candidates.iter().min_by_key(|c| c.1).unwrap()
-        }
-    };
+    candidates.sort_by(|a, b| a.0.cmp(&b.0));
+    let selected = &candidates[select_dispatch_index(&candidates, policy)];
+
+    if let Some(mut entry) = state.workers.get_mut(&selected.0) {
+        let cap = &mut entry.value_mut().capacity;
+        cap.active_sessions = cap.active_sessions.saturating_add(1);
+    }
 
     let resp = DispatchResponse {
         worker_id: selected.0.clone(),

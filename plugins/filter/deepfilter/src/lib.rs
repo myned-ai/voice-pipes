@@ -67,7 +67,8 @@ fn erb_band_bins(num_bins: usize, nyquist_hz: f32) -> Vec<usize> {
             clippy::cast_possible_truncation,
             reason = "band bin index bounded by num_bins"
         )]
-        let raw_bin = ((freq / nyquist_hz) * ((num_bins.saturating_sub(1)) as f32)).round() as usize;
+        let raw_bin =
+            ((freq / nyquist_hz) * ((num_bins.saturating_sub(1)) as f32)).round() as usize;
         let min_bin = i.min(num_bins);
         let max_bin = num_bins.saturating_sub(NUM_ERB_BANDS.saturating_sub(i));
         bins.push(raw_bin.clamp(min_bin, max_bin));
@@ -133,7 +134,10 @@ impl DeepFilter {
     fn new(atten_lim_db: f32) -> Self {
         let min_gain = 10.0_f32.powf(-atten_lim_db / 20.0);
         let mut filter = Self {
-            core: Arc::new(ComponentCore::new("filter:deepfilter", ComponentKind::Audio)),
+            core: Arc::new(ComponentCore::new(
+                "filter:deepfilter",
+                ComponentKind::Audio,
+            )),
             sample_rate: 0,
             window_len: 0,
             hop_len: 0,
@@ -241,7 +245,12 @@ impl DeepFilter {
         let noise_floor_est = estimate_voice_noise_floor(band_powers, v_start);
         if !self.initialized {
             self.initialized = true;
-            for (b, (slot, &p)) in self.noise_psd.iter_mut().zip(band_powers.iter()).enumerate() {
+            for (b, (slot, &p)) in self
+                .noise_psd
+                .iter_mut()
+                .zip(band_powers.iter())
+                .enumerate()
+            {
                 *slot = if b < v_start || p <= 4.0 * noise_floor_est {
                     p.max(1e-6)
                 } else {
@@ -328,10 +337,9 @@ impl DeepFilter {
 
         for bin in 1..self.num_bins.saturating_sub(1) {
             let mirror = self.window_len - bin;
-            if let (Some(c), Some(mc)) = (
-                self.fft_buf.get(bin).copied(),
-                self.fft_buf.get_mut(mirror),
-            ) {
+            if let (Some(c), Some(mc)) =
+                (self.fft_buf.get(bin).copied(), self.fft_buf.get_mut(mirror))
+            {
                 *mc = Complex::new(c.re, -c.im);
             }
         }
@@ -512,8 +520,11 @@ impl AudioFilterFactory for DeepFilterFactory {
             clippy::cast_possible_truncation,
             reason = "attenuation limit bounded in [0.0, 100.0]"
         )]
-        let atten_lim =
-            opts.f64_in("attenuation_limit_db", 0.0..=100.0, DEFAULT_ATTEN_LIM_DB as f64) as f32;
+        let atten_lim = opts.f64_in(
+            "attenuation_limit_db",
+            0.0..=100.0,
+            DEFAULT_ATTEN_LIM_DB as f64,
+        ) as f32;
         Ok(Box::new(DeepFilter::new(atten_lim)))
     }
 }
