@@ -8,6 +8,7 @@ const KNOWN_KEYS: &[&str] = &[
     "model",
     "chat_template",
     "device",
+    "pool_size",
     "prefill_cache",
     "system_prompt",
     "max_tokens",
@@ -41,6 +42,16 @@ pub fn schema(cfg: &TextProcessorConfig) -> ProviderSchema {
                 "device",
                 "Device",
                 "Compute device for inference: 'cpu', 'cuda' or 'metal'.",
+            ),
+            v.clone(),
+        );
+    }
+    if let Some(v) = cfg.options.get("pool_size") {
+        s.push(
+            ParamDescriptor::static_int_display(
+                "pool_size",
+                "Pool size",
+                "Number of concurrent GGUF model backend instances in the pool (default 1).",
             ),
             v.clone(),
         );

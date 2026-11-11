@@ -136,6 +136,7 @@ async fn huge_page_numbers_yield_an_empty_page() {
         Query(crate::api::types::SessionsQuery {
             page: Some(usize::MAX),
             per_page: Some(200),
+            tenant_id: None,
             status: None,
             since: None,
             until: None,
@@ -300,4 +301,60 @@ async fn any_other_non_json_answer_becomes_a_gateway_error_that_says_so() {
             .unwrap()
             .contains("not JSON")
     );
+}
+
+#[tokio::test]
+async fn burst_dispatch_least_connections_balances_and_respects_max_concurrent() {
+    let mut w1 = worker("worker-1", "cpu-voice", "10.0.0.1:8800");
+    w1.capacity.max_concurrent = 3;
+    let mut w2 = worker("worker-2", "cpu-voice", "10.0.0.2:8800");
+    w2.capacity.max_concurrent = 3;
+    let state = state_with(vec![w1, w2]);
+
+    let mut counts = std::collections::HashMap::<String, usize>::new();
+    for _ in 0..6 {
+        let (wid, _) = dispatch_ws_url(&state, "cpu-voice").await;
+        *counts.entry(wid).or_insert(0) += 1;
+    }
+    assert_eq!(counts.get("worker-1"), Some(&3));
+    assert_eq!(counts.get("worker-2"), Some(&3));
+
+    // 7th dispatch before any heartbeat frees slots must return 503.
+    let resp = super::dispatch(
+        State(Arc::clone(&state)),
+        Query(DispatchQuery {
+            pipeline_name: Some("cpu-voice".into()),
+            pipeline_hash: None,
+            tags: None,
+            policy: None,
+        }),
+    )
+    .await;
+    assert_eq!(resp.status(), axum::http::StatusCode::SERVICE_UNAVAILABLE);
+}
+
+#[tokio::test]
+async fn burst_dispatch_round_robin_cycles_across_workers() {
+    let w1 = worker("worker-a", "rr-voice", "10.0.0.1:8800");
+    let w2 = worker("worker-b", "rr-voice", "10.0.0.2:8800");
+    let state = state_with(vec![w2, w1]);
+
+    let mut chosen = Vec::new();
+    for _ in 0..4 {
+        let resp = super::dispatch(
+            State(Arc::clone(&state)),
+            Query(DispatchQuery {
+                pipeline_name: Some("rr-voice".into()),
+                pipeline_hash: None,
+                tags: None,
+                policy: Some("round-robin".into()),
+            }),
+        )
+        .await;
+        let json = body_json(resp).await;
+        chosen.push(json["data"]["worker_id"].as_str().unwrap().to_string());
+    }
+    assert_ne!(chosen[0], chosen[1]);
+    assert_eq!(chosen[0], chosen[2]);
+    assert_eq!(chosen[1], chosen[3]);
 }

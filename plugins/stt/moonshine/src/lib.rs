@@ -59,9 +59,16 @@ fn open_session(
 // ── Session pool ───────────────────────────────────────────────────
 
 /// One complete set of ONNX sessions for the Moonshine pipeline.
-struct SessionSet {
-    encoder: MoonshineEncoder,
-    decoder: MoonshineDecoder,
+enum SessionSet {
+    Onnx {
+        encoder: Box<MoonshineEncoder>,
+        decoder: Box<MoonshineDecoder>,
+    },
+    #[cfg(test)]
+    Fake {
+        delay: std::time::Duration,
+        reply_words: String,
+    },
 }
 
 impl SessionSet {
@@ -106,18 +113,44 @@ impl SessionSet {
             )));
         }
 
-        Ok(Self {
-            encoder: MoonshineEncoder::new(&final_encoder_path, threads)?,
-            decoder: MoonshineDecoder::new(&final_decoder_path, &tokenizer_path, threads)?,
+        Ok(Self::Onnx {
+            encoder: Box::new(MoonshineEncoder::new(&final_encoder_path, threads)?),
+            decoder: Box::new(MoonshineDecoder::new(
+                &final_decoder_path,
+                &tokenizer_path,
+                threads,
+            )?),
         })
+    }
+
+    fn warm_up(&mut self, silence: &[f32]) -> Result<(), SttError> {
+        match self {
+            Self::Onnx { encoder, decoder } => {
+                let enc_out = encoder.encode(silence)?;
+                decoder.warm_up(&enc_out)
+            }
+            #[cfg(test)]
+            Self::Fake { .. } => Ok(()),
+        }
     }
 
     /// Encode 16 kHz mono audio and decode it to text.
     fn transcribe(&mut self, samples: &[f32], max_new_tokens: usize) -> Result<String, SttError> {
-        let trimmed = trim_trailing_silence(samples);
-        let enc_out = self.encoder.encode(trimmed)?;
-        let tokens = self.decoder.decode(&enc_out, max_new_tokens)?;
-        self.decoder.detokenize(&tokens)
+        match self {
+            Self::Onnx { encoder, decoder } => {
+                let trimmed = trim_trailing_silence(samples);
+                let enc_out = encoder.encode(trimmed)?;
+                let tokens = decoder.decode(&enc_out, max_new_tokens)?;
+                decoder.detokenize(&tokens)
+            }
+            #[cfg(test)]
+            Self::Fake { delay, reply_words } => {
+                if !delay.is_zero() {
+                    std::thread::sleep(*delay);
+                }
+                Ok(reply_words.clone())
+            }
+        }
     }
 }
 
@@ -215,6 +248,17 @@ impl MoonshineStt {
             core,
         })
     }
+
+    async fn checkout_slot(
+        &self,
+        slot_wait: Option<std::time::Duration>,
+    ) -> Result<voice_pipes_onnx::PooledSlot<SessionSet>, SttError> {
+        match slot_wait {
+            Some(wait) => self.pool.checkout_within(wait).await,
+            None => self.pool.checkout().await,
+        }
+        .map_err(SttError::busy)
+    }
 }
 
 #[async_trait]
@@ -239,8 +283,7 @@ impl SttProvider for MoonshineStt {
         tokio::task::spawn_blocking(move || -> Result<(), SttError> {
             let silence = vec![0.0_f32; 16_000];
             for set in &mut held {
-                let enc_out = set.encoder.encode(&silence)?;
-                set.decoder.warm_up(&enc_out)?;
+                set.warm_up(&silence)?;
             }
             Ok(())
         })
@@ -305,12 +348,7 @@ impl SttProvider for MoonshineStt {
         tx: tokio::sync::mpsc::Sender<TranscriptionResult>,
         cancel: CancellationToken,
     ) -> Result<(), SttError> {
-        let mut pooled = match request.slot_wait {
-            Some(wait) => self.pool.checkout_within(wait).await,
-            None => self.pool.checkout().await,
-        }
-        .map_err(SttError::busy)?;
-
+        let slot_wait = request.slot_wait;
         let mut f32_buffer: Vec<f32> = Vec::new();
         let mut last_emitted_text = String::new();
         let mut last_inference_len: usize = 0;
@@ -376,20 +414,18 @@ impl SttProvider for MoonshineStt {
             last_inference_len = f32_buffer.len();
 
             let samples = f32_buffer.clone();
+            let mut pooled = self.checkout_slot(slot_wait).await?;
             let inference_start = std::time::Instant::now();
 
-            let (returned_pooled, result) = tokio::task::spawn_blocking(move || {
-                let result = pooled.transcribe(&samples, max_new_tokens);
-                (pooled, result)
-            })
-            .await
-            .map_err(|e| {
-                let err = SttError::InferenceFailed(format!("task join: {e}"));
-                self.core.record_error(&err);
-                err
-            })?;
+            let result =
+                tokio::task::spawn_blocking(move || pooled.transcribe(&samples, max_new_tokens))
+                    .await
+                    .map_err(|e| {
+                        let err = SttError::InferenceFailed(format!("task join: {e}"));
+                        self.core.record_error(&err);
+                        err
+                    })?;
 
-            pooled = returned_pooled;
             let inference_elapsed = inference_start.elapsed();
             total_inference_wall += inference_elapsed;
             inference_count = inference_count.saturating_add(1);
@@ -529,10 +565,11 @@ struct MoonshineOptions {
 impl MoonshineOptions {
     fn read(cfg: &SttConfig) -> Result<Self, Vec<ConfigError>> {
         let mut o = cfg.options();
+        let default_threads = voice_pipes_onnx::intra_threads_from_env(DEFAULT_THREADS);
         let options = Self {
-            pool_size: o.usize_in("pool_size", 1..=64, DEFAULT_POOL_SIZE),
+            pool_size: o.usize_in("pool_size", 1..=128, DEFAULT_POOL_SIZE),
             // 0 leaves the count to ONNX Runtime.
-            threads: o.usize_in("threads", 0..=256, DEFAULT_THREADS),
+            threads: o.usize_in("threads", 0..=256, default_threads),
             initial_buffer_ms: o.optional_f64_in("initial_buffer_ms", 0.0..=60_000.0),
             inference_step_ms: o.optional_f64_in("inference_step_ms", 1.0..=60_000.0),
             max_new_tokens: o

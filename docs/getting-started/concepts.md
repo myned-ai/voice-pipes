@@ -13,9 +13,9 @@ A **pipeline** is the chain that turns incoming audio into outgoing audio.
 Voice Pipes has two engines behind the same session protocol:
 
 ```
-Cascade:   Audio in → VAD → STT → Turn detector → Text processor chain → TTS → Audio out
-                                                        ↑
-                                       Barge-in monitor (cancels on user speech)
+Cascade:   Audio in → Audio filter → VAD → STT → Turn detector → Text processor chain → TTS → Audio out
+                                                                       ↑
+                                                      Barge-in monitor (cancels on user speech)
 
 Speech-to-speech:   Audio in → Realtime provider (OpenAI Realtime, Gemini Live, ElevenLabs Agents) → Audio out
 ```
@@ -77,10 +77,15 @@ An **utterance** is one contiguous stretch of user speech that the pipeline
 commits as input. Every utterance gets a numeric `utterance_id` that tags all
 audio, captions, metrics and annotations produced in response to it.
 
-## VAD, turn detection, barge-in
+## Audio filter, VAD, turn detection, barge-in
 
-Three different questions, three different components:
+Four different questions, four different components:
 
+- **Audio filter** (`[[audio_filter]]`) cleans or gates incoming microphone PCM
+  in place *before* VAD and STT see it. The built-in `deepfilter` plugin
+  suppresses stationary background noise, mains hum, and fan rumble using
+  decision-directed ERB Wiener filtering (`8..96 kHz`).
+  [Guide](../guides/vad.md#ingress-noise-suppression-audio_filter).
 - **VAD** (voice activity detection) answers *is this audio speech?* per chunk.
   Silero (neural, ONNX) is the default; an energy threshold is the fallback;
   `passthrough` hands everything to a provider that has its own VAD.

@@ -61,8 +61,8 @@ fn model_output(e: voice_pipes_onnx::ModelOutputError) -> SttError {
 
 /// Open one of the model's graphs through the shared opener, on the device
 /// `VP_ORT_EP` names (the CPU unless it asks for CUDA in a CUDA build).
-fn open_session(path: &Path) -> Result<ort::session::Session, SttError> {
-    let options = voice_pipes_onnx::SessionOptions::new(INTRA_THREADS)
+fn open_session(path: &Path, threads: usize) -> Result<ort::session::Session, SttError> {
+    let options = voice_pipes_onnx::SessionOptions::new(threads)
         .with_target(voice_pipes_onnx::ExecutionTarget::from_env());
     voice_pipes_onnx::open_session(path, &options)
         .map_err(|e| SttError::ModelLoadFailed(e.to_string()))
@@ -114,22 +114,69 @@ impl Precision {
 }
 
 /// One complete set of ONNX sessions for the Parakeet pipeline.
-struct SessionSet {
-    preprocessor: MelPreprocessor,
-    encoder: ParakeetEncoder,
-    decoder: TdtDecoder,
+enum SessionSet {
+    Onnx {
+        preprocessor: Box<MelPreprocessor>,
+        encoder: Box<ParakeetEncoder>,
+        decoder: Box<TdtDecoder>,
+    },
+    #[cfg(test)]
+    Fake {
+        delay: std::time::Duration,
+        reply_words: String,
+    },
 }
 
 impl SessionSet {
-    fn new(model_dir: &Path, precision: Precision) -> Result<Self, SttError> {
-        Ok(Self {
-            preprocessor: MelPreprocessor::new(&model_dir.join("nemo128.onnx"))?,
-            encoder: ParakeetEncoder::new(&model_dir.join(precision.encoder_file()))?,
-            decoder: TdtDecoder::new(
+    fn new(model_dir: &Path, precision: Precision, threads: usize) -> Result<Self, SttError> {
+        Ok(Self::Onnx {
+            preprocessor: Box::new(MelPreprocessor::new(
+                &model_dir.join("nemo128.onnx"),
+                threads,
+            )?),
+            encoder: Box::new(ParakeetEncoder::new(
+                &model_dir.join(precision.encoder_file()),
+                threads,
+            )?),
+            decoder: Box::new(TdtDecoder::new(
                 &model_dir.join(precision.decoder_file()),
                 &model_dir.join("vocab.txt"),
-            )?,
+                threads,
+            )?),
         })
+    }
+
+    fn decode_with_counts(
+        &mut self,
+        samples: &[f32],
+    ) -> Result<(usize, String, Vec<WordInfo>), SttError> {
+        match self {
+            Self::Onnx {
+                preprocessor,
+                encoder,
+                decoder,
+            } => {
+                let mel = preprocessor.process(samples)?;
+                let encoder_out = encoder.encode(
+                    &mel.features,
+                    mel.mel_bins,
+                    mel.time_steps,
+                    &mel.features_lens,
+                )?;
+                let tokens = decoder.decode(&encoder_out)?;
+                let token_count = tokens.len();
+                let total_audio_secs = samples.len() as f64 / 16000.0;
+                let (text, words) = decoder.detokenize_with_timestamps(&tokens, total_audio_secs);
+                Ok((token_count, text, words))
+            }
+            #[cfg(test)]
+            Self::Fake { delay, reply_words } => {
+                if !delay.is_zero() {
+                    std::thread::sleep(*delay);
+                }
+                Ok((1, reply_words.clone(), Vec::new()))
+            }
+        }
     }
 }
 
@@ -138,12 +185,13 @@ fn build_pool(
     model_dir: &Path,
     precision: Precision,
     pool_size: usize,
+    threads: usize,
 ) -> Result<SessionPool<SessionSet>, SttError> {
     let mut sets = Vec::with_capacity(pool_size);
     for _ in 0..pool_size {
-        sets.push(SessionSet::new(model_dir, precision)?);
+        sets.push(SessionSet::new(model_dir, precision, threads)?);
     }
-    info!(pool_size, "ONNX session pool created");
+    info!(pool_size, threads, "ONNX session pool created");
     SessionPool::new(sets, "Parakeet session sets")
         .map_err(|e| SttError::ConfigError(e.to_string()))
 }
@@ -220,24 +268,35 @@ impl std::fmt::Debug for ParakeetStt {
 }
 
 impl ParakeetStt {
-    /// Load the models from `model_dir`, `pool_size` sets of sessions for
-    /// concurrent inference. The directory holds `nemo128.onnx`
-    /// (preprocessor), the encoder and the decoder-and-joint graphs of the
-    /// export `precision` names, and `vocab.txt` (BPE vocabulary).
+    #[cfg(test)]
     pub fn with_pool_size(
         model_dir: &Path,
         precision: Precision,
         pool_size: usize,
     ) -> Result<Self, SttError> {
+        let threads = voice_pipes_onnx::intra_threads_from_env(INTRA_THREADS);
+        Self::with_pool_and_threads(model_dir, precision, pool_size, threads)
+    }
+
+    /// Load the models from `model_dir`, `pool_size` sets of sessions for
+    /// concurrent inference. The directory holds `nemo128.onnx`
+    /// (preprocessor), the encoder and the decoder-and-joint graphs of the
+    /// export `precision` names, and `vocab.txt` (BPE vocabulary).
+    pub fn with_pool_and_threads(
+        model_dir: &Path,
+        precision: Precision,
+        pool_size: usize,
+        threads: usize,
+    ) -> Result<Self, SttError> {
         let core = Arc::new(ComponentCore::new("stt:parakeet", ComponentKind::Stt));
-        let pool = match build_pool(model_dir, precision, pool_size) {
+        let pool = match build_pool(model_dir, precision, pool_size, threads) {
             Ok(p) => p,
             Err(e) => {
                 core.mark_unhealthy(format!("model load failed: {e}"));
                 return Err(e);
             }
         };
-        info!(model_dir = %model_dir.display(), ?precision, pool_size, "Parakeet TDT loaded");
+        info!(model_dir = %model_dir.display(), ?precision, pool_size, threads, "Parakeet TDT loaded");
         Ok(Self {
             pool: Arc::new(pool),
             language: DEFAULT_LANGUAGE.into(),
@@ -246,6 +305,17 @@ impl ParakeetStt {
             streaming_window_ms: DEFAULT_STREAMING_WINDOW_MS,
             core,
         })
+    }
+
+    async fn checkout_slot(
+        &self,
+        slot_wait: Option<std::time::Duration>,
+    ) -> Result<voice_pipes_onnx::PooledSlot<SessionSet>, SttError> {
+        match slot_wait {
+            Some(wait) => self.pool.checkout_within(wait).await,
+            None => self.pool.checkout().await,
+        }
+        .map_err(SttError::busy)
     }
 }
 
@@ -261,32 +331,22 @@ impl SttProvider for ParakeetStt {
         let sample_rate = audio_frame.sample_rate;
         let language = self.language.clone();
 
-        let (_pooled, result) = tokio::task::spawn_blocking(move || {
-            let result = (|| -> Result<TranscriptionResult, SttError> {
+        let result =
+            tokio::task::spawn_blocking(move || -> Result<TranscriptionResult, SttError> {
                 let set = pooled.get_mut();
                 let samples =
                     voice_pipes_sdk::audio::mono_f32_at(&raw_samples, channels, sample_rate, 16000)
                         .map_err(|e| SttError::InvalidAudio(e.to_string()))?;
 
-                let mel = set.preprocessor.process(&samples)?;
-                let encoder_out = set.encoder.encode(
-                    &mel.features,
-                    mel.mel_bins,
-                    mel.time_steps,
-                    &mel.features_lens,
-                )?;
-                let tokens = set.decoder.decode(&encoder_out)?;
+                let (token_count, mut text, mut words) = set.decode_with_counts(&samples)?;
                 let total_audio_secs = samples.len() as f64 / 16000.0;
-                let (mut text, mut words) = set
-                    .decoder
-                    .detokenize_with_timestamps(&tokens, total_audio_secs);
                 localise(&mut text, &mut words, &language);
 
                 let end_time = std::time::Duration::from_secs_f64(total_audio_secs);
 
                 info!(
                     text_len = text.len(),
-                    token_count = tokens.len(),
+                    token_count,
                     word_count = words.len(),
                     "transcription complete"
                 );
@@ -302,15 +362,13 @@ impl SttProvider for ParakeetStt {
                     .with_end_time(Some(end_time))
                     .with_words(words)
                     .with_inference_metrics(Some(inference_metrics)))
-            })();
-            (pooled, result)
-        })
-        .await
-        .map_err(|e| {
-            let err = SttError::InferenceFailed(format!("task join: {e}"));
-            self.core.record_error(&err);
-            err
-        })?;
+            })
+            .await
+            .map_err(|e| {
+                let err = SttError::InferenceFailed(format!("task join: {e}"));
+                self.core.record_error(&err);
+                err
+            })?;
 
         match &result {
             Ok(_) => self.core.record_ok(start.elapsed()),
@@ -326,18 +384,13 @@ impl SttProvider for ParakeetStt {
         tx: tokio::sync::mpsc::Sender<TranscriptionResult>,
         cancel: tokio_util::sync::CancellationToken,
     ) -> Result<(), SttError> {
-        let mut pooled = match request.slot_wait {
-            Some(wait) => self.pool.checkout_within(wait).await,
-            None => self.pool.checkout().await,
-        }
-        .map_err(SttError::busy)?;
-
         // The request's language over the configured one, as a label: the
         // model transcribes whatever it was trained on either way.
         let language = request
             .language
             .clone()
             .unwrap_or_else(|| self.language.clone());
+        let slot_wait = request.slot_wait;
 
         // Incremental f32 buffer -- we convert new i16 chunks on arrival
         // instead of reconverting the entire buffer each inference pass.
@@ -437,19 +490,17 @@ impl SttProvider for ParakeetStt {
                 };
 
             let covered_whole_buffer = samples.len() == f32_buffer.len();
+            let mut pooled = self.checkout_slot(slot_wait).await?;
             let inference_start = std::time::Instant::now();
-            let (returned_pooled, result) = tokio::task::spawn_blocking(move || {
-                let result = decode_samples(pooled.get_mut(), &samples);
-                (pooled, result)
-            })
-            .await
-            .map_err(|e| {
-                let err = SttError::InferenceFailed(format!("task join: {e}"));
-                self.core.record_error(&err);
-                err
-            })?;
+            let result =
+                tokio::task::spawn_blocking(move || decode_samples(pooled.get_mut(), &samples))
+                    .await
+                    .map_err(|e| {
+                        let err = SttError::InferenceFailed(format!("task join: {e}"));
+                        self.core.record_error(&err);
+                        err
+                    })?;
 
-            pooled = returned_pooled;
             let inference_elapsed = inference_start.elapsed();
             total_inference_wall += inference_elapsed;
             inference_count = inference_count.saturating_add(1);
@@ -482,16 +533,15 @@ impl SttProvider for ParakeetStt {
                             .get(..len.min(f32_buffer.len()))
                             .unwrap_or_default()
                             .to_vec();
+                        let mut pooled = self.checkout_slot(slot_wait).await?;
                         let t_rescue = std::time::Instant::now();
-                        let (returned_pooled, result) = tokio::task::spawn_blocking(move || {
-                            let result = decode_samples(pooled.get_mut(), &prefix);
-                            (pooled, result)
+                        let result = tokio::task::spawn_blocking(move || {
+                            decode_samples(pooled.get_mut(), &prefix)
                         })
                         .await
                         .map_err(|e| SttError::InferenceFailed(format!("task join: {e}")))?;
                         total_inference_wall += t_rescue.elapsed();
                         inference_count += 1;
-                        pooled = returned_pooled;
                         result.ok().filter(|(t, _)| !t.trim().is_empty())
                     }
                 };
@@ -659,8 +709,12 @@ impl SttFactory for ParakeetFactory {
         let default_dir = PathBuf::from("models/parakeet-tdt");
         let model_dir = cfg.model_dir.as_deref().unwrap_or(&default_dir);
         let options = ParakeetOptions::read(cfg).map_err(voice_pipes_sdk::options::refused)?;
-        let mut parakeet =
-            ParakeetStt::with_pool_size(model_dir, options.precision, options.pool_size)?;
+        let mut parakeet = ParakeetStt::with_pool_and_threads(
+            model_dir,
+            options.precision,
+            options.pool_size,
+            options.threads,
+        )?;
         if let Some(language) = options.language {
             parakeet.language = language;
         }
@@ -687,6 +741,7 @@ struct ParakeetOptions {
     precision: Precision,
     language: Option<String>,
     pool_size: usize,
+    threads: usize,
     initial_buffer_ms: Option<f64>,
     inference_step_ms: Option<f64>,
     streaming_window_ms: Option<f64>,
@@ -695,10 +750,12 @@ struct ParakeetOptions {
 impl ParakeetOptions {
     fn read(cfg: &SttConfig) -> Result<Self, Vec<ConfigError>> {
         let mut o = cfg.options();
+        let default_threads = voice_pipes_onnx::intra_threads_from_env(INTRA_THREADS);
         let options = Self {
             precision: Precision::from_name(&o.one_of("precision", &Precision::NAMES, "int8")),
             language: o.string("language").filter(|l| !l.trim().is_empty()),
-            pool_size: o.usize_in("pool_size", 1..=64, DEFAULT_POOL_SIZE),
+            pool_size: o.usize_in("pool_size", 1..=128, DEFAULT_POOL_SIZE),
+            threads: o.usize_in("threads", 0..=64, default_threads),
             initial_buffer_ms: o.optional_f64_in("initial_buffer_ms", 0.0..=60_000.0),
             inference_step_ms: o.optional_f64_in("inference_step_ms", 1.0..=60_000.0),
             streaming_window_ms: o.optional_f64_in("streaming_window_ms", 1.0..=600_000.0),
@@ -708,25 +765,13 @@ impl ParakeetOptions {
     }
 }
 
-/// Incrementally convert i16 samples to f32 and append to the buffer.
-#[inline]
 /// Mel, encoder and greedy decode of one buffer, to text and word timings.
 fn decode_samples(
     set: &mut SessionSet,
     samples: &[f32],
 ) -> Result<(String, Vec<WordInfo>), SttError> {
-    let mel = set.preprocessor.process(samples)?;
-    let encoder_out = set.encoder.encode(
-        &mel.features,
-        mel.mel_bins,
-        mel.time_steps,
-        &mel.features_lens,
-    )?;
-    let tokens = set.decoder.decode(&encoder_out)?;
-    let total_audio_secs = samples.len() as f64 / 16000.0;
-    Ok(set
-        .decoder
-        .detokenize_with_timestamps(&tokens, total_audio_secs))
+    let (_token_count, text, words) = set.decode_with_counts(samples)?;
+    Ok((text, words))
 }
 
 /// What an in-progress decode of the current utterance found.

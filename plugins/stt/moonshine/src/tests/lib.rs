@@ -187,3 +187,67 @@ async fn metric_conformance() {
     .await
     .unwrap();
 }
+
+#[tokio::test]
+async fn small_pool_serves_many_concurrent_streams_by_releasing_slots_between_steps() {
+    let sets = (0..2)
+        .map(|_| SessionSet::Fake {
+            delay: std::time::Duration::ZERO,
+            reply_words: "hello moonshine".into(),
+        })
+        .collect();
+    let pool = Arc::new(SessionPool::new(sets, "Moonshine session sets").expect("pool"));
+    let stt = Arc::new(MoonshineStt {
+        pool,
+        min_initial_buffer_ms: 800.0,
+        min_inference_step_ms: 1000.0,
+        max_new_tokens: DEFAULT_MAX_NEW_TOKENS,
+        core: Arc::new(ComponentCore::new("stt:moonshine", ComponentKind::Stt)),
+    });
+
+    let barrier = Arc::new(tokio::sync::Barrier::new(16));
+    let mut handles = Vec::new();
+    for _ in 0..16 {
+        let stt = Arc::clone(&stt);
+        let barrier = Arc::clone(&barrier);
+        handles.push(tokio::spawn(async move {
+            let (audio_tx, audio_rx) = tokio::sync::mpsc::channel(8);
+            let (res_tx, mut res_rx) = tokio::sync::mpsc::channel(8);
+            let cancel = CancellationToken::new();
+            let cancel_stream = cancel.clone();
+            let stream_task = tokio::spawn(async move {
+                stt.transcribe_stream(
+                    RecognitionRequest::default(),
+                    audio_rx,
+                    res_tx,
+                    cancel_stream,
+                )
+                .await
+            });
+
+            audio_tx
+                .send(AudioChunk {
+                    samples: vec![100i16; 320],
+                    is_last: false,
+                })
+                .await
+                .expect("send partial");
+            barrier.wait().await;
+            audio_tx
+                .send(AudioChunk {
+                    samples: vec![100i16; 3200],
+                    is_last: true,
+                })
+                .await
+                .expect("send chunk");
+            let final_res = res_rx.recv().await.expect("final result");
+            assert!(final_res.is_final);
+            assert_eq!(final_res.text, "hello moonshine");
+            cancel.cancel();
+            stream_task.await.expect("join").expect("stream ok");
+        }));
+    }
+    for h in handles {
+        h.await.expect("session task completed");
+    }
+}

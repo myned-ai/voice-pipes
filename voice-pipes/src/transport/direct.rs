@@ -39,6 +39,7 @@ pub fn channel_pair() -> (DirectTransport, DirectTransport) {
         incoming: Arc::new(Mutex::new(server_to_client_rx)),
         metadata: SessionMetadata {
             session_id: session_id.clone(),
+            tenant_id: None,
             transport_type: TransportType::Direct,
             remote_addr: None,
             connected_at: now,
@@ -54,6 +55,7 @@ pub fn channel_pair() -> (DirectTransport, DirectTransport) {
         incoming: Arc::new(Mutex::new(client_to_server_rx)),
         metadata: SessionMetadata {
             session_id,
+            tenant_id: None,
             transport_type: TransportType::Direct,
             remote_addr: Some(SocketAddr::from(([127, 0, 0, 1], 0))),
             connected_at: now,

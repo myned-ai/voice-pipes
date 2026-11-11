@@ -21,6 +21,7 @@ This guide explains everything you need to add a new AI model provider — speec
    - 5a. [VAD plugins](#5a-vad-plugins)
    - 5b. [Speech-to-speech plugins](#5b-speech-to-speech-plugins)
    - 5c. [Turn-detector plugins](#5c-turn-detector-plugins)
+   - 5d. [Audio filter plugins](#5d-audio-filter-plugins)
 6. [Component health registration](#6-component-health-registration)
 7. [Error policies and retry](#7-error-policies-and-retry)
 8. [Configuration and TOML](#8-configuration-and-toml)
@@ -876,6 +877,85 @@ my_detector::wizard_choices())` (an empty list when it offers no wizard
 entry); the stage's selector is `mode`. `voice-pipes-turn-smart` (with a wizard entry
 that downloads its model) and `voice-pipes-turn-vap` are the worked
 examples.
+
+---
+
+## 5d. Audio filter plugins
+
+An ingress audio filter modifies or gates raw microphone PCM samples in place
+*before* VAD segmentation and STT recognition. Filters are configured as an
+ordered chain of `[[audio_filter]]` tables (`provider = "<its name>"`) and
+implement `AudioFilter` and `AudioFilterFactory` (`voice_pipes_sdk::filter`):
+
+```rust
+use std::time::Instant;
+use voice_pipes_sdk::filter::{AudioFilter, AudioFilterFactory, FilterError, FilterMetrics};
+use voice_pipes_sdk::{BuildContext, BuildError, ConfigError, FilterStageConfig};
+
+pub struct MyNoiseFilter {
+    atten_db: f32,
+}
+
+impl AudioFilter for MyNoiseFilter {
+    fn process_chunk(
+        &mut self,
+        samples: &mut [i16],
+        sample_rate: u32,
+    ) -> Result<FilterMetrics, FilterError> {
+        let started = Instant::now();
+        // Modify `samples` in place (at `sample_rate` Hz) and return metrics:
+        Ok(FilterMetrics::new(started.elapsed())
+            .with_snr_improvement(15.0)
+            .with_suppressed(false))
+    }
+
+    fn reset(&mut self) {
+        // Clear internal ring buffers / recurrent state between sessions
+    }
+
+    fn name(&self) -> &'static str {
+        "my-filter"
+    }
+}
+
+pub struct MyNoiseFilterFactory;
+
+impl AudioFilterFactory for MyNoiseFilterFactory {
+    fn name(&self) -> &'static str {
+        "my-filter"
+    }
+
+    fn validate(&self, cfg: &FilterStageConfig) -> Vec<ConfigError> {
+        let mut opts = cfg.options();
+        let _ = opts.optional_f64_in("attenuation_limit_db", 0.0..=100.0);
+        opts.into_errors()
+    }
+
+    fn build(
+        &self,
+        cfg: &FilterStageConfig,
+        _ctx: &BuildContext<'_>,
+    ) -> Result<Box<dyn AudioFilter>, BuildError> {
+        voice_pipes_sdk::options::validated(self.validate(cfg))?;
+        let mut opts = cfg.options();
+        let atten_db = opts.f64_in("attenuation_limit_db", 0.0..=100.0, 30.0) as f32;
+        Ok(Box::new(MyNoiseFilter { atten_db }))
+    }
+}
+
+pub fn factory() -> Box<dyn AudioFilterFactory> {
+    Box::new(MyNoiseFilterFactory)
+}
+```
+
+```toml
+[[audio_filter]]
+provider = "my-filter"
+attenuation_limit_db = 30.0
+```
+
+Register with `voice_pipes::plugins::register_plugin(Plugin::Filter(my_filter::factory), my_filter::wizard_choices())`.
+`voice-pipes-filter-deepfilter` is the worked example.
 
 ---
 

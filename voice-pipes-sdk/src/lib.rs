@@ -112,6 +112,7 @@ pub mod audit;
 pub mod build;
 pub mod component;
 pub mod config;
+pub mod filter;
 pub mod options;
 pub mod params;
 pub mod phonemize;
@@ -122,6 +123,7 @@ pub mod schema;
 pub mod secrets;
 pub mod sentence;
 pub mod stt;
+pub mod tenant;
 pub mod testing;
 pub mod text;
 pub mod tts;
@@ -141,9 +143,10 @@ pub use component::{
     HealthStatus, LatencyStats, ModelIdentity,
 };
 pub use config::{
-    ConfigError, ConfigErrorKind, SttConfig, TextChunkingConfig, TextProcessorConfig, TtsConfig,
-    VadConfig,
+    ConfigError, ConfigErrorKind, FilterStageConfig, SttConfig, TextChunkingConfig,
+    TextProcessorConfig, TtsConfig, VadConfig,
 };
+pub use filter::{AudioFilter, AudioFilterFactory, FilterError, FilterMetrics};
 pub use params::{AtomicParamStore, AtomicParamStoreBuilder, MutableParamStore};
 pub use sanitize::{
     DualTrackText, SanitizeConfig, StrippedDirectiveRecord, ThinkTagFilter, TtsDirectiveRecord,
@@ -157,6 +160,7 @@ pub use stt::{
     AudioChunk, AudioEncoding, InferenceMetrics, RecognitionRequest, SttCapability, SttError,
     SttFactory, SttProvider, TranscriptionResult, WarmUpScope, WordInfo,
 };
+pub use tenant::{TenantId, TenantIdError, TenantRetentionPolicy};
 pub use text::{TextFragment, TextProcessor, TextProcessorError, TextProcessorFactory};
 pub use tokio_util::sync::CancellationToken;
 pub use tts::{

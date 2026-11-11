@@ -1,0 +1,41 @@
+# Ingress Noise Suppression (`DeepFilter`) Feature Pipeline
+#
+# Demonstrates pure-Rust, zero-allocation ERB Wiener noise suppression
+# (`[[audio_filter]] provider = "deepfilter"`) running upstream of Silero VAD
+# and Parakeet TDT STT.
+#
+# Validate:
+#   voice-pipes validate-config voice-pipes/examples/features/noise-suppression-deepfilter.toml
+#
+# Dictate in noisy environments (STT-only):
+#   voice-pipes --config voice-pipes/examples/features/noise-suppression-deepfilter.toml listen
+#
+# Full local voice loop:
+#   voice-pipes --config voice-pipes/examples/features/noise-suppression-deepfilter.toml live
+
+[pipeline]
+name = "local-deepfilter-cascade"
+
+[[audio_filter]]
+provider = "deepfilter"
+attenuation_limit_db = 30.0
+
+[vad]
+mode = "auto"
+model = "models/silero_vad.onnx"
+speech_prob = 0.5
+neg_threshold = 0.35
+
+[stt]
+provider = "parakeet-tdt"
+model_dir = "models/parakeet-tdt"
+
+[[text_processor]]
+type = "openai-compat"
+base_url = "http://localhost:8081/v1"
+model = "gemma-4-E2B-it"
+system_prompt = "You are a concise voice assistant."
+
+[tts]
+provider = "piper"
+model = "models/en_US-lessac-medium.onnx"

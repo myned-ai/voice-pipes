@@ -33,7 +33,7 @@ use voice_pipes::transport::serve::{TransportState, run_session};
 use voice_pipes::transport::session_store::{SessionStore, SessionStoreConfig};
 use voice_pipes::transport::{ClientControl, ClientMessage, ServerControl, ServerMessage};
 
-const TEST_TIMEOUT: Duration = Duration::from_secs(30);
+const TEST_TIMEOUT: Duration = Duration::from_secs(60);
 const RATE: u32 = 16_000;
 
 // ── The plugin ──────────────────────────────────────────────

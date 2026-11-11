@@ -104,7 +104,7 @@ fn element_count(name: &str, shape: &[i64]) -> Result<usize, SttError> {
         })
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Default)]
 pub struct CacheTensors {
     pub state_f32: HashMap<String, (Vec<i64>, Vec<f32>)>,
     pub state_i64: HashMap<String, (Vec<i64>, Vec<i64>)>,
@@ -283,7 +283,7 @@ pub fn run_encoder_chunk(
     })
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DecoderState {
     pub inputs: Vec<(String, Vec<i64>, Vec<f32>)>,
     pub output_names: Vec<String>,
@@ -770,10 +770,11 @@ pub fn transcribe_buffered(
 }
 
 /// Per-utterance streaming engine: maintains cache + decoder state across
-/// `feed_samples` calls, draining encoder chunks as enough audio arrives.
+/// `drain_ready_chunks` calls without holding an ONNX `Session` slot while
+/// waiting for incoming network audio.
 pub struct StreamingEngine {
-    /// The pooled session set; dropping the engine returns it to the pool.
-    pub sessions: voice_pipes_onnx::PooledSlot<NemotronSessions>,
+    initial_cache: CacheTensors,
+    initial_decoder_state: DecoderState,
     pub cache: CacheTensors,
     pub decoder_state: DecoderState,
     pub chunk_frames: usize,
@@ -781,7 +782,7 @@ pub struct StreamingEngine {
     pub blank_id: i32,
     pub max_tokens_per_step: usize,
     /// Unprocessed audio tail. The consumed prefix is drained after each
-    /// `feed_samples` so this holds ~one window, not the whole
+    /// `drain_ready_chunks` so this holds ~one window, not the whole
     /// utterance — the encoder's cross-chunk state lives in `cache`.
     sample_buffer: Vec<f32>,
     /// Read cursor into `sample_buffer`: the centre of the next window's
@@ -812,17 +813,19 @@ impl std::fmt::Debug for StreamingEngine {
 }
 
 impl StreamingEngine {
-    pub fn new(
-        sessions: voice_pipes_onnx::PooledSlot<NemotronSessions>,
+    pub fn from_templates(
+        initial_cache: CacheTensors,
+        initial_decoder_state: DecoderState,
         metadata: &ExportMetadata,
         blank_id: i32,
         max_tokens_per_step: usize,
-    ) -> Result<Self, SttError> {
+    ) -> Self {
         let cfg = metadata.streaming_config;
-        let cache = CacheTensors::new(&sessions.encoder, &metadata.cache_init_shapes)?;
-        let decoder_state = DecoderState::new(&sessions.decoder, blank_id)?;
-        Ok(Self {
-            sessions,
+        let cache = initial_cache.clone();
+        let decoder_state = initial_decoder_state.clone();
+        Self {
+            initial_cache,
+            initial_decoder_state,
             cache,
             decoder_state,
             chunk_frames: cfg.chunk * SUBSAMPLING_FACTOR,
@@ -833,24 +836,64 @@ impl StreamingEngine {
             sample_pos: 0,
             consumed: 0,
             chunks_processed: 0,
-        })
+        }
+    }
+
+    pub fn new(
+        sessions: &NemotronSessions,
+        metadata: &ExportMetadata,
+        blank_id: i32,
+        max_tokens_per_step: usize,
+    ) -> Result<Self, SttError> {
+        let initial_cache = CacheTensors::new(&sessions.encoder, &metadata.cache_init_shapes)?;
+        let initial_decoder_state = DecoderState::new(&sessions.decoder, blank_id)?;
+        Ok(Self::from_templates(
+            initial_cache,
+            initial_decoder_state,
+            metadata,
+            blank_id,
+            max_tokens_per_step,
+        ))
     }
 
     /// Forget the current utterance: fresh encoder cache and decoder state,
-    /// empty audio tail. The sessions stay loaded, so the next utterance
-    /// on the same stream starts without reloading anything.
-    pub fn reset(&mut self, metadata: &ExportMetadata) -> Result<(), SttError> {
-        self.cache = CacheTensors::new(&self.sessions.encoder, &metadata.cache_init_shapes)?;
-        self.decoder_state = DecoderState::new(&self.sessions.decoder, self.blank_id)?;
+    /// empty audio tail. Requires no ONNX session checkout.
+    pub fn reset(&mut self) {
+        self.cache.clone_from(&self.initial_cache);
+        self.decoder_state.clone_from(&self.initial_decoder_state);
         self.sample_buffer.clear();
         self.sample_pos = 0;
         self.consumed = 0;
-        Ok(())
+    }
+
+    /// Append incoming audio samples to the buffer without checking out an
+    /// ONNX session.
+    pub fn push_samples(&mut self, samples: &[f32]) {
+        self.sample_buffer.extend_from_slice(samples);
+    }
+
+    /// Number of buffered samples beyond `sample_pos` required to run one
+    /// full streaming encoder chunk.
+    fn needed_chunk_samples(&self) -> usize {
+        let chunk_samples = self.chunk_frames * HOP_LENGTH;
+        let right_samples = self.right_ctx_frames * HOP_LENGTH;
+        chunk_samples + right_samples + WIN_LENGTH
+    }
+
+    /// Whether enough audio is buffered to execute at least one streaming
+    /// encoder step.
+    pub fn has_ready_chunk(&self) -> bool {
+        self.sample_pos + self.needed_chunk_samples() <= self.sample_buffer.len()
+    }
+
+    /// Whether enough trailing audio remains to execute a final flush step.
+    pub fn has_flushable_audio(&self) -> bool {
+        self.sample_buffer.len().saturating_sub(self.sample_pos) >= WIN_LENGTH
     }
 
     /// The utterance's audio is spent: whatever arrives next starts a new
     /// one, from its own start.
-    fn end_audio(&mut self) {
+    pub(crate) fn end_audio(&mut self) {
         self.sample_buffer.clear();
         self.sample_pos = 0;
         self.consumed = 0;
@@ -866,34 +909,29 @@ impl StreamingEngine {
         }
     }
 
-    /// Append samples and drain as many full chunks as possible. Returns
-    /// any tokens emitted by those chunks.
-    pub fn feed_samples(&mut self, samples: &[f32]) -> Result<Vec<u32>, SttError> {
-        self.sample_buffer.extend_from_slice(samples);
+    /// Drain as many full chunks as possible using `sessions`. Returns any
+    /// tokens emitted by those chunks.
+    pub fn drain_ready_chunks(
+        &mut self,
+        sessions: &mut NemotronSessions,
+    ) -> Result<Vec<u32>, SttError> {
         let chunk_samples = self.chunk_frames * HOP_LENGTH;
-        let right_samples = self.right_ctx_frames * HOP_LENGTH;
-        let needed = chunk_samples + right_samples + WIN_LENGTH;
+        let needed = self.needed_chunk_samples();
         let mut emitted = Vec::new();
         let window_frames = self.chunk_frames + self.right_ctx_frames;
         while self.sample_pos + needed <= self.sample_buffer.len() {
             let left = self.left_context();
             let stretch = buffered(&self.sample_buffer, self.sample_pos, left, Some(needed))?;
-            let (feat, mel_bins, time_steps, feat_lens) = stretch_mel_features(
-                &mut self.sessions,
-                stretch,
-                left,
-                false,
-                Some(window_frames),
-            )?;
+            let (feat, mel_bins, time_steps, feat_lens) =
+                stretch_mel_features(sessions, stretch, left, false, Some(window_frames))?;
             let enc_out = run_encoder_chunk(
-                &mut self.sessions.encoder,
+                &mut sessions.encoder,
                 &feat,
                 mel_bins,
                 time_steps,
                 &feat_lens,
                 &mut self.cache,
             )?;
-            let sessions = &mut *self.sessions;
             let tokens = decode_chunk_split(
                 &mut sessions.decoder,
                 &mut sessions.joint,
@@ -918,25 +956,32 @@ impl StreamingEngine {
         Ok(emitted)
     }
 
+    /// Append samples and drain as many full chunks as possible. Returns
+    /// any tokens emitted by those chunks.
+    pub fn feed_samples(
+        &mut self,
+        sessions: &mut NemotronSessions,
+        samples: &[f32],
+    ) -> Result<Vec<u32>, SttError> {
+        self.push_samples(samples);
+        self.drain_ready_chunks(sessions)
+    }
+
     /// Flush the trailing audio at end-of-utterance. Drains all remaining
     /// frames in fixed-size mel chunks (zero-padded if needed) so the
     /// encoder sees the same shape it was traced for. This is what makes
     /// short utterances ("hi", "hello") transcribe at all -- the streaming
     /// `feed_samples` loop only fires when ~685 ms of audio is buffered;
     /// for anything shorter, all the work happens here.
-    pub fn flush(&mut self) -> Result<Vec<u32>, SttError> {
-        if self.sample_pos >= self.sample_buffer.len() {
-            self.end_audio();
-            return Ok(Vec::new());
-        }
-        if self.sample_buffer.len() - self.sample_pos < WIN_LENGTH {
+    pub fn flush(&mut self, sessions: &mut NemotronSessions) -> Result<Vec<u32>, SttError> {
+        if !self.has_flushable_audio() {
             self.end_audio();
             return Ok(Vec::new());
         }
         let left = self.left_context();
         let stretch = buffered(&self.sample_buffer, self.sample_pos, left, None)?;
         let (mel_data, mel_bins, total_frames, _) =
-            stretch_mel_features(&mut self.sessions, stretch, left, true, None)?;
+            stretch_mel_features(sessions, stretch, left, true, None)?;
         if total_frames == 0 {
             self.end_audio();
             return Ok(Vec::new());
@@ -948,14 +993,13 @@ impl StreamingEngine {
             let (feat_data, time_steps, feat_lens) =
                 slice_mel_chunk(&mel_data, mel_bins, total_frames, frame_pos, window_frames);
             let enc_out = run_encoder_chunk(
-                &mut self.sessions.encoder,
+                &mut sessions.encoder,
                 &feat_data,
                 mel_bins,
                 time_steps,
                 &feat_lens,
                 &mut self.cache,
             )?;
-            let sessions = &mut *self.sessions;
             let tokens = decode_chunk_split(
                 &mut sessions.decoder,
                 &mut sessions.joint,

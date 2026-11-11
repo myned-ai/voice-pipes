@@ -59,6 +59,7 @@ pub(super) async fn bootstrap_session(
     state: &TransportState,
 ) -> Option<BootstrappedSession> {
     let session_id = session.metadata().session_id.clone();
+    let tenant_id = session.metadata().tenant_id.clone();
     // Taken before the session moves into its pump: the negotiated input
     // rate is published through this handle after the handshake so the
     // transport's inbound audio rate limiter is sized for the client's
@@ -148,8 +149,14 @@ pub(super) async fn bootstrap_session(
     }
 
     // ── Streaming audit sink ────────────────────────────────
-    let streaming_audit =
-        setup_audit_sink(state, &handshake.session_id, &negotiated, &client_config).await;
+    let streaming_audit = setup_audit_sink(
+        state,
+        &handshake.session_id,
+        tenant_id,
+        &negotiated,
+        &client_config,
+    )
+    .await;
 
     Some(BootstrappedSession {
         session_id,
@@ -717,6 +724,7 @@ pub(super) async fn negotiate_and_announce(
 pub(super) async fn setup_audit_sink(
     state: &TransportState,
     session_id: &str,
+    tenant_id: Option<voice_pipes_sdk::TenantId>,
     negotiated: &NegotiatedConfig,
     client_config: &Option<SessionConfig>,
 ) -> Option<StreamingAuditSink> {
@@ -749,6 +757,7 @@ pub(super) async fn setup_audit_sink(
     let (stt_device, llm_device, tts_device) = resolve_device_infos(state).await;
     let meta = serde_json::json!({
         "id": session_id,
+        "tenant_id": tenant_id.as_ref().map(voice_pipes_sdk::TenantId::as_str),
         "start_time": chrono::Utc::now().to_rfc3339(),
         "pipeline_name": state.config.pipeline.name,
         "pipeline_config_hash": crate::config::config_hash(&state.config),
@@ -799,18 +808,23 @@ pub(super) async fn setup_audit_sink(
         // per-turn table without re-deriving them server-side.
         "metric_descriptors": negotiated.metric_descriptors,
     });
-    let meta_key = format!("{session_id}/metadata.json");
+    let meta_key = match &tenant_id {
+        Some(t) => format!("{t}/{session_id}/metadata.json"),
+        None => format!("{session_id}/metadata.json"),
+    };
     let meta_bytes = serde_json::to_string_pretty(&meta).unwrap_or_default();
     if let Err(e) = audit_store.put(&meta_key, meta_bytes.as_bytes()).await {
         warn!(error = %e, "failed to write session metadata.json");
     }
 
     let audit_cfg = &state.config.pipeline.audit;
-    let sink = StreamingAuditSink::spawn_with_budget(
+    let sink = StreamingAuditSink::spawn_with_tenant(
         std::sync::Arc::clone(&audit_store),
+        tenant_id,
         session_id.to_string(),
         audit_cfg.buffer_size.max(AUDIT_CHAN_CAP),
         audit_cfg.max_session_bytes,
+        audit_cfg.zero_data_retention,
     );
 
     Some(sink)
@@ -969,11 +983,16 @@ pub(super) fn setup_audio_pipeline(
         // Read before the VAD moves into its task: barge-in below needs to know
         // whether anything local is actually judging the audio.
         let local_vad_detects_speech = vad.name() != "passthrough";
+        let filter_chain = pipeline::build_filter_chain(&state.config, None).unwrap_or_else(|e| {
+            tracing::warn!(error = %e, "failed to build audio filter chain for transport, proceeding without filter");
+            None
+        });
         let (vad_out_tx, vad_out_rx) = mpsc::channel::<AudioChunk>(AUDIO_IN_BUF);
-        tokio::spawn(pipeline::vad_filter_task(
+        tokio::spawn(pipeline::vad_filter_task_with_filter(
             raw_audio_rx,
             vad_out_tx,
             vad,
+            filter_chain,
             silence_ms,
             pre_roll_ms,
             Some(std::sync::Arc::clone(&user_speaking)),

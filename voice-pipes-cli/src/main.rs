@@ -392,6 +392,7 @@ fn register_each_plugin() -> Result<(), voice_pipes::plugins::RegistrationError>
     plugin!("tts-gemini", Tts, voice_pipes_tts_gemini);
     plugin!("tts-elevenlabs", Tts, voice_pipes_tts_elevenlabs);
     plugin!("vad-silero", Vad, voice_pipes_vad_silero);
+    plugin!("filter-deepfilter", Filter, voice_pipes_filter_deepfilter);
     plugin!("llm-gguf", Text, voice_pipes_llm_gguf);
     plugin!("llm-openai-compat", Text, voice_pipes_llm_openai_compat);
     plugin!("s2s-gemini", Realtime, voice_pipes_s2s_gemini);

@@ -68,3 +68,27 @@ fn invalid_language_codes_are_rejected() {
     );
     assert!(run_espeak_with_language("hello", "").is_err());
 }
+
+#[test]
+fn subprocess_limiter_caps_concurrency_and_releases_on_drop() {
+    let limiter = std::sync::Arc::new(SubprocessLimiter::new(2));
+    let p1 = limiter
+        .acquire(Instant::now() + Duration::from_millis(50))
+        .expect("permit 1");
+    let p2 = limiter
+        .acquire(Instant::now() + Duration::from_millis(50))
+        .expect("permit 2");
+    assert!(
+        limiter
+            .acquire(Instant::now() + Duration::from_millis(20))
+            .is_err()
+    );
+    drop(p1);
+    let p3 = limiter
+        .acquire(Instant::now() + Duration::from_millis(50))
+        .expect("permit after release");
+    drop((p2, p3));
+    assert_eq!(parse_phonemize_jobs(Some("8"), 16), 8);
+    assert_eq!(parse_phonemize_jobs(Some("0"), 16), 16);
+    assert_eq!(parse_phonemize_jobs(None, 16), 16);
+}

@@ -180,3 +180,35 @@ async fn a_failed_build_with_a_checked_out_item_leaves_the_pool_whole() {
     drop(engine);
     assert_eq!(p.available(), 1);
 }
+
+#[test]
+fn checkout_blocking_waits_for_returned_slot_and_times_out_when_exhausted() {
+    let p = pool(1);
+    let held = p
+        .checkout_blocking_within(Duration::from_millis(50))
+        .expect("initial blocking checkout");
+    assert_eq!(
+        p.checkout_blocking_within(Duration::from_millis(20))
+            .expect_err("pool is full"),
+        PoolExhausted {
+            label: "test engines",
+            size: 1,
+            waited: Duration::from_millis(20),
+        }
+    );
+
+    let p2 = Arc::clone(&p);
+    let barrier = Arc::new(std::sync::Barrier::new(2));
+    let b2 = Arc::clone(&barrier);
+    let releaser = std::thread::spawn(move || {
+        b2.wait();
+        drop(held);
+    });
+    barrier.wait();
+    let acquired = p2
+        .checkout_blocking_within(Duration::from_millis(500))
+        .expect("woken when slot returned");
+    releaser.join().expect("releaser thread");
+    drop(acquired);
+    assert_eq!(p.available(), 1);
+}

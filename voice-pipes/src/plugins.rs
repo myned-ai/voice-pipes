@@ -70,6 +70,8 @@ pub enum Plugin {
     /// A speech-to-speech provider (`[realtime_provider] provider`).
     #[cfg(feature = "realtime")]
     Realtime(fn() -> Box<dyn voice_pipes_sdk::s2s::RealtimeFactory>),
+    /// An ingress audio filter.
+    Filter(fn() -> Box<dyn voice_pipes_sdk::filter::AudioFilterFactory>),
 }
 
 /// Register a plugin: its factory, then the setup wizard's `choices` for
@@ -104,6 +106,10 @@ pub fn register_plugin(
             Stage::Realtime,
             crate::realtime::factory::REALTIME_FACTORIES.register_named(ctor)?,
         ),
+        Plugin::Filter(ctor) => {
+            let _name = crate::pipeline::filter::FILTER_FACTORIES.register_named(ctor)?;
+            return Ok(());
+        }
         Plugin::Vad(ctor) => {
             // No menu: one entry at most, the settings the wizard writes
             // under `[vad]` when this backend is the auto one.
@@ -152,6 +158,7 @@ named!(
     voice_pipes_sdk::vad::VadFactory,
     voice_pipes_sdk::turn::TurnDetectorFactory,
     voice_pipes_sdk::s2s::RealtimeFactory,
+    voice_pipes_sdk::filter::AudioFilterFactory,
 );
 
 /// One stage's factories: the ones built into this build, then the ones

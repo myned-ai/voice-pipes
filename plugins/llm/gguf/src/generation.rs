@@ -158,7 +158,7 @@ impl LlmProcessor {
         // streaming for every session. The backend lock is held for the full
         // turn so a concurrent turn cannot interleave its `reset_cache` with
         // our per-token `forward` calls and corrupt the KV-cache.
-        let backend = Arc::clone(&self.backend);
+        let pool = Arc::clone(&self.pool);
         let tokenizer = Arc::clone(&self.tokenizer);
         let template = Arc::clone(&self.template);
         let prefilled = Arc::clone(&self.prefilled);
@@ -186,7 +186,10 @@ impl LlmProcessor {
             let mut logits_processor = LogitsProcessor::new(seed, Some(temperature), top_p);
 
             let t_lock = std::time::Instant::now();
-            let mut backend = backend.lock();
+            let mut slot = pool
+                .checkout_blocking()
+                .map_err(|e| TextProcessorError::new("llm", format!("backend pool: {e}")))?;
+            let backend = slot.get_mut();
             let _lock_wait_ms = t_lock.elapsed().as_secs_f64() * 1000.0;
 
             // Reset KV-cache to system-prompt snapshot (or clear).
@@ -198,7 +201,7 @@ impl LlmProcessor {
 
             // Ingest prompt tokens, get logits for last prompt token.
             let t_ingest = std::time::Instant::now();
-            let first_logits = Self::ingest_prompt(&mut backend, &prompt_tokens, &prefilled)?;
+            let first_logits = Self::ingest_prompt(backend, &prompt_tokens, &prefilled)?;
             let prompt_ingest_ms = t_ingest.elapsed().as_secs_f64() * 1000.0;
             let _pos = prompt_tokens.len();
 
@@ -285,7 +288,7 @@ impl LlmProcessor {
         // As in `process_inner`, generation is CPU-bound candle work and runs
         // on the blocking pool. The backend lock is held for the full turn so
         // a concurrent turn cannot interleave cache ops with ours.
-        let backend = Arc::clone(&self.backend);
+        let pool = Arc::clone(&self.pool);
         let tokenizer = Arc::clone(&self.tokenizer);
         let template = Arc::clone(&self.template);
         let prefilled = Arc::clone(&self.prefilled);
@@ -320,9 +323,12 @@ impl LlmProcessor {
 
             let mut logits_processor = LogitsProcessor::new(seed, Some(temperature), top_p);
 
-            // ── Lock backend & Reset KV-cache ────────
+            // ── Checkout backend from pool & Reset KV-cache ────────
             let t_lock = Instant::now();
-            let mut backend = backend.lock();
+            let mut slot = pool
+                .checkout_blocking()
+                .map_err(|e| TextProcessorError::new("llm", format!("backend pool: {e}")))?;
+            let backend = slot.get_mut();
             let _lock_wait_ms = t_lock.elapsed().as_secs_f64() * 1000.0;
 
             let t_cache = Instant::now();
@@ -340,7 +346,7 @@ impl LlmProcessor {
 
             // ── Ingest prompt tokens ───────────────────
             let t_ingest = Instant::now();
-            let first_logits = Self::ingest_prompt(&mut backend, &prompt_tokens, &prefilled)?;
+            let first_logits = Self::ingest_prompt(backend, &prompt_tokens, &prefilled)?;
             let prompt_ingest_ms = t_ingest.elapsed().as_secs_f64() * 1000.0;
             let _pos = prompt_tokens.len();
 
@@ -578,17 +584,5 @@ pub(crate) fn build_llm_detail_payload(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::build_llm_detail_payload;
-
-    #[test]
-    fn llm_detail_first_token_ms_is_null_when_absent() {
-        let payload =
-            build_llm_detail_payload(0.2, 145.6, 24, 1.1, 0, None, None, 0.0, "cpu", false, 0.0);
-        assert!(
-            payload["first_token_ms"].is_null(),
-            "missing first_token_ms must serialize as null, got {}",
-            payload["first_token_ms"]
-        );
-    }
-}
+#[path = "tests/generation.rs"]
+mod tests;

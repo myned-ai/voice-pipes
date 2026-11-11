@@ -200,6 +200,7 @@ pub fn merge(base: Option<PipelineConfig>, cli: CliOverrides) -> PipelineConfig 
         adaptive_quality: AdaptiveQualityConfig::default(),
         transport: None,
         text_processor: Vec::new(),
+        audio_filter: Vec::new(),
         audio_post_processor: Vec::new(),
         realtime_provider: None,
         auth: None,

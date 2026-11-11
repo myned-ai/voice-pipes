@@ -2,7 +2,7 @@ import asyncio
 import logging
 
 import httpx
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
 
 from ..captures.reader import _read_capture_artifacts, _read_session_metadata, is_empty_turn
@@ -38,6 +38,7 @@ _ORCHESTRATOR_SESSION_FIELDS = (
     "worker_id",
     "input_sample_rate",
     "output_sample_rate",
+    "tenant_id",
 )
 
 
@@ -54,12 +55,19 @@ def merge_session_metadata(local_meta: dict, orch_data: dict) -> dict:
     return merged
 
 
+def _extract_tenant_id(request: Request | None, query_tenant: str | None) -> str | None:
+    if isinstance(query_tenant, str):
+        return query_tenant
+    if request is not None and hasattr(request, "headers"):
+        return request.headers.get("x-tenant-id")
+    return None
 
 
 # ── Sessions Endpoints (proxy to orchestrator + local captures) ──
 
 @router.get("/api/v1/sessions")
 async def list_sessions(
+    request: Request = None,
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=500),
     status: str | None = Query(None),
@@ -71,9 +79,13 @@ async def list_sessions(
     min_turns: int | None = Query(None, ge=0),
     since: str | None = Query(None, description="RFC3339: only sessions started at/after"),
     until: str | None = Query(None, description="RFC3339: only sessions started at/before"),
+    tenant_id: str | None = Query(None, description="Filter sessions by tenant identifier"),
 ):
     """List sessions from the orchestrator's session store."""
     params: dict = {"page": page, "per_page": per_page}
+    eff_tenant = _extract_tenant_id(request, tenant_id)
+    if eff_tenant:
+        params["tenant_id"] = eff_tenant
     if status:
         params["status"] = status
     if pipeline_name:
@@ -107,12 +119,14 @@ async def list_sessions(
 @router.get("/api/v1/sessions/{session_id}")
 async def get_session_detail(
     session_id: str,
+    request: Request = None,
     events_offset: int = Query(0, ge=0),
     events_limit: int = Query(200, ge=1, le=5000),
     wait_for_playback_report: bool = Query(False, description="Wait for PlaybackReport to resolve barge-ins before returning"),
+    tenant_id: str | None = Query(None, description="Scope session resolution to a tenant identifier"),
 ):
     """Session detail: orchestrator metadata + turns, merged with local capture artifacts."""
-    
+    eff_tenant = _extract_tenant_id(request, tenant_id)
     if wait_for_playback_report:
         # Briefly poll for up to 500ms to allow orchestrator to write turn_resolved.json
         # and pipeline_events.jsonl for any recently resolved barge-ins.
@@ -131,21 +145,37 @@ async def get_session_detail(
         except Exception:  # noqa: BLE001, S110 - orchestrator unreachable: the capture alone is served
             pass
 
+    if eff_tenant and orch_data and orch_data.get("tenant_id") and orch_data.get("tenant_id") != eff_tenant:
+        raise HTTPException(status_code=404, detail="Session not found")
+
     # The capture read and the verdict are blocking file I/O and CPU work;
     # on the event loop they would stall every other request until done.
     result = await asyncio.to_thread(
-        _local_session_detail, session_id, events_offset, events_limit, orch_data
+        _local_session_detail, session_id, events_offset, events_limit, orch_data, eff_tenant
     )
+    if eff_tenant and result.get("captures_missing") and (not orch_data or orch_data.get("tenant_id") != eff_tenant):
+        raise HTTPException(status_code=404, detail="Session not found")
     return {"data": result}
 
 
 def _local_session_detail(
-    session_id: str, events_offset: int, events_limit: int, orch_data: dict | None
+    session_id: str,
+    events_offset: int,
+    events_limit: int,
+    orch_data: dict | None,
+    tenant_id: str | None = None,
 ) -> dict:
     """Read the session's capture artifacts, merge the orchestrator record
     over them and add the provider identity and verdict. Blocking."""
-    artifacts = _read_capture_artifacts(session_id, events_offset, events_limit)
-    local_meta = _read_session_metadata(session_id)
+    if tenant_id is not None:
+        artifacts = _read_capture_artifacts(session_id, events_offset, events_limit, tenant_id=tenant_id)
+        local_meta = _read_session_metadata(session_id, tenant_id=tenant_id)
+    else:
+        artifacts = _read_capture_artifacts(session_id, events_offset, events_limit)
+        local_meta = _read_session_metadata(session_id)
+
+    if tenant_id and local_meta.get("tenant_id") and local_meta.get("tenant_id") != tenant_id:
+        raise HTTPException(status_code=404, detail="Session not found")
 
     if orch_data:
         # Merge orchestrator session data with local artifacts
@@ -233,6 +263,7 @@ def _local_session_detail(
 @router.get("/api/v1/sessions/{session_id}/report-for-llm")
 async def session_report_for_llm(
     session_id: str,
+    request: Request = None,
     format: str = Query("markdown", pattern="^(markdown|json)$"),
     targets: str | None = Query(
         None,
@@ -252,6 +283,7 @@ async def session_report_for_llm(
         pattern="^(v1|v2)$",
         description="Health model: v1 (binary) or v2 (graded). Defaults to VP_HEALTH_MODEL env.",
     ),
+    tenant_id: str | None = Query(None, description="Scope session resolution to a tenant identifier"),
 ):
     """Build a compact diagnostic bundle suitable for pasting into an LLM
     prompt to ask "is this pipeline healthy?".
@@ -260,6 +292,7 @@ async def session_report_for_llm(
     but reshapes them for analysis: per-turn flat rows, per-component
     aggregates, precomputed anomalies, and explicit SLA targets.
     """
+    eff_tenant = _extract_tenant_id(request, tenant_id)
     # Fetch orchestrator session for metadata (best-effort).
     orch_data = None
     async with orch_client() as client:
@@ -272,10 +305,13 @@ async def session_report_for_llm(
         except Exception:  # noqa: BLE001, S110 - orchestrator unreachable: the capture alone is served
             pass
 
+    if eff_tenant and orch_data and orch_data.get("tenant_id") and orch_data.get("tenant_id") != eff_tenant:
+        raise HTTPException(status_code=404, detail="Session not found")
+
     # Reading every capture artifact and building the report is blocking
     # work; it runs off the event loop like the session detail's.
     return await asyncio.to_thread(
-        _report_for_llm_response, session_id, orch_data, format, targets, include_events, health
+        _report_for_llm_response, session_id, orch_data, format, targets, include_events, health, eff_tenant
     )
 
 
@@ -286,10 +322,19 @@ def _report_for_llm_response(
     targets: str | None,
     include_events: bool,
     health: str | None,
+    tenant_id: str | None = None,
 ):
     # Pull the FULL local artifacts (no pagination).
-    artifacts = _read_capture_artifacts(session_id, events_offset=0, events_limit=5000)
-    local_meta: dict = _read_session_metadata(session_id)
+    if tenant_id is not None:
+        artifacts = _read_capture_artifacts(
+            session_id, events_offset=0, events_limit=5000, tenant_id=tenant_id
+        )
+        local_meta: dict = _read_session_metadata(session_id, tenant_id=tenant_id)
+    else:
+        artifacts = _read_capture_artifacts(session_id, events_offset=0, events_limit=5000)
+        local_meta: dict = _read_session_metadata(session_id)
+    if tenant_id and local_meta.get("tenant_id") and local_meta.get("tenant_id") != tenant_id:
+        raise HTTPException(status_code=404, detail="Session not found")
 
     metadata: dict = merge_session_metadata(local_meta, orch_data) if orch_data else dict(local_meta)
 

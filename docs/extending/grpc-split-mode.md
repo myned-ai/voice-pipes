@@ -64,10 +64,17 @@ only their endpoint; the component server decides everything else.
 ## Topologies this enables
 
 - **GPU isolation.** One CUDA process serving STT to several CPU workers.
-- **Horizontal scaling.** Several TTS component servers behind a load
-  balancer; workers point at the balancer.
+- **Horizontal scaling.** Several TTS or STT component servers behind a load
+  balancer, or passed directly as a comma-separated list of replica URLs
+  (`endpoint = "http://tts-1:50051,http://tts-2:50051"`) balanced round-robin
+  over HTTP/2 with automatic keep-alive probes.
+- **Shared text-processor containers with per-session history.** When
+  `[[text_processor]] type = "grpc"` connects to `voice-pipes-component`, the
+  gateway reuses a single multiplexed HTTP/2 channel and tags each session's
+  RPCs with `x-vp-session-id` so the component server maintains isolated
+  per-session conversation memory while sharing loaded model weights.
 - **Mixed deployments.** Local STT, remote GPU LLM, cloud TTS, in one
-  pipeline.
+  pipeline. See [High-density CPU deployment](../guides/high-density-cpu-deployment.md).
 
 ## Related protocols
 

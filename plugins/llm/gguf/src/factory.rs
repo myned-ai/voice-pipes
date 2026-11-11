@@ -12,6 +12,7 @@ const DEFAULT_CHAT_TEMPLATE: &str = "chatml";
 const DEFAULT_PREFILL_CACHE: bool = false;
 const DEFAULT_REPEAT_PENALTY: f32 = 1.1;
 const DEFAULT_SEED: u64 = 42;
+const DEFAULT_POOL_SIZE: usize = 1;
 
 /// The settings the local LLM reads from its option table.
 struct GgufOptions {
@@ -26,6 +27,7 @@ struct GgufOptions {
     repeat_penalty: f32,
     top_p: Option<f64>,
     seed: u64,
+    pool_size: usize,
     history_max_turns: Option<usize>,
     full_prompts: bool,
 }
@@ -58,6 +60,7 @@ impl GgufOptions {
             )),
             top_p: o.optional_f64_in("top_p", 0.0..=1.0),
             seed: o.u64_in("seed", 0..=u64::MAX, DEFAULT_SEED),
+            pool_size: o.usize_in("pool_size", 1..=32, DEFAULT_POOL_SIZE),
             history_max_turns: o
                 .optional_u64_in("history_max_turns", 1..=10_000)
                 .and_then(|n| usize::try_from(n).ok()),
@@ -115,6 +118,7 @@ impl voice_pipes_sdk::TextProcessorFactory for LlmFactory {
             repeat_penalty,
             top_p,
             seed,
+            pool_size,
             history_max_turns,
             full_prompts,
         } = GgufOptions::read(cfg).map_err(voice_pipes_sdk::options::refused)?;
@@ -131,6 +135,7 @@ impl voice_pipes_sdk::TextProcessorFactory for LlmFactory {
             repeat_penalty,
             top_p,
             seed,
+            pool_size,
         };
 
         // Load the weights once per worker, not once per session.
@@ -216,13 +221,14 @@ static LOADED: std::sync::OnceLock<
 /// twice.
 fn cache_key(cfg: &LlmConfig) -> String {
     format!(
-        "{}|{}|{}|{}|{}|{}",
+        "{}|{}|{}|{}|{}|{}|{}",
         cfg.model_path.display(),
         cfg.tokenizer_path
             .as_ref()
             .map_or_else(String::new, |p| p.display().to_string()),
         cfg.chat_template,
         cfg.device,
+        cfg.pool_size.max(1),
         cfg.prefill_cache,
         // The prefill caches the system prompt's KV entries, so a different
         // prompt is a different loaded state even with identical weights.
@@ -261,72 +267,5 @@ fn load_shared(
 }
 
 #[cfg(test)]
-mod cache_tests {
-    use super::*;
-    use std::path::PathBuf;
-
-    fn cfg(model: &str, template: &str, prefill: bool, prompt: &str) -> LlmConfig {
-        LlmConfig {
-            model_path: PathBuf::from(model),
-            tokenizer_path: None,
-            system_prompt: prompt.to_string(),
-            max_tokens: 128,
-            temperature: 0.7,
-            device: "cpu".into(),
-            chat_template: template.into(),
-            prefill_cache: prefill,
-            repeat_penalty: 1.1,
-            top_p: None,
-            seed: 42,
-        }
-    }
-
-    #[test]
-    fn the_same_model_shares_one_key() {
-        assert_eq!(
-            cache_key(&cfg("a.gguf", "chatml", false, "x")),
-            cache_key(&cfg("a.gguf", "chatml", false, "x"))
-        );
-    }
-
-    #[test]
-    fn sampling_parameters_do_not_split_the_cache() {
-        // These live in atomic cells that /debug/params retunes at runtime,
-        // so two sessions differing only in temperature must share one
-        // loaded model rather than load the weights twice.
-        let mut hot = cfg("a.gguf", "chatml", false, "x");
-        hot.temperature = 1.4;
-        hot.max_tokens = 999;
-        hot.top_p = Some(0.9);
-        hot.seed = 7;
-        assert_eq!(
-            cache_key(&cfg("a.gguf", "chatml", false, "x")),
-            cache_key(&hot)
-        );
-    }
-
-    #[test]
-    fn a_different_model_or_template_or_device_is_a_different_key() {
-        let base = cache_key(&cfg("a.gguf", "chatml", false, "x"));
-        assert_ne!(base, cache_key(&cfg("b.gguf", "chatml", false, "x")));
-        assert_ne!(base, cache_key(&cfg("a.gguf", "gemma", false, "x")));
-        let mut gpu = cfg("a.gguf", "chatml", false, "x");
-        gpu.device = "cuda".into();
-        assert_ne!(base, cache_key(&gpu));
-    }
-
-    #[test]
-    fn the_system_prompt_splits_the_cache_only_when_it_is_prefilled() {
-        // Without prefill the prompt is assembled per turn by the memory
-        // wrapper, so it does not change the loaded state. With prefill it
-        // is baked into the KV cache and two prompts are two models.
-        assert_eq!(
-            cache_key(&cfg("a.gguf", "chatml", false, "one")),
-            cache_key(&cfg("a.gguf", "chatml", false, "two"))
-        );
-        assert_ne!(
-            cache_key(&cfg("a.gguf", "chatml", true, "one")),
-            cache_key(&cfg("a.gguf", "chatml", true, "two"))
-        );
-    }
-}
+#[path = "tests/factory.rs"]
+mod cache_tests;

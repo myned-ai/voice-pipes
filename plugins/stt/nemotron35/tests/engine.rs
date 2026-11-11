@@ -81,9 +81,9 @@ fn mismatches(
         let mut engine =
             Engine::new(&mut sessions, &cfg, want.prompt_id, tokens.locale_tag_ids()).unwrap();
         for piece in pcm.chunks(1600) {
-            engine.accept(piece).unwrap();
+            engine.accept(&mut sessions, piece).unwrap();
         }
-        engine.finish().unwrap();
+        engine.finish(&mut sessions).unwrap();
         let got = engine.tokens().to_vec();
         let (text, _) = tokens.decode(&got);
         eprintln!("{key:28} {text:?}");

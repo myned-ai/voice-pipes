@@ -9,6 +9,7 @@ use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
+use voice_pipes_sdk::TenantId;
 
 use crate::audit::store::{AuditStore, SessionStore};
 use crate::config::PipelineConfig;
@@ -145,6 +146,9 @@ pub struct WorkerCapacity {
 pub struct SessionRecord {
     /// UUID v4, generated at WebSocket/gRPC connect time.
     pub id: String,
+    /// Tenant owning this session, if running multi-tenant.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tenant_id: Option<TenantId>,
     /// Worker that owns this session.
     pub worker_id: String,
     pub started_at: DateTime<Utc>,
@@ -582,6 +586,7 @@ pub struct SessionWithTurns {
 pub struct SessionsQuery {
     pub page: Option<usize>,
     pub per_page: Option<usize>,
+    pub tenant_id: Option<String>,
     pub status: Option<String>,
     pub since: Option<String>,
     pub until: Option<String>,

@@ -1,5 +1,6 @@
 //! Configuration structs, defaults, and error types.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -35,6 +36,8 @@ pub struct PipelineConfig {
     pub transport: Option<TransportConfig>,
     #[serde(default)]
     pub text_processor: Vec<TextProcessorConfig>,
+    #[serde(default)]
+    pub audio_filter: Vec<FilterStageSettings>,
     #[serde(default)]
     pub audio_post_processor: Vec<AudioPostProcessorConfig>,
     /// Optional Speech-to-Speech (Realtime) provider. When set, the
@@ -155,6 +158,19 @@ impl Default for SpeculativeConfig {
 
 fn default_min_speculative_partial_interval_ms() -> u64 {
     150
+}
+
+/// Configuration for an ingress audio filter stage.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct FilterStageSettings {
+    /// Provider name: e.g. "deepfilter".
+    pub provider: String,
+    /// Path to model file or directory.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<PathBuf>,
+    /// Filter-specific options from the table.
+    #[serde(default, flatten)]
+    pub options: HashMap<String, serde_json::Value>,
 }
 
 /// Configuration for a single audio post-processor in the chain.
@@ -344,6 +360,10 @@ impl Default for PipelineSettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "AuditConfig flags are independent boolean audit switches"
+)]
 pub struct AuditConfig {
     #[serde(default)]
     pub enabled: bool,
@@ -384,6 +404,11 @@ pub struct AuditConfig {
     /// duplicating the whole conversation on disk on every turn.
     #[serde(default)]
     pub full_prompts: bool,
+    /// Zero Data Retention (ZDR) mode: drop all raw microphone and synthesized
+    /// audio fragments immediately after inference, keeping only telemetry,
+    /// transcripts, and waterfall timing metrics.
+    #[serde(default)]
+    pub zero_data_retention: bool,
 }
 
 fn default_retention_days() -> u32 {
@@ -409,6 +434,7 @@ impl Default for AuditConfig {
             record_session_audio: false,
             session_audio_max_seconds: default_session_audio_max_seconds(),
             full_prompts: false,
+            zero_data_retention: false,
         }
     }
 }

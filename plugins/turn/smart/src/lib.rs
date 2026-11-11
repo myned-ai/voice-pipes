@@ -31,10 +31,10 @@
     )
 )]
 
-use std::collections::VecDeque;
-use std::path::Path;
-use std::sync::Arc;
+use std::collections::{HashMap, VecDeque};
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -42,6 +42,7 @@ use ort::session::Session;
 use ort::value::Tensor;
 use parking_lot::Mutex;
 
+use voice_pipes_onnx::SessionPool;
 use voice_pipes_sdk::turn::{TurnConfig, TurnDetector, TurnDetectorFactory, TurnSignal};
 use voice_pipes_sdk::{ConfigError, TranscriptionResult};
 
@@ -64,11 +65,17 @@ const TARGET_SAMPLE_RATE: u32 = 16_000;
 const DEFAULT_THRESHOLD: f32 = 0.5;
 const DEFAULT_WINDOW_SECS: u32 = 8;
 const DEFAULT_MIN_AUDIO_MS: u64 = 500;
+const DEFAULT_POOL_SIZE: usize = 2;
+const DEFAULT_THREADS: usize = 2;
 /// Accepted `smart_window_secs`. The model reads the last 8 s, so a longer
 /// window would hold audio it never sees.
 const WINDOW_SECS: std::ops::RangeInclusive<u64> = 1..=8;
 /// Accepted `smart_min_audio_ms`.
 const MIN_AUDIO_MS: std::ops::RangeInclusive<u64> = 0..=10_000;
+/// Accepted `smart_pool_size`.
+const POOL_SIZE_RANGE: std::ops::RangeInclusive<usize> = 1..=128;
+/// Accepted `smart_threads` (`0` lets ONNX Runtime choose).
+const THREADS_RANGE: std::ops::RangeInclusive<usize> = 0..=256;
 
 /// Shortest pause worth asking the model about.
 ///
@@ -167,6 +174,95 @@ impl CompletionModel for OnnxModel {
     }
 }
 
+/// Shared pool wrapper around [`OnnxModel`] so per-session [`SmartTurnDetector`]
+/// instances check out a pooled ONNX session only during `evaluate`.
+struct PooledOnnxModel(Arc<SessionPool<OnnxModel>>);
+
+impl CompletionModel for PooledOnnxModel {
+    fn probability(&mut self, features: Vec<f32>) -> anyhow::Result<f32> {
+        let mut slot = self
+            .0
+            .checkout_blocking()
+            .map_err(|e| anyhow::anyhow!("smart-turn session pool: {e}"))?;
+        slot.get_mut().probability(features)
+    }
+}
+
+type SmartPoolKey = (PathBuf, usize, usize);
+type SmartPoolCache = Mutex<HashMap<SmartPoolKey, Arc<SessionPool<OnnxModel>>>>;
+
+fn shared_smart_pools() -> &'static SmartPoolCache {
+    static POOLS: OnceLock<SmartPoolCache> = OnceLock::new();
+    POOLS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn load_single_onnx_model(
+    model_path: &Path,
+    threads: usize,
+    run_probe: bool,
+) -> anyhow::Result<OnnxModel> {
+    // CPU only, whatever VP_ORT_EP says: one small inference per pause,
+    // where a GPU round trip costs more than the inference.
+    let session =
+        voice_pipes_onnx::open_session(model_path, &voice_pipes_onnx::SessionOptions::new(threads))
+            .map_err(|e| anyhow::anyhow!("smart-turn: {e}"))?;
+
+    // Smart Turn v3's input is the Whisper feature-extractor tensor
+    // `input_features`; fall back to that name when introspection fails.
+    let input_name = session
+        .inputs()
+        .first()
+        .map_or_else(|| "input_features".to_string(), |i| i.name().to_string());
+    let mut model = OnnxModel {
+        session,
+        input_name,
+    };
+
+    if run_probe {
+        // Fail-loud guard: probe the model with the exact [1, 80, 800] log-mel
+        // tensor we feed at runtime. An incompatible model (Smart Turn v2, or any
+        // non-Whisper export) errors HERE at startup instead of silently failing
+        // every inference and degrading to the silence-timeout fallback for a
+        // whole session (the regression this replaces).
+        model
+            .probability(mel::log_mel_features(&vec![0.0f32; mel::SAMPLE_RATE]))
+            .map_err(|e| {
+                anyhow::anyhow!(
+                    "smart-turn model at {} rejected the Whisper log-mel input \
+                     [1, {}, {}] — incompatible model (expected Smart Turn v3, \
+                     e.g. smart-turn-v3.2-cpu.onnx). Inference error: {e}",
+                    model_path.display(),
+                    mel::N_MELS,
+                    mel::N_FRAMES,
+                )
+            })?;
+    }
+    Ok(model)
+}
+
+fn get_or_build_smart_pool(
+    model_path: &Path,
+    pool_size: usize,
+    threads: usize,
+) -> anyhow::Result<Arc<SessionPool<OnnxModel>>> {
+    let key = (model_path.to_path_buf(), pool_size, threads);
+    if let Some(found) = shared_smart_pools().lock().get(&key) {
+        return Ok(Arc::clone(found));
+    }
+
+    let mut models = Vec::with_capacity(pool_size);
+    for idx in 0..pool_size {
+        models.push(load_single_onnx_model(model_path, threads, idx == 0)?);
+    }
+    let pool = Arc::new(
+        SessionPool::new(models, "Smart Turn sessions")
+            .map_err(|e| anyhow::anyhow!("smart-turn pool: {e}"))?,
+    );
+    let mut cache = shared_smart_pools().lock();
+    let entry = cache.entry(key).or_insert_with(|| Arc::clone(&pool));
+    Ok(Arc::clone(entry))
+}
+
 /// Smart Turn v3 detector.
 ///
 /// Maintains a rolling buffer of the most recent `window_samples` of
@@ -201,51 +297,20 @@ impl std::fmt::Debug for SmartTurnDetector {
 }
 
 impl SmartTurnDetector {
-    /// Load a Smart Turn v3 ONNX export.
-    pub fn new(
+    /// Build a detector backed by the shared [`SessionPool`] for
+    /// `(model_path, pool_size, threads)`.
+    pub(crate) fn with_pool_config(
         model_path: &Path,
+        pool_size: usize,
+        threads: usize,
         threshold: f32,
         window_secs: u32,
         min_audio_ms: u64,
         fallback_timeout_ms: u64,
     ) -> anyhow::Result<Self> {
-        // CPU only, whatever VP_ORT_EP says: one small inference per pause,
-        // where a GPU round trip costs more than the inference.
-        let session =
-            voice_pipes_onnx::open_session(model_path, &voice_pipes_onnx::SessionOptions::new(2))
-                .map_err(|e| anyhow::anyhow!("smart-turn: {e}"))?;
-
-        // Smart Turn v3's input is the Whisper feature-extractor tensor
-        // `input_features`; fall back to that name when introspection fails.
-        let input_name = session
-            .inputs()
-            .first()
-            .map_or_else(|| "input_features".to_string(), |i| i.name().to_string());
-        let mut model = OnnxModel {
-            session,
-            input_name,
-        };
-
-        // Fail-loud guard: probe the model with the exact [1, 80, 800] log-mel
-        // tensor we feed at runtime. An incompatible model (Smart Turn v2, or any
-        // non-Whisper export) errors HERE at startup instead of silently failing
-        // every inference and degrading to the silence-timeout fallback for a
-        // whole session (the regression this replaces).
-        model
-            .probability(mel::log_mel_features(&vec![0.0f32; mel::SAMPLE_RATE]))
-            .map_err(|e| {
-                anyhow::anyhow!(
-                    "smart-turn model at {} rejected the Whisper log-mel input \
-                     [1, {}, {}] — incompatible model (expected Smart Turn v3, \
-                     e.g. smart-turn-v3.2-cpu.onnx). Inference error: {e}",
-                    model_path.display(),
-                    mel::N_MELS,
-                    mel::N_FRAMES,
-                )
-            })?;
-
+        let pool = get_or_build_smart_pool(model_path, pool_size, threads)?;
         Ok(Self::with_model(
-            Box::new(model),
+            Box::new(PooledOnnxModel(pool)),
             threshold,
             window_secs,
             min_audio_ms,
@@ -430,6 +495,8 @@ const SMART_KEYS: &[&str] = &[
     "smart_threshold",
     "smart_window_secs",
     "smart_min_audio_ms",
+    "smart_pool_size",
+    "smart_threads",
 ];
 
 /// Smart Turn's settings, parsed from the section's options.
@@ -439,6 +506,8 @@ struct SmartSettings {
     threshold: f32,
     window_secs: u32,
     min_audio_ms: u64,
+    pool_size: usize,
+    threads: usize,
 }
 
 impl SmartSettings {
@@ -481,6 +550,9 @@ impl SmartSettings {
         );
         let window_secs = u32::try_from(window_secs).unwrap_or(DEFAULT_WINDOW_SECS);
         let min_audio_ms = o.u64_in("smart_min_audio_ms", MIN_AUDIO_MS, DEFAULT_MIN_AUDIO_MS);
+        let pool_size = o.usize_in("smart_pool_size", POOL_SIZE_RANGE, DEFAULT_POOL_SIZE);
+        let default_threads = voice_pipes_onnx::intra_threads_from_env(DEFAULT_THREADS);
+        let threads = o.usize_in("smart_threads", THREADS_RANGE, default_threads);
         errors.extend(o.into_value_errors());
         if errors.is_empty() {
             Ok(Self {
@@ -488,6 +560,8 @@ impl SmartSettings {
                 threshold,
                 window_secs,
                 min_audio_ms,
+                pool_size,
+                threads,
             })
         } else {
             Err(errors)
@@ -517,8 +591,10 @@ impl TurnDetectorFactory for SmartTurnFactory {
                 .collect();
             anyhow::anyhow!("{}", messages.join("; "))
         })?;
-        let detector = SmartTurnDetector::new(
+        let detector = SmartTurnDetector::with_pool_config(
             Path::new(&s.model_path),
+            s.pool_size,
+            s.threads,
             s.threshold,
             s.window_secs,
             s.min_audio_ms,
@@ -526,6 +602,8 @@ impl TurnDetectorFactory for SmartTurnFactory {
         )?;
         tracing::info!(
             model = s.model_path,
+            pool_size = s.pool_size,
+            threads = s.threads,
             threshold = s.threshold,
             window_secs = s.window_secs,
             min_audio_ms = s.min_audio_ms,
@@ -566,6 +644,22 @@ impl TurnDetectorFactory for SmartTurnFactory {
                 "Minimum audio duration buffered before running ONNX evaluation (default 500 ms).",
                 bound(*MIN_AUDIO_MS.start()),
                 bound(*MIN_AUDIO_MS.end()),
+            )
+            .restart_required(),
+            ParamDescriptor::mutable_int(
+                "smart_pool_size",
+                "Smart pool size",
+                "Shared ONNX session pool size across concurrent WebSocket sessions (default 2).",
+                bound(*POOL_SIZE_RANGE.start() as u64),
+                bound(*POOL_SIZE_RANGE.end() as u64),
+            )
+            .restart_required(),
+            ParamDescriptor::mutable_int(
+                "smart_threads",
+                "Smart threads",
+                "Intra-op threads per Smart Turn ONNX session (default 2, or VP_ORT_THREADS).",
+                bound(*THREADS_RANGE.start() as u64),
+                bound(*THREADS_RANGE.end() as u64),
             )
             .restart_required(),
         ]

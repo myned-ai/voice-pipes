@@ -17,12 +17,13 @@ Voice Pipes is an ultra-low-latency, modular conversational voice pipeline runti
   - `voice-pipes-bench`: Automated latency, RTF, and WER benchmarking suite.
   - `voice-pipes-cli`: Command-line interface and configuration wizard.
   - `voice-pipes-gym`: Reinforcement-learning environment and regression harness for voice agents.
-- **Plugin Crates (20 crates in `plugins/{stt,tts,llm,s2s,turn,vad}/`)**:
+- **Plugin Crates (21 crates in `plugins/{stt,tts,llm,s2s,turn,vad,filter}/`)**:
   - STT: `voice-pipes-stt-parakeet`, `voice-pipes-stt-nemotron`, `voice-pipes-stt-nemotron35`, `voice-pipes-stt-moonshine`, `voice-pipes-stt-assemblyai`, `voice-pipes-stt-google`.
   - TTS: `voice-pipes-tts-kokoro`, `voice-pipes-tts-piper`, `voice-pipes-tts-pocket`, `voice-pipes-tts-openai`, `voice-pipes-tts-gemini`, `voice-pipes-tts-elevenlabs`.
   - LLM: `voice-pipes-llm-openai-compat`, `voice-pipes-llm-gguf`.
   - S2S: `voice-pipes-s2s-openai`, `voice-pipes-s2s-gemini`, `voice-pipes-s2s-elevenlabs`.
   - VAD / Turn: `voice-pipes-vad-silero`, `voice-pipes-turn-smart`, `voice-pipes-turn-vap`.
+  - Filter: `voice-pipes-filter-deepfilter`.
 - **Admin Console (`voice-pipes-admin`)**:
   - `backend/`: FastAPI application (Python 3.12+), Server-Sent Events fleet stream, and WebSocket playground proxy.
   - `frontend/`: React 18 + Vite + TypeScript dashboard, live audio player, karaoke transcript reveal, and session inspector.
@@ -57,7 +58,7 @@ Voice Pipes is an ultra-low-latency, modular conversational voice pipeline runti
 
 ### Build & Lint
 ```sh
-# Workspace compile check across all 27 crates
+# Workspace compile check across all 28 crates
 cargo check --workspace
 
 # Workspace clippy (must pass with 0 warnings)
@@ -118,7 +119,7 @@ When implementing a new AI model provider (e.g. STT, TTS, or LLM):
    ```
 
 2. **Implement the Stage Trait**:
-   Implement `SttProvider`, `TtsProvider`, `TextProcessor`, or `VadEngine`.
+   Implement `SttProvider`, `TtsProvider`, `TextProcessor`, `VadBackend`, `TurnDetector`, `RealtimeProtocol`, or `AudioFilter`.
    Always implement `as_component(&self) -> Option<Arc<dyn Component>>`:
    ```rust
    fn as_component(&self) -> Option<Arc<dyn Component>> {
@@ -151,4 +152,8 @@ When implementing a new AI model provider (e.g. STT, TTS, or LLM):
 - **WebSocket Close Code 4502**: Target worker process is unreachable; verify worker transport bind address and network connectivity.
 - **SSE Stream Freezing (GZip Buffering)**: a gzipped `text/event-stream` freezes in the browser (zlib buffers the small frames). The admin backend uses Starlette's own `GZipMiddleware`, which excludes `text/event-stream` by default; do not add a custom gzip middleware or an SSE exemption of your own. Serve every SSE route with `media_type="text/event-stream"`. `app/test_sse_not_compressed.py` pins both halves (large JSON gzipped, SSE not).
 - **STT Recovery Cascades**: Always respect `RecognitionRequest.slot_wait` when checking out sessions from `SessionPool` (`pool.checkout_within(wait)`).
+- **High-Concurrency CPU Scaling (100+ Sessions)**:
+  - Never hold a `SessionPool` `PooledSlot` across `audio_rx.recv().await` in streaming STT plugins; hold per-session audio/decoder state on the task and check out a `PooledSlot` only inside each `spawn_blocking` inference step.
+  - Per-session factories (`VadFactory`, `TurnDetectorFactory`, `TextProcessorFactory`) that load heavy model files must share a process-wide `SessionPool` or weight cache so WebSocket handshakes do not reload models from disk.
+  - Set `VP_ORT_THREADS=1..2` and `VP_PHONEMIZE_JOBS=16` on high-density CPU hosts to prevent OpenMP thread-spinning and `espeak-ng` fork-storm contention.
 - **Model Cold-Start Latency Spike**: Local ONNX models (2+ GB) may be paged out by the OS during idle periods. Configure `keep_warm_interval_s = 60..300` in deployment configurations.

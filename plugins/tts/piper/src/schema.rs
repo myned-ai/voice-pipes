@@ -3,7 +3,7 @@
 use voice_pipes_sdk::TtsConfig;
 use voice_pipes_sdk::schema::{ParamDescriptor, ProviderSchema};
 
-const KNOWN_KEYS: &[&str] = &["pool_size"];
+const KNOWN_KEYS: &[&str] = &["pool_size", "threads"];
 
 pub fn schema(cfg: &TtsConfig) -> ProviderSchema {
     let mut s = ProviderSchema::default();
@@ -32,6 +32,16 @@ pub fn schema(cfg: &TtsConfig) -> ProviderSchema {
                 "pool_size",
                 "Pool size",
                 "Number of concurrent synthesis engine instances.",
+            ),
+            v.clone(),
+        );
+    }
+    if let Some(v) = cfg.options.get("threads") {
+        s.push(
+            ParamDescriptor::static_int_display(
+                "threads",
+                "Threads",
+                "Intra-op threads per ONNX session; 0 lets ONNX Runtime choose.",
             ),
             v.clone(),
         );

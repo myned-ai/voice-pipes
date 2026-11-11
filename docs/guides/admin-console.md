@@ -331,7 +331,9 @@ microphone-processing switches:
 
 ### Sessions
 
-Every recorded session with time filters and pagination. The detail view
+Every recorded session with time filters and pagination. In multi-tenant environments, sessions and audit files are isolated by tenant (`captures/<tenant_id>/<session_id>/`). Supplying an `X-Tenant-Id` header or `?tenant_id=` query parameter scopes session listings and capture file playback strictly to that tenant's recordings, ensuring strict tenant isolation and preventing unauthorized access. Zero Data Retention (ZDR) sessions display full turn transcripts and latency metrics while omitting discarded audio waveforms.
+
+The detail view
 plays the conversation from the capture files (user and agent fragments,
 "as-heard" reconstruction with the client's underrun gaps spliced in), shows
 the per-turn component metrics table rendered from descriptors, the LLM

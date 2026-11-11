@@ -16,6 +16,16 @@ fn only_cuda_by_name_selects_cuda() {
     }
 }
 
+#[test]
+fn parse_intra_threads_honours_valid_values_and_falls_back_otherwise() {
+    assert_eq!(parse_intra_threads(Some("2"), 4), 2);
+    assert_eq!(parse_intra_threads(Some(" 0 "), 4), 0);
+    assert_eq!(parse_intra_threads(None, 4), 4);
+    assert_eq!(parse_intra_threads(Some(""), 4), 4);
+    assert_eq!(parse_intra_threads(Some("invalid"), 4), 4);
+    assert_eq!(parse_intra_threads(Some("-1"), 4), 4);
+}
+
 /// A build without CUDA reports a CUDA request as running on the CPU, with
 /// the reason; the CPU is always the CPU.
 #[test]

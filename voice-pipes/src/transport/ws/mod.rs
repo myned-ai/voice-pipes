@@ -409,6 +409,7 @@ impl WsSession {
             health,
             metadata: SessionMetadata {
                 session_id,
+                tenant_id: None,
                 transport_type: TransportType::WebSocket,
                 remote_addr,
                 connected_at: Instant::now(),
@@ -424,6 +425,13 @@ impl WsSession {
             negotiated_input_rate,
             read_task,
         }
+    }
+
+    /// Set an optional tenant identifier for this WebSocket session.
+    #[must_use]
+    pub fn with_tenant(mut self, tenant_id: Option<voice_pipes_sdk::TenantId>) -> Self {
+        self.metadata.tenant_id = tenant_id;
+        self
     }
 }
 
