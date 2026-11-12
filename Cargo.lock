@@ -4506,7 +4506,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "voice-pipes"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -4554,7 +4554,7 @@ dependencies = [
 
 [[package]]
 name = "voice-pipes-bench"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -4582,7 +4582,7 @@ dependencies = [
 
 [[package]]
 name = "voice-pipes-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -4624,7 +4624,7 @@ dependencies = [
 
 [[package]]
 name = "voice-pipes-filter-deepfilter"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "hound",
  "rustfft",
@@ -4635,7 +4635,7 @@ dependencies = [
 
 [[package]]
 name = "voice-pipes-gym"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4648,7 +4648,7 @@ dependencies = [
 
 [[package]]
 name = "voice-pipes-llm-gguf"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -4671,7 +4671,7 @@ dependencies = [
 
 [[package]]
 name = "voice-pipes-llm-openai-compat"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -4693,7 +4693,7 @@ dependencies = [
 
 [[package]]
 name = "voice-pipes-net"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "futures-util",
  "reqwest",
@@ -4707,7 +4707,7 @@ dependencies = [
 
 [[package]]
 name = "voice-pipes-onnx"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "ort",
  "parking_lot",
@@ -4718,7 +4718,7 @@ dependencies = [
 
 [[package]]
 name = "voice-pipes-s2s-elevenlabs"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -4734,7 +4734,7 @@ dependencies = [
 
 [[package]]
 name = "voice-pipes-s2s-gemini"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -4746,7 +4746,7 @@ dependencies = [
 
 [[package]]
 name = "voice-pipes-s2s-openai"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -4774,7 +4774,7 @@ dependencies = [
 
 [[package]]
 name = "voice-pipes-stt-assemblyai"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4791,7 +4791,7 @@ dependencies = [
 
 [[package]]
 name = "voice-pipes-stt-google"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4815,7 +4815,7 @@ dependencies = [
 
 [[package]]
 name = "voice-pipes-stt-moonshine"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "hound",
@@ -4831,7 +4831,7 @@ dependencies = [
 
 [[package]]
 name = "voice-pipes-stt-nemotron"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4850,7 +4850,7 @@ dependencies = [
 
 [[package]]
 name = "voice-pipes-stt-nemotron35"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4869,7 +4869,7 @@ dependencies = [
 
 [[package]]
 name = "voice-pipes-stt-parakeet"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "hound",
@@ -4884,7 +4884,7 @@ dependencies = [
 
 [[package]]
 name = "voice-pipes-tts-elevenlabs"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -4902,7 +4902,7 @@ dependencies = [
 
 [[package]]
 name = "voice-pipes-tts-gemini"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -4919,7 +4919,7 @@ dependencies = [
 
 [[package]]
 name = "voice-pipes-tts-kokoro"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4937,7 +4937,7 @@ dependencies = [
 
 [[package]]
 name = "voice-pipes-tts-openai"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -4956,7 +4956,7 @@ dependencies = [
 
 [[package]]
 name = "voice-pipes-tts-piper"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "ort",
@@ -4971,7 +4971,7 @@ dependencies = [
 
 [[package]]
 name = "voice-pipes-tts-pocket"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -4988,7 +4988,7 @@ dependencies = [
 
 [[package]]
 name = "voice-pipes-turn-smart"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5004,7 +5004,7 @@ dependencies = [
 
 [[package]]
 name = "voice-pipes-turn-vap"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5019,7 +5019,7 @@ dependencies = [
 
 [[package]]
 name = "voice-pipes-vad-silero"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "hound",
  "ort",

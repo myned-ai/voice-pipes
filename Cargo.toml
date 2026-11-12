@@ -35,33 +35,33 @@ resolver = "2"
 # line here, and members cannot drift apart. Members add their own features
 # and `optional`; default features are decided here.
 [workspace.dependencies]
-voice-pipes = { path = "voice-pipes", version = "0.1.0" }
-voice-pipes-bench = { path = "voice-pipes-bench", version = "0.1.0" }
-voice-pipes-gym = { path = "voice-pipes-gym", version = "0.1.0" }
-voice-pipes-net = { path = "voice-pipes-net", version = "0.1.0" }
-voice-pipes-onnx = { path = "voice-pipes-onnx", version = "0.1.0" }
+voice-pipes = { path = "voice-pipes", version = "0.2.0" }
+voice-pipes-bench = { path = "voice-pipes-bench", version = "0.2.0" }
+voice-pipes-gym = { path = "voice-pipes-gym", version = "0.2.0" }
+voice-pipes-net = { path = "voice-pipes-net", version = "0.2.0" }
+voice-pipes-onnx = { path = "voice-pipes-onnx", version = "0.2.0" }
 voice-pipes-sdk = { path = "voice-pipes-sdk", version = "1.0.0" }
-voice-pipes-stt-google = { path = "plugins/stt/google", version = "0.1.0" }
-voice-pipes-stt-nemotron35 = { path = "plugins/stt/nemotron35", version = "0.1.0" }
-voice-pipes-tts-kokoro = { path = "plugins/tts/kokoro", version = "0.1.0" }
-voice-pipes-tts-pocket = { path = "plugins/tts/pocket", version = "0.1.0" }
-voice-pipes-tts-openai = { path = "plugins/tts/openai", version = "0.1.0" }
-voice-pipes-stt-assemblyai = { path = "plugins/stt/assemblyai", version = "0.1.0" }
-voice-pipes-tts-elevenlabs = { path = "plugins/tts/elevenlabs", version = "0.1.0" }
-voice-pipes-tts-gemini = { path = "plugins/tts/gemini", version = "0.1.0" }
-voice-pipes-llm-openai-compat = { path = "plugins/llm/openai-compat", version = "0.1.0" }
-voice-pipes-s2s-openai = { path = "plugins/s2s/openai", version = "0.1.0" }
-voice-pipes-s2s-gemini = { path = "plugins/s2s/gemini", version = "0.1.0" }
-voice-pipes-s2s-elevenlabs = { path = "plugins/s2s/elevenlabs", version = "0.1.0" }
-voice-pipes-turn-smart = { path = "plugins/turn/smart", version = "0.1.0" }
-voice-pipes-turn-vap = { path = "plugins/turn/vap", version = "0.1.0" }
-voice-pipes-stt-nemotron = { path = "plugins/stt/nemotron", version = "0.1.0" }
-voice-pipes-llm-gguf = { path = "plugins/llm/gguf", version = "0.1.0" }
-voice-pipes-stt-parakeet = { path = "plugins/stt/parakeet", version = "0.1.0" }
-voice-pipes-tts-piper = { path = "plugins/tts/piper", version = "0.1.0" }
-voice-pipes-vad-silero = { path = "plugins/vad/silero", version = "0.1.0" }
-voice-pipes-stt-moonshine = { path = "plugins/stt/moonshine", version = "0.1.0" }
-voice-pipes-filter-deepfilter = { path = "plugins/filter/deepfilter", version = "0.1.0" }
+voice-pipes-stt-google = { path = "plugins/stt/google", version = "0.2.0" }
+voice-pipes-stt-nemotron35 = { path = "plugins/stt/nemotron35", version = "0.2.0" }
+voice-pipes-tts-kokoro = { path = "plugins/tts/kokoro", version = "0.2.0" }
+voice-pipes-tts-pocket = { path = "plugins/tts/pocket", version = "0.2.0" }
+voice-pipes-tts-openai = { path = "plugins/tts/openai", version = "0.2.0" }
+voice-pipes-stt-assemblyai = { path = "plugins/stt/assemblyai", version = "0.2.0" }
+voice-pipes-tts-elevenlabs = { path = "plugins/tts/elevenlabs", version = "0.2.0" }
+voice-pipes-tts-gemini = { path = "plugins/tts/gemini", version = "0.2.0" }
+voice-pipes-llm-openai-compat = { path = "plugins/llm/openai-compat", version = "0.2.0" }
+voice-pipes-s2s-openai = { path = "plugins/s2s/openai", version = "0.2.0" }
+voice-pipes-s2s-gemini = { path = "plugins/s2s/gemini", version = "0.2.0" }
+voice-pipes-s2s-elevenlabs = { path = "plugins/s2s/elevenlabs", version = "0.2.0" }
+voice-pipes-turn-smart = { path = "plugins/turn/smart", version = "0.2.0" }
+voice-pipes-turn-vap = { path = "plugins/turn/vap", version = "0.2.0" }
+voice-pipes-stt-nemotron = { path = "plugins/stt/nemotron", version = "0.2.0" }
+voice-pipes-llm-gguf = { path = "plugins/llm/gguf", version = "0.2.0" }
+voice-pipes-stt-parakeet = { path = "plugins/stt/parakeet", version = "0.2.0" }
+voice-pipes-tts-piper = { path = "plugins/tts/piper", version = "0.2.0" }
+voice-pipes-vad-silero = { path = "plugins/vad/silero", version = "0.2.0" }
+voice-pipes-stt-moonshine = { path = "plugins/stt/moonshine", version = "0.2.0" }
+voice-pipes-filter-deepfilter = { path = "plugins/filter/deepfilter", version = "0.2.0" }
 
 anyhow = "1"
 arc-swap = "1"
@@ -209,7 +209,7 @@ too_many_arguments = "allow"
 # One version for every crate but the SDK, which keeps its own: the SDK's
 # version is the promise plugin authors build on (its stability policy is
 # docs/extending/sdk-stability.md); the rest move together.
-version = "0.1.0"
+version = "0.2.0"
 license = "BUSL-1.1"
 repository = "https://github.com/myned-ai/voice-pipes"
 # MSRV — Duration::from_mins/from_hours need 1.91 (duration_constructors_lite).

@@ -8,6 +8,46 @@ migration note.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-12
+
+### Added
+
+- Multi-tenancy: generic tenant isolation in the engine and SDK
+  (`voice_pipes_sdk::tenant`), tenant-partitioned audit captures and
+  retention, and a tenant-scoped admin console (see
+  `docs/guides/multi-tenancy.md`).
+- Resource telemetry: per-turn and per-session CPU time and RSS memory
+  tracking, carried into session reports and the diagnostic report generator.
+- Admin console: worker memory and CPU metrics on the dashboard, each card
+  toggleable, with the choice remembered in the browser; a raw pipeline
+  config drawer on the Live Pipeline page.
+- High-density CPU scaling: per-session factories share process-wide ONNX
+  session pools, streaming STT checks out a pooled slot only per inference
+  step, and `VP_ORT_THREADS` / `VP_PHONEMIZE_JOBS` tune thread use (see
+  `docs/guides/high-density-cpu-deployment.md`).
+- Fleet: flash-attention, `mlock` and an automatic warm-up ping for the
+  llama-server sidecar.
+
+### Changed
+
+- Docker deployment `pipeline-custom.toml`: `silence_timeout_ms` lowered from
+  2000 to 500 for faster turn-taking.
+- Vendored VibeVoice moved to `vendor/vibevoice`.
+- crates.io publishing is no longer triggered automatically by a tag; run the
+  `publish` workflow by hand.
+
+### Fixed
+
+- Audit store: a legacy SQLite schema is migrated before the tenant index is
+  created, so existing capture databases open after upgrading.
+- `Dockerfile.cuda`: replaced deprecated `cp -n` with `cp --update=none`.
+- Release packaging: the macOS arm64 build runs on `macos-latest`, the
+  Windows binary links the dynamic MSVC runtime that ONNX Runtime needs
+  (`msvc-crt-static = false`), and `voice-pipes-net` declares the
+  `tokio-tungstenite` feature `cargo-auditable` asks for.
+- CI: the SDK API check compares against the pushed branch, not always
+  `main`.
+
 ## [0.1.0] - 2026-11-11
 
 The initial release of Voice Pipes: an ultra-low-latency, modular conversational
@@ -1796,5 +1836,6 @@ voice pipeline runtime written in safe Rust.
   Playground's system-prompt field should keep working (the wizard does this
   for the dev profile).
 
-[Unreleased]: https://github.com/myned-ai/voice-pipes/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/myned-ai/voice-pipes/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/myned-ai/voice-pipes/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/myned-ai/voice-pipes/releases/tag/v0.1.0
