@@ -602,14 +602,18 @@ services:
         --host 0.0.0.0
         -ngl $${LLAMA_GPU_LAYERS:-99}
         -c $${LLAMA_CTX:-4096}
+        --flash-attn
+        --mlock
         --jinja
     # The upstream image bakes in a healthcheck against port 8080; the command
-    # above moves the server to 8081, so without this override the container
-    # reports "unhealthy" forever. start_period covers the model load.
+    # above moves the server to 8081. Once healthy, run a 1-token warmup query
+    # so CUDA graph generation and KV caches are ready before the first caller.
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:8081/health"]
+      test:
+        - "CMD-SHELL"
+        - "curl -sf http://localhost:8081/health && ([ -f /tmp/.warmed ] || (curl -sf -X POST http://localhost:8081/v1/chat/completions -H 'Content-Type: application/json' -d '{\"model\":\"default\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],\"max_tokens\":1}' > /dev/null && touch /tmp/.warmed)) || exit 1"
       interval: 30s
-      timeout: 5s
+      timeout: 10s
       retries: 3
       start_period: 180s
     restart: unless-stopped
@@ -657,7 +661,7 @@ services:
   # reaches it at http://vibevoice:8091 on the shared compose network (like
   # pocket-tts), so the pipeline config's TTS endpoint is `http://vibevoice:8091/v1`.
   #
-  # Weights (models/vibevoice) and voice .pt prompts (VibeVoice/demo/voices) are
+  # Weights (models/vibevoice) and voice .pt prompts (vendor/vibevoice/demo/voices) are
   # volume-mounted from the repo and downloaded on first boot by the entrypoint,
   # so they persist on the host across restarts and the image stays lean. Reserves
   # an nvidia device like llama-server; server.py auto-detects cuda.
@@ -671,7 +675,7 @@ services:
       - "127.0.0.1:8091:8091"
     volumes:
       - ../../models:/app/models
-      - ../../VibeVoice/demo/voices:/app/VibeVoice/demo/voices
+      - ../../../vendor/vibevoice/demo/voices:/app/vendor/vibevoice/demo/voices
     environment:
       # Public repos, so no token is strictly required; passed through for parity
       # with the other sidecars and in case of HF rate limits on first download.

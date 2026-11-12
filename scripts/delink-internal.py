@@ -18,7 +18,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 INTERNAL = REPO / "docs" / "internal"
-EXCLUDE_PARTS = {"node_modules", "target", ".git", ".cache", "VibeVoice", "book", "internal", "marketing"}
+EXCLUDE_PARTS = {"node_modules", "target", ".git", ".cache", "VibeVoice", "vendor", "book", "internal", "marketing"}
 LINK_RE = re.compile(r"\[([^\]]*)\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
 
 

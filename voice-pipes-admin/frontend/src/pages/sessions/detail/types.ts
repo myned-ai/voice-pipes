@@ -252,6 +252,16 @@ export interface Utterance {
   metric_snapshot?: TurnMetricsSnapshot;
   /** Client-reported playback health (underruns / inserted silence). */
   playback_health?: PlaybackHealth;
+  /** Process and system resource usage metrics (RAM, CPU, container memory). */
+  resource_usage?: TurnResourceUsage;
+}
+
+export interface TurnResourceUsage {
+  cpu_percent?: number;
+  cpu_time_ms?: number;
+  rss_bytes?: number;
+  rss_delta_bytes?: number;
+  container_peak_memory_bytes?: number;
 }
 
 /**
@@ -271,6 +281,7 @@ export interface OrchTurnDetail {
   tts?: { provider?: string; latency_ms?: number; audio_duration_s?: number };
   text_latency_ms?: number;
   latency_breakdown?: TurnMetricsSnapshot;
+  resource_usage?: TurnResourceUsage;
 }
 
 export interface OrchTurn {
@@ -305,6 +316,12 @@ export interface SessionMetadata {
    *  session-detail page. Empty for older sessions captured before
    *  descriptors were persisted. */
   metric_descriptors?: ComponentMetricDescriptor[];
+  /** Peak process physical resident RAM (bytes) observed across turns. */
+  peak_rss_bytes?: number;
+  /** Peak container memory usage (bytes) from cgroups. */
+  container_peak_memory_bytes?: number;
+  /** Average CPU time consumed per turn (ms). */
+  avg_turn_cpu_ms?: number;
 }
 
 export interface EventTimestamp {

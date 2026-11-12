@@ -162,10 +162,10 @@ if ($needsGpu.Count -gt 0 -and -not $gpu_supported) {
     Write-Host "   NVIDIA Container Toolkit / WSL GPU support for usable latency." -ForegroundColor Yellow
 }
 
-# Pre-create bind-mount source dirs (relative to voice-pipes/) so Docker
-# doesn't create them as root-owned paths.
+# Pre-create bind-mount source dirs so Docker doesn't create them as
+# root-owned paths.
 foreach ($dir in $ensureDirs) {
-    $hostDir = Join-Path "voice-pipes" $dir
+    $hostDir = if ($dir -like "vendor/*") { $dir } else { Join-Path "voice-pipes" $dir }
     if (-not (Test-Path $hostDir)) { New-Item -ItemType Directory -Force -Path $hostDir | Out-Null }
 }
 
@@ -318,6 +318,13 @@ foreach ($sidecar in $sidecars) {
                 if ($hStatus -eq "healthy") {
                     $ready = $true
                     Write-Host "[+] Sidecar '$sidecar' is healthy and ready." -ForegroundColor Green
+                    if ($sidecar -eq "llama-server") {
+                        try {
+                            $warmupBody = '{"model":"default","messages":[{"role":"user","content":"hi"}],"max_tokens":1}'
+                            Invoke-RestMethod -Uri "http://127.0.0.1:8081/v1/chat/completions" -Method Post -Body $warmupBody -ContentType "application/json" -TimeoutSec 10 2>$null | Out-Null
+                            Write-Host "   llama-server CUDA graphs & KV cache warmed." -ForegroundColor DarkGray
+                        } catch {}
+                    }
                     break
                 }
                 Start-Sleep -Seconds 2

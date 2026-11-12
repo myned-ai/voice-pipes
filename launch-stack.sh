@@ -175,10 +175,14 @@ if [ -n "$REQUIRES_GPU" ] && [ "$gpu_supported" != true ]; then
     echo "   NVIDIA Container Toolkit / WSL GPU support for usable latency."
 fi
 
-# Pre-create bind-mount source dirs (relative to voice-pipes/) so Docker
-# doesn't create them as root-owned paths.
+# Pre-create bind-mount source dirs so Docker doesn't create them as
+# root-owned paths.
 for dir in $ENSURE_DIRS; do
-    mkdir -p "voice-pipes/$dir"
+    if [ "${dir#vendor/}" != "$dir" ]; then
+        mkdir -p "$dir"
+    else
+        mkdir -p "voice-pipes/$dir"
+    fi
 done
 
 # Containers run unprivileged. On Linux the bind-mounted data dirs
@@ -286,6 +290,12 @@ for sidecar in $SIDECAR_SERVICES; do
                 if [ "$h_status" = "healthy" ]; then
                     ready=true
                     echo "✓ Sidecar '$sidecar' is healthy and ready."
+                    if [ "$sidecar" = "llama-server" ]; then
+                        curl -sf -X POST http://127.0.0.1:8081/v1/chat/completions \
+                            -H "Content-Type: application/json" \
+                            -d '{"model":"default","messages":[{"role":"user","content":"hi"}],"max_tokens":1}' >/dev/null 2>&1 || true
+                        echo "  [+] llama-server CUDA graphs & KV cache warmed."
+                    fi
                     break
                 fi
                 sleep 2

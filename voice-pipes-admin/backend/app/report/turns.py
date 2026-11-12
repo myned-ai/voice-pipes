@@ -645,6 +645,10 @@ def _flatten_turn(utt: dict, t0_iso: str | None, first_utt_id, providers: dict) 
     if playback is not None:
         row["playback"] = playback
 
+    res = utt.get("resource_usage") or utt.get("resources")
+    if isinstance(res, dict) and res:
+        row["resources"] = res
+
     if s.get("interrupted"):
         row["bi"] = {
             "trigger": s.get("interrupt_trigger"),

@@ -352,6 +352,9 @@ fn session_record(id: &str) -> SessionRecord {
         output_sample_rate: None,
         tags: Vec::new(),
         turn_count: 0,
+        peak_rss_bytes: None,
+        container_peak_memory_bytes: None,
+        avg_turn_cpu_ms: None,
     }
 }
 

@@ -4,7 +4,7 @@
 #
 # This runs the SAME code as the host sidecar, but containerized so no host
 # Python / venv / CUDA toolkit is required. Model weights (models/vibevoice) and
-# the reference voice .pt prompts (VibeVoice/demo/voices) are VOLUME-MOUNTED from
+# the reference voice .pt prompts (vendor/vibevoice/demo/voices) are VOLUME-MOUNTED from
 # the repo — NOT baked into the image. The entrypoint downloads them on first
 # boot into the mounted dirs, so they persist on the host across restarts and the
 # image stays lean.
@@ -56,10 +56,10 @@ COPY scripts/vibevoice/requirements.txt /app/scripts/vibevoice/requirements.txt
 RUN pip install -r /app/scripts/vibevoice/requirements.txt huggingface_hub
 
 # 3. The vendored VibeVoice package (editable), matching the host README's
-#    `pip install -e VibeVoice` step. torch is already satisfied, so this won't
+#    `pip install -e vendor/vibevoice` step. torch is already satisfied, so this won't
 #    pull the CPU wheel over our CUDA build.
-COPY voice-pipes/VibeVoice /app/VibeVoice
-RUN pip install -e /app/VibeVoice
+COPY vendor/vibevoice /app/vendor/vibevoice
+RUN pip install -e /app/vendor/vibevoice
 
 # 3b. Pre-fetch the text tokenizer into the image's HF cache. The model weights
 #     carry NO tokenizer — the processor loads it from a SEPARATE HF repo
@@ -80,7 +80,7 @@ COPY voice-pipes/deploy/docker/scripts/vibevoice-entrypoint.sh /usr/local/bin/vi
 RUN chmod +x /usr/local/bin/vibevoice-entrypoint.sh
 
 # Unprivileged runtime user. The entrypoint downloads weights and
-# voice prompts into the bind-mounted models/ and VibeVoice/demo/voices dirs,
+# voice prompts into the bind-mounted models/ and vendor/vibevoice/demo/voices dirs,
 # which must be writable by this uid; compose sets `user:` to the host user's
 # ids on Linux (launcher exports VP_UID/VP_GID), Docker Desktop needs nothing.
 RUN groupadd --system --gid 10001 vp \

@@ -76,6 +76,7 @@ def _make_session(
     events: list[dict] | None = None,
     outcome: str | None = None,
     csat: int | None = None,
+    meta_extra: dict | None = None,
 ) -> None:
     """Write one synthetic session (metadata + turn files + events.jsonl +
     pipeline_events.jsonl with canonical per-turn snapshots)."""
@@ -89,6 +90,8 @@ def _make_session(
         "stt_provider": "deepgram",
         "tts_provider": "cartesia",
     }
+    if meta_extra:
+        meta.update(meta_extra)
     if outcome is not None:
         meta["outcome"] = outcome
     if csat is not None:
@@ -412,6 +415,36 @@ class ClearAndLiteAnalyticsTest(_WindowTest):
         self.assertFalse((self.caps / "s1").exists())
         self.assertFalse((self.caps / "s2").exists())
         self.assertEqual(self.window()["kpi"]["total_sessions"], 0)
+
+    def test_resource_metrics_aggregated_in_kpi(self) -> None:
+        _make_session(
+            self.caps,
+            "s1",
+            pipeline="alpha",
+            turns=[{"total_ms": 1000}],
+            meta_extra={
+                "peak_rss_bytes": 64 * 1024 * 1024,
+                "container_peak_memory_bytes": 78 * 1024 * 1024,
+                "avg_turn_cpu_ms": 35.5,
+            },
+        )
+        _make_session(
+            self.caps,
+            "s2",
+            pipeline="beta",
+            turns=[{"total_ms": 1200}],
+            meta_extra={
+                "peak_rss_bytes": 72 * 1024 * 1024,
+                "container_peak_memory_bytes": 82 * 1024 * 1024,
+                "avg_turn_cpu_ms": 42.5,
+            },
+        )
+        res = self.window()
+        kpi = res["kpi"]
+        self.assertEqual(kpi["avg_peak_rss_bytes"], 68 * 1024 * 1024)
+        self.assertEqual(kpi["p95_peak_rss_bytes"], 72 * 1024 * 1024)
+        self.assertEqual(kpi["max_container_peak_bytes"], 82 * 1024 * 1024)
+        self.assertEqual(kpi["avg_turn_cpu_ms"], 39.0)
 
 
 if __name__ == "__main__":

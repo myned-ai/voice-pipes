@@ -16,15 +16,15 @@ limitations under the License.
 
 This repository includes third-party software:
 
-* voice-pipes/VibeVoice/ — VibeVoice, Copyright (c) 2025 Microsoft.
-  Licensed under the MIT License (see voice-pipes/VibeVoice/LICENSE).
+* vendor/vibevoice/ — VibeVoice, Copyright (c) 2025 Microsoft.
+  Licensed under the MIT License (see vendor/vibevoice/LICENSE).
   Vendored from https://github.com/microsoft/VibeVoice at commit
   94da20d98b2fa7688e9cbfaf7692ddb4954f7600 (2026-07-24), with small
   local modifications (idempotency guards around HuggingFace Auto-class
   registration in six files under vibevoice/modular/) and with the
   Figures/ directory and Microsoft's CONTRIBUTING.md / SECURITY.md
   removed.
-  Contains voice-pipes/VibeVoice/vibevoice/schedule/dpm_solver.py,
+  Contains vendor/vibevoice/vibevoice/schedule/dpm_solver.py,
   Copyright 2024 TSAIL Team and The HuggingFace Team, licensed under
   the Apache License, Version 2.0 (originally from the HuggingFace
   diffusers project).

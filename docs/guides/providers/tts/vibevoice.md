@@ -11,7 +11,7 @@ Microsoft VibeVoice-Realtime-0.5B served by a Python sidecar on a GPU and reache
 | **Stage** | TTS (text → speech) |
 | **Vendor** | Microsoft |
 | **Family** | VibeVoice-Realtime-0.5B (diffusion-based neural TTS) |
-| **License/source** | vendored at `voice-pipes/VibeVoice/` |
+| **License/source** | vendored at `vendor/vibevoice/` |
 | **Runs** | **Separate process** (Python sidecar), GPU — as the `vibevoice` Docker service, or standalone on the host |
 | **Engine provider** | `openai` TTS provider, pointed at the sidecar's OpenAI-compatible endpoint |
 
@@ -36,7 +36,7 @@ session setup via `/v1/models`.
 **Docker (default).** Selecting VibeVoice in the config wizard writes the
 `.vibevoice-enabled` flag; `launch-stack.ps1` then starts the `vibevoice` compose
 service (`--profile vibevoice`) built from `Dockerfile.vibevoice`. It reserves an
-nvidia device, binds `:8091`, and volume-mounts `models/` + `VibeVoice/demo/voices`
+nvidia device, binds `:8091`, and volume-mounts `models/` + `vendor/vibevoice/demo/voices`
 — the entrypoint (`deploy/docker/scripts/vibevoice-entrypoint.sh`) downloads the
 weights + voices on first boot. The worker reaches it at `http://vibevoice:8091`
 on the shared compose network. Requires Docker GPU pass-through (probed by the
@@ -48,7 +48,7 @@ launcher); flash-attn is not in the image, so it runs on `sdpa`.
 .venv-vibevoice\Scripts\python.exe scripts/vibevoice/server.py \
     --device cuda --model-path models/vibevoice
 ```
-(45 voice aliases load from `VibeVoice/demo/voices/streaming_model/`.)
+(45 voice aliases load from `vendor/vibevoice/demo/voices/streaming_model/`.)
 
 ### Engine config (TOML, TTS section)
 ```toml

@@ -18,7 +18,7 @@
 //! - `REQUIRES_GPU` — space-separated services that need GPU pass-through;
 //!   the launcher warns when its GPU probe failed.
 //! - `ENSURE_DIRS` — space-separated bind-mount source dirs (relative to
-//!   `voice-pipes/`) the launcher pre-creates so Docker doesn't create them
+//!   the repo or `voice-pipes/`) the launcher pre-creates so Docker doesn't create them
 //!   root-owned.
 //!
 //! Any other key (e.g. `LLAMA_MODEL`) is exported to the environment verbatim

@@ -87,6 +87,8 @@ pub(super) struct TurnTracker {
     /// completion via [`emit_turn_metrics`]. Drained into the final
     /// `ServerControl::SessionSummary` frame just before `Closing`.
     pub session_aggregator: SessionAggregator,
+    /// Resource usage baseline snapshot taken at turn start.
+    pub start_resource_sample: Option<crate::telemetry::resources::ProcessSample>,
     /// The end-of-utterance chunk for the current turn has been forwarded
     /// to the client: the pipeline has nothing more to produce and the
     /// client may legitimately report playback complete.
@@ -115,6 +117,10 @@ pub(super) struct SessionAggregator {
     pub ttfb_count: u32,
     pub total_ms_sum: u64,
     pub total_audio_duration_ms: u64,
+    /// Total process CPU time consumed across all turns (ms).
+    pub total_cpu_time_ms: u64,
+    /// Peak process RSS observed across all turns (bytes).
+    pub peak_rss_bytes: Option<u64>,
 }
 
 impl SessionAggregator {
@@ -186,6 +192,7 @@ impl TurnTracker {
             client_timings: Vec::new(),
             playback_health: None,
             session_aggregator: SessionAggregator::default(),
+            start_resource_sample: None,
             eou_sent: false,
             metrics_emitted: false,
         }
@@ -245,6 +252,7 @@ impl TurnTracker {
         self.ttfb_recorded = None;
         self.client_timings.clear();
         self.playback_health = None;
+        self.start_resource_sample = crate::telemetry::resources::ProcessSample::capture();
         self.eou_sent = false;
         self.metrics_emitted = false;
     }
@@ -540,6 +548,28 @@ pub(super) fn build_turn_record(
     let total_ms = snapshot.total_ms;
     let client_timings = std::mem::take(&mut tracker.client_timings);
     let playback_health = tracker.playback_health.take();
+    let end_sample = crate::telemetry::resources::ProcessSample::capture();
+    let resource_usage = crate::telemetry::resources::compute_turn_resources(
+        tracker.start_resource_sample.take(),
+        end_sample,
+    );
+    if let Some(ref ru) = resource_usage {
+        if let Some(rss) = ru.rss_bytes {
+            tracker.session_aggregator.peak_rss_bytes = Some(
+                tracker
+                    .session_aggregator
+                    .peak_rss_bytes
+                    .unwrap_or(0)
+                    .max(rss),
+            );
+        }
+        if let Some(cpu_ms) = ru.cpu_time_ms {
+            tracker.session_aggregator.total_cpu_time_ms = tracker
+                .session_aggregator
+                .total_cpu_time_ms
+                .saturating_add(cpu_ms);
+        }
+    }
     crate::api::types::TurnRecord {
         id: uuid::Uuid::new_v4().to_string(),
         session_id: session_id.to_string(),
@@ -578,6 +608,7 @@ pub(super) fn build_turn_record(
             latency_breakdown: Some(snapshot.clone()),
             client_timings,
             playback_health,
+            resource_usage,
         }),
         pipeline_name: pipeline_name.clone(),
         pipeline_config_hash: None,
@@ -673,6 +704,7 @@ pub(super) fn build_realtime_turn_record(
             latency_breakdown: Some(snapshot.clone()),
             client_timings: Vec::new(),
             playback_health,
+            resource_usage: crate::telemetry::resources::compute_turn_resources(None, None),
         }),
         pipeline_name: pipeline_name.clone(),
         pipeline_config_hash: None,
@@ -692,6 +724,7 @@ pub(super) fn make_session_record(
     tags: Vec<String>,
     sample_rates: Option<(u32, u32)>,
     state: &super::state::TransportState,
+    aggregator: Option<&SessionAggregator>,
 ) -> crate::api::types::SessionRecord {
     // Realtime (S2S) pipelines do not have separate `[stt]` / `[tts]`
     // sections — the provider plays both roles. Fall back to the
@@ -710,6 +743,13 @@ pub(super) fn make_session_record(
         (None, None, Some(rt)) => (Some(rt.provider.clone()), Some(rt.provider.clone())),
         (None, None, None) => (None, None),
     };
+    let peak_rss_bytes = aggregator
+        .and_then(|a| a.peak_rss_bytes)
+        .or_else(crate::telemetry::resources::read_linux_rss);
+    let avg_turn_cpu_ms =
+        aggregator.and_then(|a| (a.turns > 0).then(|| a.total_cpu_time_ms / a.turns as u64));
+    let container_peak_memory_bytes = crate::telemetry::resources::read_container_peak_memory();
+
     crate::api::types::SessionRecord {
         id: session_id.to_string(),
         tenant_id: None,
@@ -724,7 +764,10 @@ pub(super) fn make_session_record(
         input_sample_rate: sample_rates.map(|(input, _)| input),
         output_sample_rate: sample_rates.map(|(_, output)| output),
         tags,
-        turn_count: 0,
+        turn_count: aggregator.map_or(0, |a| a.turns),
+        peak_rss_bytes,
+        container_peak_memory_bytes,
+        avg_turn_cpu_ms,
     }
 }
 

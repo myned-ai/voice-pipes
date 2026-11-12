@@ -66,6 +66,7 @@ export interface PipelineGraph {
   edges: PipelineEdge[];
   /** Absent from the BFF's offline mock pipeline. */
   audit_tap?: { enabled: boolean; side?: string | null; tapped_nodes: string[] };
+  raw_toml?: string | null;
 }
 
 // ── GET /api/v1/pipelines (`PipelineGroupsResponse`) ────────────────────────

@@ -160,9 +160,11 @@ def load_model(model_path: str, device: str, dtype_str: str):
     global _model_id, _model_version
 
     base_dir = Path(__file__).resolve().parent.parent.parent
-    if (base_dir / "voice-pipes").is_dir():
-        base_dir = base_dir / "voice-pipes"
-    voices_dir = base_dir / "VibeVoice" / "demo" / "voices" / "streaming_model"
+    voices_dir = base_dir / "vendor" / "vibevoice" / "demo" / "voices" / "streaming_model"
+    if not voices_dir.is_dir() and (base_dir / "voice-pipes" / "VibeVoice").is_dir():
+        voices_dir = base_dir / "voice-pipes" / "VibeVoice" / "demo" / "voices" / "streaming_model"
+    elif not voices_dir.is_dir() and (base_dir / "VibeVoice").is_dir():
+        voices_dir = base_dir / "VibeVoice" / "demo" / "voices" / "streaming_model"
     _voice_mapper = VoiceMapper(voices_dir)
 
     dtype_map = {
@@ -313,7 +315,7 @@ def _synthesize_stream(text: str, voice_name: str = "default") -> Iterator[np.nd
     `generate()` runs on a background thread and pushes audio chunks into an
     `AudioStreamer` queue; we yield them as they arrive so the HTTP response's
     first byte is the *first* chunk (≈ first-chunk latency) instead of the full
-    synthesis time. Mirrors `VibeVoice/demo/web/app.py::stream`.
+    synthesis time. Mirrors `vendor/vibevoice/demo/web/app.py::stream`.
     """
     inputs, prefilled = _prepare_inputs(text, voice_name)
     audio_streamer = AudioStreamer(batch_size=1, stop_signal=None, timeout=None)

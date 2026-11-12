@@ -79,6 +79,71 @@ class MergeSessionMetadataTest(unittest.TestCase):
         self.assertEqual(merged["pipeline_config_hash"], "from-orchestrator")
         self.assertEqual(merged["tags"], ["orch"])
 
+    def test_orchestrator_resource_fields_merged(self):
+        merged = merge_session_metadata(
+            self.LOCAL,
+            {
+                "peak_rss_bytes": 67108864,
+                "container_peak_memory_bytes": 75497472,
+                "avg_turn_cpu_ms": 38,
+            },
+        )
+        self.assertEqual(merged["peak_rss_bytes"], 67108864)
+        self.assertEqual(merged["container_peak_memory_bytes"], 75497472)
+        self.assertEqual(merged["avg_turn_cpu_ms"], 38)
+
+
+class ReportResourcesTest(unittest.TestCase):
+    def test_resources_rendered_in_session_and_markdown(self):
+        from .report.render import _build_report_for_llm, _render_report_markdown
+        from .report.turns import _flatten_turn
+
+        meta = {
+            "pipeline_name": "custom-classic",
+            "pipeline_config_hash": "abc12345",
+            "peak_rss_bytes": 64 * 1024 * 1024,
+            "container_peak_memory_bytes": 80 * 1024 * 1024,
+            "avg_turn_cpu_ms": 42,
+        }
+        utt = {
+            "utterance_id": 1,
+            "user_text": "Hello",
+            "llm_output": {"text": "Hi there!"},
+            "resource_usage": {
+                "process_rss_bytes": 64 * 1024 * 1024,
+                "cpu_percent": 15.2,
+                "cpu_time_ms": 42,
+            },
+        }
+        flat = _flatten_turn(utt, None, 1, {})
+        self.assertIn("resources", flat)
+        self.assertEqual(flat["resources"]["cpu_time_ms"], 42)
+
+        targets = {
+            "ttft_ms": 300,
+            "ttfb_ms": 400,
+            "stt_processing_ms": 800,
+            "endpointing_ms": 500,
+            "rtf_max": 0.6,
+            "tokens_per_sec_min": 18,
+            "barge_in_rtt_ms": 400,
+            "self_barge_played_ms_max": 200,
+        }
+        report = _build_report_for_llm(
+            session_id="test-res-sess",
+            metadata=meta,
+            utterances=[utt],
+            session_metrics={},
+            providers={},
+            targets=targets,
+        )
+        self.assertEqual(report["session"]["peak_rss_bytes"], 64 * 1024 * 1024)
+        self.assertEqual(report["totals"]["avg_turn_cpu_ms"], 42)
+        self.assertIn("resources", report["turns"][0])
+
+        md = _render_report_markdown(report)
+        self.assertIn("resources:  peak_rss=64.0MB  container_peak=80.0MB  avg_turn_cpu=42ms", md)
+
 
 def _trace_client_timing(event: str, client_ms: int, secs: int) -> dict:
     return {

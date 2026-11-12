@@ -135,6 +135,7 @@ pub(super) async fn bootstrap_session(
             Vec::new(),
             Some((negotiated.input_sample_rate, negotiated.output_sample_rate)),
             state,
+            None,
         );
         super::turn::emit_record(tx, rec, "session");
     }

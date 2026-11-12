@@ -7,9 +7,8 @@ name = "custom-classic"
 enabled = true
 
 [stt]
-provider = "nemotron-3.5"
-model_dir = "models/nemotron-3.5"
-language = "en-US"
+provider = "parakeet-tdt"
+model_dir = "models/parakeet-tdt"
 
 [[text_processor]]
 type = "openai-compat"
@@ -23,9 +22,8 @@ top_p = 0.95
 extra_body = { chat_template_kwargs = { enable_thinking = false } }
 
 [tts]
-provider = "kokoro"
-model = "models/kokoro-v1.0.onnx"
-voices = "models/voices-v1.0.bin"
+provider = "piper"
+model = "models/en_US-lessac-medium.onnx"
 
 [vad]
 mode = "auto"
@@ -33,7 +31,7 @@ model = "models/silero_vad.onnx"
 
 [turn_detection]
 mode = "smart"
-silence_timeout_ms = 700
+silence_timeout_ms = 500
 smart_model_path = "models/smart-turn-v3.2-cpu.onnx"
 smart_threshold = 0.5
 smart_window_secs = 8

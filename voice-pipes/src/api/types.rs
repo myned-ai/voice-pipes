@@ -164,6 +164,15 @@ pub struct SessionRecord {
     pub tags: Vec<String>,
     /// Number of turns completed in this session.
     pub turn_count: u32,
+    /// Peak process resident memory (RSS in bytes) observed during this session.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub peak_rss_bytes: Option<u64>,
+    /// Container peak memory (bytes) from cgroups, if available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub container_peak_memory_bytes: Option<u64>,
+    /// Average turn CPU time consumed (ms) across all completed turns.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub avg_turn_cpu_ms: Option<u64>,
 }
 
 // ── Turn record (one utterance pass through the pipeline) ───
@@ -232,6 +241,29 @@ pub struct SessionDetail {
     /// sqlite `data` JSON blob — no schema migration.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub playback_health: Option<PlaybackHealth>,
+    /// System and process resource utilization metrics for this turn.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resource_usage: Option<TurnResourceUsage>,
+}
+
+/// Resource utilization telemetry captured for an individual pipeline turn.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TurnResourceUsage {
+    /// Effective CPU utilization across cores during this turn (e.g. 145.0%).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cpu_percent: Option<f32>,
+    /// Total process CPU time consumed during this turn (user + system) in milliseconds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cpu_time_ms: Option<u64>,
+    /// Process physical resident set size (RAM in bytes) at turn completion.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rss_bytes: Option<u64>,
+    /// Net change in process physical RAM during this turn in bytes (positive = growth).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rss_delta_bytes: Option<i64>,
+    /// Peak container memory from cgroups v2 (bytes), if running in a container.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub container_peak_memory_bytes: Option<u64>,
 }
 
 /// Per-turn client playback health.
@@ -651,6 +683,8 @@ pub struct PipelineGraphResponse {
     pub nodes: Vec<PipelineNode>,
     pub edges: Vec<PipelineEdge>,
     pub audit_tap: PipelineAuditTap,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_toml: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

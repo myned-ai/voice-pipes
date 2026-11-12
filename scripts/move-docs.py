@@ -27,7 +27,7 @@ import sys
 from pathlib import Path, PurePosixPath
 
 REPO = Path(__file__).resolve().parent.parent
-EXCLUDE_DIR_PARTS = {"node_modules", "target", ".git", ".cache", "VibeVoice", "book"}
+EXCLUDE_DIR_PARTS = {"node_modules", "target", ".git", ".cache", "VibeVoice", "vendor", "book"}
 LINK_RE = re.compile(r"\]\(([^)\s]+)(\s+\"[^\"]*\")?\)")
 
 

@@ -56,7 +56,7 @@ fn the_vibevoice_entry_renders_the_config_and_sidecar_the_built_in_did() {
             service: "vibevoice".into(),
             model_env: None,
             requires_gpu: true,
-            ensure_dirs: vec!["VibeVoice/demo/voices/streaming_model".into()],
+            ensure_dirs: vec!["vendor/vibevoice/demo/voices/streaming_model".into()],
         }
     );
 }
