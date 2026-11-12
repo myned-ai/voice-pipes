@@ -39,6 +39,9 @@ _ORCHESTRATOR_SESSION_FIELDS = (
     "input_sample_rate",
     "output_sample_rate",
     "tenant_id",
+    "peak_rss_bytes",
+    "container_peak_memory_bytes",
+    "avg_turn_cpu_ms",
 )
 
 
@@ -345,6 +348,31 @@ def _report_for_llm_response(
         )
 
     utterances = artifacts.get("utterances") or []
+    if orch_data and isinstance(orch_data.get("turns"), list):
+        turns_by_id = {}
+        for idx, t in enumerate(orch_data["turns"]):
+            uid = t.get("utterance_id") if t.get("utterance_id") is not None else idx
+            turns_by_id[uid] = t
+        if utterances:
+            for u in utterances:
+                uid = u.get("utterance_id")
+                if uid in turns_by_id:
+                    t = turns_by_id[uid]
+                    res = (t.get("detail") or {}).get("resource_usage") or t.get("resource_usage")
+                    if res and "resource_usage" not in u:
+                        u["resource_usage"] = res
+        else:
+            for idx, t in enumerate(orch_data["turns"]):
+                detail = t.get("detail") or {}
+                utterances.append({
+                    "utterance_id": t.get("utterance_id", idx),
+                    "stt": detail.get("stt"),
+                    "tts": detail.get("tts"),
+                    "llm_output": {"text": t.get("text_preview") or ""},
+                    "resource_usage": detail.get("resource_usage"),
+                    "metric_snapshot": detail.get("latency_breakdown"),
+                    "playback_health": detail.get("playback_health"),
+                })
 
     # Resolve provider identity (model names, streaming mode) from the
     # richest event payload available, then derive provider-aware SLA

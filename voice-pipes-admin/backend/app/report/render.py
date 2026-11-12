@@ -197,6 +197,10 @@ def _build_report_for_llm(
     tool_rows = [_tool_call_report_row(c) for c in (client_tool_calls or [])]
 
     totals = _totals_to_snake_case(session_metrics or {})
+    for k in ("peak_rss_bytes", "container_peak_memory_bytes", "avg_turn_cpu_ms"):
+        if metadata.get(k) is not None and totals.get(k) is None:
+            totals[k] = metadata[k]
+
     # For s2s pipelines there is no cascade TTS, so the synthesis `avg_rtf` is
     # structurally null — exactly the metric that was 1.67 when a post-processor
     # starved the client. Populate it from the
@@ -209,23 +213,28 @@ def _build_report_for_llm(
         totals["avg_rtf"] = totals["avg_emit_rtf"]
         totals["avg_rtf_source"] = "emit_rtf"
 
+    session_block = {
+        "id": session_id,
+        "pipeline_name": metadata.get("pipeline_name"),
+        "pipeline_config_hash": metadata.get("pipeline_config_hash"),
+        "stt_provider": metadata.get("stt_provider"),
+        "tts_provider": metadata.get("tts_provider"),
+        "worker_id": metadata.get("worker_id"),
+        "status": metadata.get("status"),
+        "started_at": started_at,
+        "ended_at": ended_at,
+        "duration_s": duration_s,
+        "turn_count": metadata.get("turn_count"),
+        "tags": metadata.get("tags") or [],
+    }
+    for k in ("peak_rss_bytes", "container_peak_memory_bytes", "avg_turn_cpu_ms"):
+        if metadata.get(k) is not None:
+            session_block[k] = metadata[k]
+
     return {
         "report_version": _REPORT_VERSION,
         "generated_at": generated_at,
-        "session": {
-            "id": session_id,
-            "pipeline_name": metadata.get("pipeline_name"),
-            "pipeline_config_hash": metadata.get("pipeline_config_hash"),
-            "stt_provider": metadata.get("stt_provider"),
-            "tts_provider": metadata.get("tts_provider"),
-            "worker_id": metadata.get("worker_id"),
-            "status": metadata.get("status"),
-            "started_at": started_at,
-            "ended_at": ended_at,
-            "duration_s": duration_s,
-            "turn_count": metadata.get("turn_count"),
-            "tags": metadata.get("tags") or [],
-        },
+        "session": session_block,
         "providers": providers,
         "verdict": verdict,
         **({"verdict_v2": verdict_v2} if verdict_v2 is not None else {}),
@@ -519,6 +528,16 @@ def _render_report_markdown(report: dict) -> str:
     unstable_clause = (
         f"  unstable components: {', '.join(unstable_list)}\n" if unstable_list else ""
     )
+    res_parts = []
+    if sess.get("peak_rss_bytes") is not None:
+        rss_mb = sess["peak_rss_bytes"] / (1024 * 1024)
+        res_parts.append(f"peak_rss={rss_mb:.1f}MB")
+    if sess.get("container_peak_memory_bytes") is not None:
+        c_mb = sess["container_peak_memory_bytes"] / (1024 * 1024)
+        res_parts.append(f"container_peak={c_mb:.1f}MB")
+    if sess.get("avg_turn_cpu_ms") is not None:
+        res_parts.append(f"avg_turn_cpu={sess['avg_turn_cpu_ms']}ms")
+    res_clause = f"resources:  {'  '.join(res_parts)}\n" if res_parts else ""
     # Said to the reader that is asked to "confirm or override" the verdict:
     # left alone it would override a deliberate grade back to general norms,
     # which is the operator's decision being quietly undone.
@@ -545,6 +564,7 @@ def _render_report_markdown(report: dict) -> str:
         f"pipeline:   {sess.get('pipeline_name')} (config={sess.get('pipeline_config_hash')})"
         + (" [speech-to-speech]" if is_s2s else "") + "\n"
         f"providers:  llm={llm_label}  stt={stt_label}  tts={tts_label}\n"
+        + res_clause +
         f"started:    {sess.get('started_at')}  duration_s: {sess.get('duration_s')}\n"
         f"turns:      {n_turns}  flagged anomalies: {n_anom}\n"
         f"\n"
@@ -689,6 +709,12 @@ def _render_report_markdown(report: dict) -> str:
             "  `session.started_at` and high-cardinality payloads stripped.  Use it\n"
             "  to audit ordering / propagation bugs that the aggregates can't show.\n"
             if report.get("event_timeline") else ""
+        )
+        + (
+            "- `resources:` line reports system resources: `peak_rss` is worker process RAM;\n"
+            "  `container_peak` is cgroup peak memory; `avg_turn_cpu` is the mean active CPU time per turn.\n"
+            "  Each turn row may also include a `resources` block with process RSS and CPU usage.\n"
+            if res_clause else ""
         ) +
         "\n## Transcripts\n"
         + "".join([_transcript_block(turn) for turn in (report.get("turns") or [])]) +
