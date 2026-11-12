@@ -28,6 +28,7 @@ tokio = { workspace = true, features = ["time", "net"], optional = true }
 [features]
 # WebSocket client settings (the speech-to-speech client, AssemblyAI).
 ws = ["dep:tokio-tungstenite", "dep:tokio"]
+tokio-tungstenite = ["dep:tokio-tungstenite"]
 # Loopback HTTP servers for provider tests: enable it as a dev-dependency.
 testing = ["dep:tokio", "tokio/rt", "tokio/io-util"]
 
