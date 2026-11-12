@@ -339,6 +339,7 @@ fn worker_heartbeat_serialised_skips_empty_components() {
 fn session_record(id: &str) -> SessionRecord {
     SessionRecord {
         id: id.into(),
+        tenant_id: None,
         worker_id: "w1".into(),
         started_at: chrono::Utc::now(),
         ended_at: None,

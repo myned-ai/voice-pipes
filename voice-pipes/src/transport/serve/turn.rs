@@ -712,6 +712,7 @@ pub(super) fn make_session_record(
     };
     crate::api::types::SessionRecord {
         id: session_id.to_string(),
+        tenant_id: None,
         worker_id: String::new(),
         started_at: chrono::Utc::now(),
         ended_at,

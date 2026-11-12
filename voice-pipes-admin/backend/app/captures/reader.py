@@ -26,24 +26,54 @@ _DROPPED_FILE_RE = re.compile(
 _SAFE_SESSION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 
 
-def _resolve_session_dir(session_id: str) -> Path:
-    """Return a validated session directory under config.CAPTURES_DIR."""
+def _resolve_session_dir(session_id: str, tenant_id: str | None = None) -> Path:
+    """Return a validated session directory under config.CAPTURES_DIR.
+
+    When ``tenant_id`` is provided, resolution is strictly scoped to that tenant's
+    partition (captures/<tenant_id>/<session_id>). When ``tenant_id`` is None, the
+    flat directory is tried first, followed by tenant partition discovery.
+    """
     if config.CAPTURES_DIR == _CAPTURES_DIR_FALLBACK:
         _resolve_captures_dir()
 
     if not _SAFE_SESSION_ID_RE.fullmatch(session_id):
         raise HTTPException(status_code=400, detail="Invalid session id")
     captures_root = config.CAPTURES_DIR.resolve()
-    session_dir = (captures_root / session_id).resolve()
-    if not session_dir.is_relative_to(captures_root):
-        raise HTTPException(status_code=400, detail="Invalid session id")
-    return session_dir
+
+    if isinstance(tenant_id, str):
+        if not _SAFE_SESSION_ID_RE.fullmatch(tenant_id):
+            raise HTTPException(status_code=400, detail="Invalid tenant id")
+        session_dir = (captures_root / tenant_id / session_id).resolve()
+        if not session_dir.is_relative_to(captures_root):
+            raise HTTPException(status_code=400, detail="Invalid session id")
+        return session_dir
+
+    flat_dir = (captures_root / session_id).resolve()
+    if flat_dir.exists() and flat_dir.is_relative_to(captures_root):
+        return flat_dir
+
+    if captures_root.exists():
+        try:
+            for child in captures_root.iterdir():
+                if child.is_dir() and _SAFE_SESSION_ID_RE.fullmatch(child.name):
+                    candidate = (child / session_id).resolve()
+                    if candidate.exists() and candidate.is_relative_to(captures_root):
+                        return candidate
+        except OSError:
+            pass
+
+    return flat_dir
 
 
-def _read_session_metadata(session_id: str) -> dict:
+def _read_session_metadata(session_id: str, tenant_id: str | None = None) -> dict:
     """Return the session's ``metadata.json``, or ``{}`` when it is absent,
     unreadable or torn (the session is then shown without metadata)."""
-    meta_path = _resolve_session_dir(session_id) / "metadata.json"
+    dir_path = (
+        _resolve_session_dir(session_id, tenant_id=tenant_id)
+        if isinstance(tenant_id, str)
+        else _resolve_session_dir(session_id)
+    )
+    meta_path = dir_path / "metadata.json"
     if meta_path.exists():
         try:
             with open(meta_path, encoding="utf-8") as f:
@@ -890,9 +920,18 @@ def _attribute_calls_to_turns(calls: list[dict], utterances: list[dict]) -> None
         call["after_utterance_id"] = after
 
 
-def _read_capture_artifacts(session_id: str, events_offset: int = 0, events_limit: int = 200):
+def _read_capture_artifacts(
+    session_id: str,
+    events_offset: int = 0,
+    events_limit: int = 200,
+    tenant_id: str | None = None,
+):
     """Read events.jsonl, telemetry.jsonl, and per-utterance files from captures dir."""
-    session_dir = _resolve_session_dir(session_id)
+    session_dir = (
+        _resolve_session_dir(session_id, tenant_id=tenant_id)
+        if isinstance(tenant_id, str)
+        else _resolve_session_dir(session_id)
+    )
     result = {"events": [], "events_total": 0, "utterances": [], "telemetry": [], "session_metrics": None}
 
     if not session_dir.exists() or not session_dir.is_dir():

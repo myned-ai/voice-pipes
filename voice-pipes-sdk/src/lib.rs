@@ -123,6 +123,7 @@ pub mod schema;
 pub mod secrets;
 pub mod sentence;
 pub mod stt;
+pub mod tenant;
 pub mod testing;
 pub mod text;
 pub mod tts;
@@ -159,6 +160,7 @@ pub use stt::{
     AudioChunk, AudioEncoding, InferenceMetrics, RecognitionRequest, SttCapability, SttError,
     SttFactory, SttProvider, TranscriptionResult, WarmUpScope, WordInfo,
 };
+pub use tenant::{TenantId, TenantIdError, TenantRetentionPolicy};
 pub use text::{TextFragment, TextProcessor, TextProcessorError, TextProcessorFactory};
 pub use tokio_util::sync::CancellationToken;
 pub use tts::{

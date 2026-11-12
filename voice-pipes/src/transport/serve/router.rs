@@ -8,9 +8,11 @@ use axum::Router;
 use axum::extract::State;
 use axum::extract::connect_info::ConnectInfo;
 use axum::extract::ws::{WebSocket, WebSocketUpgrade};
+use axum::http::{HeaderMap, Uri, header};
 use axum::response::IntoResponse;
 use axum::routing::get;
 use tracing::info;
+use voice_pipes_sdk::TenantId;
 
 use crate::transport::health::{ConnectionHealthMonitor, HealthConfig};
 use crate::transport::ws::WsSession;
@@ -149,8 +151,44 @@ async fn readiness_handler(State(state): State<Arc<TransportState>>) -> impl Int
 
 // ── WebSocket upgrade ───────────────────────────────────────
 
+fn extract_tenant_id(headers: &HeaderMap, query: Option<&str>) -> Option<TenantId> {
+    headers
+        .get("x-tenant-id")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| TenantId::new(v).ok())
+        .or_else(|| {
+            headers
+                .get(header::AUTHORIZATION)
+                .and_then(|v| v.to_str().ok())
+                .and_then(|v| v.strip_prefix("Bearer "))
+                .and_then(|v| {
+                    let trimmed = v.trim();
+                    trimmed
+                        .strip_prefix("vp_live_")
+                        .or_else(|| trimmed.strip_prefix("vp_test_"))
+                })
+                .and_then(|rest| rest.split_once('_'))
+                .and_then(|(tenant, _)| TenantId::new(tenant).ok())
+        })
+        .or_else(|| {
+            query.and_then(|q| {
+                q.split('&').find_map(|pair| {
+                    let (k, v) = pair.split_once('=')?;
+                    if (k == "tenant_id" || k == "tenant") && !v.is_empty() {
+                        let unescaped = v.replace("%2D", "-").replace("%5F", "_");
+                        TenantId::new(unescaped).ok()
+                    } else {
+                        None
+                    }
+                })
+            })
+        })
+}
+
 async fn ws_handler(
     ws: WebSocketUpgrade,
+    headers: HeaderMap,
+    uri: Uri,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(state): State<Arc<TransportState>>,
 ) -> impl IntoResponse {
@@ -168,19 +206,26 @@ async fn ws_handler(
             .into_response();
     }
 
+    let tenant_id = extract_tenant_id(&headers, uri.query());
+
     // Cap inbound message/frame size at the protocol layer so an
     // oversized message is refused before it is ever buffered (tungstenite's
     // default is ~64 MiB per message). The codec enforces the same limit
     // with a typed `MessageTooLarge` error.
     ws.max_message_size(crate::transport::ws::MAX_CLIENT_MESSAGE_BYTES)
         .max_frame_size(crate::transport::ws::MAX_CLIENT_MESSAGE_BYTES)
-        .on_upgrade(move |socket| handle_ws_connection(socket, addr, state))
+        .on_upgrade(move |socket| handle_ws_connection(socket, addr, tenant_id, state))
         .into_response()
 }
 
-async fn handle_ws_connection(socket: WebSocket, addr: SocketAddr, state: Arc<TransportState>) {
+async fn handle_ws_connection(
+    socket: WebSocket,
+    addr: SocketAddr,
+    tenant_id: Option<TenantId>,
+    state: Arc<TransportState>,
+) {
     let session_id = uuid::Uuid::new_v4().to_string();
-    info!(session_id = %session_id, remote = %addr, "WS connection accepted");
+    info!(session_id = %session_id, ?tenant_id, remote = %addr, "WS connection accepted");
 
     let health = ConnectionHealthMonitor::new(HealthConfig::default());
     let write_timeout = std::time::Duration::from_millis(
@@ -190,7 +235,8 @@ async fn handle_ws_connection(socket: WebSocket, addr: SocketAddr, state: Arc<Tr
             .as_ref()
             .map_or(5_000, |t| t.write_timeout_ms),
     );
-    let session = WsSession::new(socket, session_id, Some(addr), health, write_timeout);
+    let session = WsSession::new(socket, session_id, Some(addr), health, write_timeout)
+        .with_tenant(tenant_id);
 
     run_session(Box::new(session), state).await;
 }

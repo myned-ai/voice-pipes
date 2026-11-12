@@ -72,6 +72,7 @@ All sections reject unknown keys except the open option maps noted.
 | `record_session_audio` | bool | `false` — also write one continuous stereo `session_audio.wav` per session (channel 0 the user before the VAD, channel 1 the agent). The per-utterance files are post-VAD and cut into utterances, so the silence between turns and the relative timing of the two speakers are not recoverable from them; turn-taking models and interruption evaluation need both. Records continuously, including silence |
 | `session_audio_max_seconds` | integer | `900` — cap on one session's continuous recording; past it audio is dropped and the recording is marked truncated. About 3.8 MB per minute at 16 kHz stereo |
 | `full_prompts` | bool | `false` — record every LLM prompt in full in the trace log instead of its message count and hash |
+| `zero_data_retention` | bool | `false` — Zero Data Retention (ZDR) mode: discards raw microphone input and synthesized TTS audio WAVs while retaining event telemetry and latency metrics |
 
 ### `[pipeline.audit_tap]`
 

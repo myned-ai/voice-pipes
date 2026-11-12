@@ -955,7 +955,13 @@ pub async fn list_sessions(
 
     // Filters and paging are pushed down to the store (SQL for the
     // sqlite store), so a page view never loads the whole table.
+    let tenant_id = q
+        .tenant_id
+        .as_deref()
+        .and_then(|t| voice_pipes_sdk::TenantId::new(t).ok());
+
     let filter = crate::audit::SessionFilter {
+        tenant_id,
         status: status_filter,
         worker_id: q.worker_id,
         pipeline_name: q.pipeline_name,

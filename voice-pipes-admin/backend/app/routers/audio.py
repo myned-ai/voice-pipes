@@ -10,14 +10,29 @@ import asyncio
 import io
 import json
 import wave as _wave
+from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse, Response
 
 from ..captures.reader import _resolve_session_dir
 from ..captures.speech_bounds import speech_bounds
 
 router = APIRouter()
+
+
+def _extract_tenant(request: Request | None, tenant_id: str | None) -> str | None:
+    if isinstance(tenant_id, str):
+        return tenant_id
+    if request is not None and hasattr(request, "headers"):
+        return request.headers.get("x-tenant-id")
+    return None
+
+
+def _resolve_session_dir_compat(session_id: str, tenant_id: str | None) -> Path:
+    if isinstance(tenant_id, str):
+        return _resolve_session_dir(session_id, tenant_id=tenant_id)
+    return _resolve_session_dir(session_id)
 
 
 def _turn_frags(session_dir, utterance_id: int):
@@ -80,7 +95,12 @@ def _wav_response(params, frames: bytes) -> Response:
 # ── Session Audio (local captures) ───────────────────────────
 
 @router.get("/api/v1/sessions/{session_id}/audio/turn/{utterance_id}/tts_concat.wav")
-async def get_turn_tts_concat(session_id: str, utterance_id: int):
+async def get_turn_tts_concat(
+    session_id: str,
+    utterance_id: int,
+    request: Request = None,
+    tenant_id: str | None = Query(None),
+):
     """Stream all `{utt:03}_tts_frag_*.wav` chunks for a turn as a single
     contiguous WAV.
 
@@ -99,11 +119,14 @@ async def get_turn_tts_concat(session_id: str, utterance_id: int):
     declaration order and the `:path` converter would otherwise
     swallow `turn/{utt}/tts_concat.wav` and 404.
     """
-    return await asyncio.to_thread(_turn_tts_concat, session_id, utterance_id)
+    eff_tenant = _extract_tenant(request, tenant_id)
+    return await asyncio.to_thread(_turn_tts_concat, session_id, utterance_id, eff_tenant)
 
 
-def _turn_tts_concat(session_id: str, utterance_id: int) -> Response:
-    session_dir = _resolve_session_dir(session_id)
+def _turn_tts_concat(
+    session_id: str, utterance_id: int, tenant_id: str | None = None
+) -> Response:
+    session_dir = _resolve_session_dir_compat(session_id, tenant_id)
     frags = _turn_frags(session_dir, utterance_id)
     if not frags:
         raise HTTPException(status_code=404, detail="No TTS fragments for turn")
@@ -115,7 +138,12 @@ def _turn_tts_concat(session_id: str, utterance_id: int) -> Response:
 
 
 @router.get("/api/v1/sessions/{session_id}/audio/turn/{utterance_id}/as-heard.wav")
-async def get_turn_as_heard(session_id: str, utterance_id: int):
+async def get_turn_as_heard(
+    session_id: str,
+    utterance_id: int,
+    request: Request = None,
+    tenant_id: str | None = Query(None),
+):
     """Reconstruct the audio the CLIENT actually heard for a turn.
 
     The ideal fragment concat with the client-reported underrun silences
@@ -128,11 +156,14 @@ async def get_turn_as_heard(session_id: str, utterance_id: int):
     NOTE: declared before the `/audio/{filename:path}` catch-all — FastAPI
     matches in declaration order.
     """
-    return await asyncio.to_thread(_turn_as_heard, session_id, utterance_id)
+    eff_tenant = _extract_tenant(request, tenant_id)
+    return await asyncio.to_thread(_turn_as_heard, session_id, utterance_id, eff_tenant)
 
 
-def _turn_as_heard(session_id: str, utterance_id: int) -> Response:
-    session_dir = _resolve_session_dir(session_id)
+def _turn_as_heard(
+    session_id: str, utterance_id: int, tenant_id: str | None = None
+) -> Response:
+    session_dir = _resolve_session_dir_compat(session_id, tenant_id)
     frags = _turn_frags(session_dir, utterance_id)
     if not frags:
         raise HTTPException(status_code=404, detail="No TTS fragments for turn")
@@ -188,7 +219,12 @@ def _turn_as_heard(session_id: str, utterance_id: int) -> Response:
 
 
 @router.get("/api/v1/sessions/{session_id}/audio/turn/{utterance_id}/user_speech.wav")
-async def get_turn_user_speech(session_id: str, utterance_id: int):
+async def get_turn_user_speech(
+    session_id: str,
+    utterance_id: int,
+    request: Request = None,
+    tenant_id: str | None = Query(None),
+):
     """The user's mic capture for a turn, cut down to the region that carries
     speech (see `captures/speech_bounds.py`).
 
@@ -201,11 +237,14 @@ async def get_turn_user_speech(session_id: str, utterance_id: int):
     NOTE: declared before the `/audio/{filename:path}` catch-all — FastAPI
     matches in declaration order.
     """
-    return await asyncio.to_thread(_turn_user_speech, session_id, utterance_id)
+    eff_tenant = _extract_tenant(request, tenant_id)
+    return await asyncio.to_thread(_turn_user_speech, session_id, utterance_id, eff_tenant)
 
 
-def _turn_user_speech(session_id: str, utterance_id: int) -> Response:
-    session_dir = _resolve_session_dir(session_id)
+def _turn_user_speech(
+    session_id: str, utterance_id: int, tenant_id: str | None = None
+) -> Response:
+    session_dir = _resolve_session_dir_compat(session_id, tenant_id)
     mic = next(
         (p for k in ("mic_raw", "mic_16k") for p in [session_dir / f"{utterance_id:03d}_{k}.wav"] if p.exists()),
         None,
@@ -227,13 +266,21 @@ def _turn_user_speech(session_id: str, utterance_id: int) -> Response:
 
 
 @router.get("/api/v1/sessions/{session_id}/audio/{filename:path}")
-async def get_session_audio(session_id: str, filename: str):
+async def get_session_audio(
+    session_id: str,
+    filename: str,
+    request: Request = None,
+    tenant_id: str | None = Query(None),
+):
     """Serve any WAV file from a session's capture directory."""
-    return await asyncio.to_thread(_session_audio, session_id, filename)
+    eff_tenant = _extract_tenant(request, tenant_id)
+    return await asyncio.to_thread(_session_audio, session_id, filename, eff_tenant)
 
 
-def _session_audio(session_id: str, filename: str) -> FileResponse:
-    session_dir = _resolve_session_dir(session_id)
+def _session_audio(
+    session_id: str, filename: str, tenant_id: str | None = None
+) -> FileResponse:
+    session_dir = _resolve_session_dir_compat(session_id, tenant_id)
 
     # Allow shorthand "in" / "out" for full-session audio
     if filename == "in":

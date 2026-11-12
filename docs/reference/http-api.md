@@ -22,7 +22,7 @@ Paginated lists return `{ total, page, per_page, items }`.
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/ws` (upgrade) | The client WebSocket; see the [wire protocol](../clients/protocol.md) |
+| `GET` | `/ws` (upgrade) | The client WebSocket; see the [wire protocol](../clients/protocol.md). Supports tenant scoping via `X-Tenant-Id` header, `Authorization: Bearer vp_live_<tenant>_*` / `vp_test_<tenant>_*`, or query param `?tenant_id=<id>` |
 | `GET` | `/health` | `aggregate_health` plus one entry per component (`id`, `kind`, `state`, `reason`) from the shared registry. One request reveals a down STT, TTS or LLM backend |
 
 ## Worker debug API (`debug_port`, default 8085)
@@ -87,7 +87,7 @@ API and never on the transport port.
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/api/v1/sessions` | Paginated; filters `status`, `worker_id`, `pipeline_name`, `config_hash`, `tags` |
+| `GET` | `/api/v1/sessions` | Paginated; filters `status`, `worker_id`, `pipeline_name`, `config_hash`, `tags`, `tenant_id` |
 | `GET` | `/api/v1/sessions/{id}` | Session with turns |
 | `GET` | `/api/v1/sessions/{id}/turns` | Turns of a session |
 | `GET` | `/api/v1/turns` | All turns (paginated) |

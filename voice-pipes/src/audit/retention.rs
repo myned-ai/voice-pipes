@@ -119,11 +119,14 @@ pub fn sweep_expired_captures_at(
         .checked_sub(Duration::from_secs(u64::from(retention_days) * 86_400))
         .unwrap_or(SystemTime::UNIX_EPOCH);
 
-    let Ok(entries) = std::fs::read_dir(captures_dir) else {
-        return report; // nothing recorded yet
+    sweep_entries(captures_dir, cutoff, &mut report, true);
+    report
+}
+
+fn sweep_entries(dir: &Path, cutoff: SystemTime, report: &mut SweepReport, is_root: bool) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
     };
-    // Real directories only: a symbolic link at the top level is never
-    // followed, so a link into another tree cannot get that tree removed.
     let mut candidates: Vec<PathBuf> = entries
         .flatten()
         .filter(|e| e.file_type().is_ok_and(|t| t.is_dir() && !t.is_symlink()))
@@ -131,36 +134,65 @@ pub fn sweep_expired_captures_at(
         .collect();
     candidates.sort();
 
-    for dir in candidates {
-        if !is_capture_dir(&dir) {
-            report.skipped += 1;
-            continue;
-        }
-        let Some(mtime) = newest_mtime(&dir) else {
-            report.skipped += 1;
-            continue;
-        };
-        if mtime >= cutoff {
-            report.kept += 1;
-            continue;
-        }
-        let size = dir_size(&dir);
-        match std::fs::remove_dir_all(&dir) {
-            Ok(()) => {
-                report.removed += 1;
-                report.bytes_freed += size;
+    for candidate in candidates {
+        if is_capture_dir(&candidate) {
+            sweep_single_capture(&candidate, cutoff, report);
+        } else if is_root {
+            // Check if this directory is a tenant partition holding session captures
+            if let Ok(sub_entries) = std::fs::read_dir(&candidate) {
+                let mut sub_dirs: Vec<PathBuf> = sub_entries
+                    .flatten()
+                    .filter(|e| e.file_type().is_ok_and(|t| t.is_dir() && !t.is_symlink()))
+                    .map(|e| e.path())
+                    .collect();
+                sub_dirs.sort();
+                let has_captures = sub_dirs.iter().any(|d| is_capture_dir(d));
+                if has_captures {
+                    for sub in sub_dirs {
+                        if is_capture_dir(&sub) {
+                            sweep_single_capture(&sub, cutoff, report);
+                        } else {
+                            report.skipped += 1;
+                        }
+                    }
+                    // Clean up empty tenant directory
+                    if std::fs::read_dir(&candidate).is_ok_and(|mut it| it.next().is_none()) {
+                        let _ = std::fs::remove_dir(&candidate);
+                    }
+                    continue;
+                }
             }
-            // Another worker got there first.
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => report.removed += 1,
-            Err(e) => report.errors.push((
-                dir.file_name()
-                    .map(|n| n.to_string_lossy().into_owned())
-                    .unwrap_or_default(),
-                e.to_string(),
-            )),
+            report.skipped += 1;
+        } else {
+            report.skipped += 1;
         }
     }
-    report
+}
+
+fn sweep_single_capture(dir: &Path, cutoff: SystemTime, report: &mut SweepReport) {
+    let Some(mtime) = newest_mtime(dir) else {
+        report.skipped += 1;
+        return;
+    };
+    if mtime >= cutoff {
+        report.kept += 1;
+        return;
+    }
+    let size = dir_size(dir);
+    match std::fs::remove_dir_all(dir) {
+        Ok(()) => {
+            report.removed += 1;
+            report.bytes_freed += size;
+        }
+        // Another worker got there first.
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => report.removed += 1,
+        Err(e) => report.errors.push((
+            dir.file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+            e.to_string(),
+        )),
+    }
 }
 
 #[cfg(test)]

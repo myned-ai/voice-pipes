@@ -360,6 +360,10 @@ impl Default for PipelineSettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "AuditConfig flags are independent boolean audit switches"
+)]
 pub struct AuditConfig {
     #[serde(default)]
     pub enabled: bool,
@@ -400,6 +404,11 @@ pub struct AuditConfig {
     /// duplicating the whole conversation on disk on every turn.
     #[serde(default)]
     pub full_prompts: bool,
+    /// Zero Data Retention (ZDR) mode: drop all raw microphone and synthesized
+    /// audio fragments immediately after inference, keeping only telemetry,
+    /// transcripts, and waterfall timing metrics.
+    #[serde(default)]
+    pub zero_data_retention: bool,
 }
 
 fn default_retention_days() -> u32 {
@@ -425,6 +434,7 @@ impl Default for AuditConfig {
             record_session_audio: false,
             session_audio_max_seconds: default_session_audio_max_seconds(),
             full_prompts: false,
+            zero_data_retention: false,
         }
     }
 }
