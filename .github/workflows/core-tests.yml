@@ -345,7 +345,7 @@ jobs:
       - name: install cargo-semver-checks (cached with the toolchain's bin directory)
         run: cargo install cargo-semver-checks --locked
       - name: voice-pipes-sdk against the base branch
-        run: cargo semver-checks -p voice-pipes-sdk --baseline-rev "origin/${{ github.base_ref || 'main' }}"
+        run: cargo semver-checks -p voice-pipes-sdk --baseline-rev "origin/${{ github.base_ref || github.ref_name }}"
 
   packages:
     name: every crate builds from its published files
