@@ -529,7 +529,7 @@ impl AudioFilterFactory for DeepFilterFactory {
     }
 }
 
-/// Returns a boxed [`DeepFilterFactory`].
+/// The factory the binary registers for `[[audio_filter]]` provider = "deepfilter".
 pub fn factory() -> Box<dyn AudioFilterFactory> {
     Box::new(DeepFilterFactory)
 }
