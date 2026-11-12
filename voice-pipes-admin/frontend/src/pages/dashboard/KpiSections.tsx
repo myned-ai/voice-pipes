@@ -1,6 +1,6 @@
-import { BarChart3, Activity, Clock, Zap, MessageSquare, AlertTriangle, Radio, Check, XCircle, DollarSign } from 'lucide-react';
+import { BarChart3, Activity, Clock, Zap, MessageSquare, AlertTriangle, Radio, Check, XCircle, DollarSign, Cpu, HardDrive } from 'lucide-react';
 import { GLOBAL_SLO } from '../../lib/slo';
-import { fmtMs, fmtNum, fmtUsd } from './format';
+import { fmtBytes, fmtMs, fmtNum, fmtUsd } from './format';
 import { KpiCard } from './KpiCard';
 import type { AnalyticsData, KPI } from './types';
 import type { DashboardMetrics } from './useDashboardMetrics';
@@ -286,6 +286,61 @@ export function AudioQualityKpis({ isDark, filteredUtterances, kpi, audioQuality
             />
           );
         })()}
+      </div>
+    </div>
+  );
+}
+
+interface ResourceEfficiencyKpisProps {
+  isDark: boolean;
+  kpi: KPI;
+}
+
+/** Resource efficiency (CPU & RAM) KPIs */
+export function ResourceEfficiencyKpis({ isDark, kpi }: ResourceEfficiencyKpisProps) {
+  const hasRss = kpi.avg_peak_rss_bytes != null;
+  const hasP95Rss = kpi.p95_peak_rss_bytes != null;
+  const hasContainer = kpi.max_container_peak_bytes != null;
+  const hasCpu = kpi.avg_turn_cpu_ms != null;
+
+  return (
+    <div>
+      <h3 className={`text-xs font-semibold uppercase tracking-wide mb-2 ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+        System · Resource efficiency (CPU & RAM)
+      </h3>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiCard
+          icon={HardDrive}
+          label="Avg Worker RAM (RSS)"
+          value={hasRss ? fmtBytes(kpi.avg_peak_rss_bytes) : '—'}
+          sub={hasP95Rss ? `p95: ${fmtBytes(kpi.p95_peak_rss_bytes)}` : 'resident set size per worker'}
+          iconColor="text-cyan-400"
+          isDark={isDark}
+        />
+        <KpiCard
+          icon={HardDrive}
+          label="Peak Worker RAM"
+          value={hasP95Rss ? fmtBytes(kpi.p95_peak_rss_bytes) : '—'}
+          sub="95th percentile worker ceiling"
+          iconColor="text-sky-400"
+          isDark={isDark}
+        />
+        <KpiCard
+          icon={Cpu}
+          label="Avg Turn CPU Time"
+          value={hasCpu ? fmtMs(kpi.avg_turn_cpu_ms) : '—'}
+          sub="active pipeline compute / turn"
+          iconColor="text-violet-400"
+          isDark={isDark}
+        />
+        <KpiCard
+          icon={HardDrive}
+          label="Container Peak RAM"
+          value={hasContainer ? fmtBytes(kpi.max_container_peak_bytes) : '—'}
+          sub="cgroup observed maximum"
+          iconColor="text-indigo-400"
+          isDark={isDark}
+        />
       </div>
     </div>
   );

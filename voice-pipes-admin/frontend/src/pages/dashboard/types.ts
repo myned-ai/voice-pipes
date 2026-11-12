@@ -109,6 +109,11 @@ export interface KPI {
   // Window rollup of the S2S provider
   // endpointing lag. Optional until the analytics API ships it.
   avg_provider_endpointing_ms?: number | null;
+  // Worker resource efficiency (CPU & RAM)
+  avg_peak_rss_bytes?: number | null;
+  p95_peak_rss_bytes?: number | null;
+  max_container_peak_bytes?: number | null;
+  avg_turn_cpu_ms?: number | null;
   // Business outcomes / CSAT (present only when captures carry tags).
   contained?: number;
   escalated?: number;

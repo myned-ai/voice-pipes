@@ -34,7 +34,10 @@ _log = logging.getLogger("voice_pipes.analytics")
 
 # Schema version — bump when the shape of a per-session rollup payload changes
 # so old rows in rollups.db are transparently invalidated.
-_ROLLUP_SCHEMA = 7  # v7: per-utterance `chain_overhead_ms` is the
+_ROLLUP_SCHEMA = 8  # v8: worker resource telemetry — peak_rss_bytes,
+                    # container_peak_memory_bytes, avg_turn_cpu_ms in session rollups
+                    # and window KPI aggregates.
+                    # v7: per-utterance `chain_overhead_ms` is the
                     # post-processors' share only (0 with none configured)
                     # and the realtime pacer's wait is `pacer_wait_ms`.
                     # v6: a torn line in an event file no longer ends the
@@ -577,6 +580,13 @@ def _compute_session_rollup(session_dir: Path, meta: dict, *, lite: bool = False
         "turns_over_realtime": sum(1 for v in emit_rtf_vals if v > 1.0),
     }
 
+    # Worker resource efficiency (CPU & RAM) from session metadata
+    resources = {
+        "peak_rss_bytes": meta.get("peak_rss_bytes"),
+        "container_peak_memory_bytes": meta.get("container_peak_memory_bytes"),
+        "avg_turn_cpu_ms": meta.get("avg_turn_cpu_ms"),
+    }
+
     return {
         "utterances": utts,
         "total_latencies": s_total_latencies,
@@ -586,6 +596,7 @@ def _compute_session_rollup(session_dir: Path, meta: dict, *, lite: bool = False
         "failed_session": failed_session,
         "anomaly": anomaly,
         "throughput": throughput,
+        "resources": resources,
     }
 
 
@@ -743,6 +754,10 @@ def _compute_analytics_window(
     # S2S provider endpointing over the window: how late the provider noticed
     # the end of speech, per S2S turn.
     provider_endpt_window: list[float] = []
+    # Resource metrics distributions over the window
+    peak_rss_window: list[int] = []
+    container_peak_window: list[int] = []
+    avg_turn_cpu_window: list[float] = []
 
     def _add_cost(provider: str | None, component: str, cost: float | None) -> None:
         """Bump ``spend_by_provider`` for the given (provider, component) pair.
@@ -811,6 +826,14 @@ def _compute_analytics_window(
             if isinstance(u.get("provider_endpointing_ms"), (int, float))
         )
 
+        _res = contrib.get("resources") or {}
+        if isinstance(_res.get("peak_rss_bytes"), int) and _res["peak_rss_bytes"] > 0:
+            peak_rss_window.append(_res["peak_rss_bytes"])
+        if isinstance(_res.get("container_peak_memory_bytes"), int) and _res["container_peak_memory_bytes"] > 0:
+            container_peak_window.append(_res["container_peak_memory_bytes"])
+        if isinstance(_res.get("avg_turn_cpu_ms"), (int, float)) and _res["avg_turn_cpu_ms"] >= 0:
+            avg_turn_cpu_window.append(float(_res["avg_turn_cpu_ms"]))
+
         # Business outcome + CSAT from this session's metadata.
         oc = meta.get("outcome")
         if oc in outcome_counts:
@@ -852,6 +875,9 @@ def _compute_analytics_window(
 
     emit_sorted = sorted(emit_rtf_window)
     emit_p90_idx = min(len(emit_sorted) - 1, int(len(emit_sorted) * 0.9)) if emit_sorted else 0
+
+    rss_sorted = sorted(peak_rss_window)
+    rss_p95_idx = min(len(rss_sorted) - 1, int(len(rss_sorted) * 0.95)) if rss_sorted else 0
 
     # Error rate is per-turn: failed turns / (successful turns + failed turns).
     # `len(utterances)` already counts every turn we saw a `turn_resolved`
@@ -906,6 +932,25 @@ def _compute_analytics_window(
         "avg_provider_endpointing_ms": (
             round(sum(provider_endpt_window) / len(provider_endpt_window), 1)
             if provider_endpt_window else None
+        ),
+        # Worker resource efficiency (CPU & RAM):
+        # Average & p95 peak worker RSS bytes, maximum container peak memory bytes,
+        # and mean turn CPU compute time (ms).
+        "avg_peak_rss_bytes": (
+            int(round(sum(peak_rss_window) / len(peak_rss_window)))
+            if peak_rss_window else None
+        ),
+        "p95_peak_rss_bytes": (
+            rss_sorted[rss_p95_idx]
+            if rss_sorted else None
+        ),
+        "max_container_peak_bytes": (
+            max(container_peak_window)
+            if container_peak_window else None
+        ),
+        "avg_turn_cpu_ms": (
+            round(sum(avg_turn_cpu_window) / len(avg_turn_cpu_window), 1)
+            if avg_turn_cpu_window else None
         ),
         # Business outcomes / CSAT (None when the captures carry no
         # outcome tags, so the FE cards hide gracefully).

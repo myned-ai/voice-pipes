@@ -1,6 +1,7 @@
 import { CheckCircle, AlertTriangle, XCircle } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import type { Slo } from '../lib/slo';
+import { fmtBytes, fmtMs } from '../pages/dashboard/format';
 import { deriveSystemHealth, type HealthLevel, type KpiLike } from './systemStatusStrip.logic';
 
 /* ── L0 "is the system healthy?" glance strip ──────────────────
@@ -68,6 +69,12 @@ export default function SystemStatusStrip({ kpi, slo, latencyBreachPct, windowLa
         {health.signals.map((s) => (
           <Chip key={s.key} label={s.label} value={s.detail} valueClass={signalColor(s.level, isDark)} isDark={isDark} />
         ))}
+        {kpi.avg_peak_rss_bytes != null && (
+          <Chip label="RAM" value={fmtBytes(kpi.avg_peak_rss_bytes)} isDark={isDark} />
+        )}
+        {kpi.avg_turn_cpu_ms != null && (
+          <Chip label="CPU" value={fmtMs(kpi.avg_turn_cpu_ms)} isDark={isDark} />
+        )}
         {kpi.spend_total_usd != null && (
           <Chip label="Spend" value={`$${kpi.spend_total_usd.toFixed(2)}`} isDark={isDark} />
         )}

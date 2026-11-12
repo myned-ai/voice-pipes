@@ -15,6 +15,8 @@ export interface KpiLike {
   p95_latency_ms?: number | null;
   spend_total_usd?: number;
   spend_by_provider?: Record<string, { cap_pct: number | null }>;
+  avg_peak_rss_bytes?: number | null;
+  avg_turn_cpu_ms?: number | null;
 }
 
 export interface SystemSignal {

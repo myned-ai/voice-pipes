@@ -17,6 +17,7 @@ export interface DashboardSection {
 export const DASHBOARD_SECTIONS: DashboardSection[] = [
   { id: 'health', label: 'Live pipelines & health', group: 'Overview' },
   { id: 'kpis', label: 'Summary KPI cards', group: 'Overview' },
+  { id: 'resources', label: 'Resource efficiency (CPU & RAM)', group: 'Overview' },
   { id: 'audioQuality', label: 'Audio quality KPIs', group: 'Overview', productionOnly: true },
   { id: 'business', label: 'Business / cost efficiency', group: 'Cost', productionOnly: true },
   { id: 'failedSessions', label: 'Failed sessions', group: 'Reliability' },

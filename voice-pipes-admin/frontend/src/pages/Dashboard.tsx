@@ -16,7 +16,7 @@ import { useCollapsed, usePagedTable } from './dashboard/tableState';
 import { clearDashboardMetrics, useDashboardData } from './dashboard/useDashboardData';
 import { useDashboardMetrics } from './dashboard/useDashboardMetrics';
 import { DashboardHeader } from './dashboard/DashboardHeader';
-import { AudioQualityKpis, BusinessKpis, KpiCards, QuotaAlerts } from './dashboard/KpiSections';
+import { AudioQualityKpis, BusinessKpis, KpiCards, QuotaAlerts, ResourceEfficiencyKpis } from './dashboard/KpiSections';
 import { FailedSessionsTable, PipelineMatrixTable, ProviderSpendTable, TokenUsageTable } from './dashboard/DashboardTables';
 import { CostByPipelineChart, LatencyByPipelineChart } from './dashboard/BucketedCharts';
 import { PipelineFilter, ProviderChipFilters } from './dashboard/Filters';
@@ -330,6 +330,17 @@ export default function Dashboard({ productionMode = DASHBOARD_PRODUCTION_MODE }
               priorDeltas={priorDeltas}
               productionMode={productionMode}
             />
+            )}
+
+            {/* ── Resource efficiency (CPU & RAM) ─────────────
+                Worker process memory footprint (RSS) and active pipeline
+                compute per turn. Toggleable in the Customize menu and
+                persisted in localStorage. */}
+            {isVisible('resources') && (kpi.avg_peak_rss_bytes != null || kpi.avg_turn_cpu_ms != null || kpi.max_container_peak_bytes != null) && (
+              <ResourceEfficiencyKpis
+                isDark={isDark}
+                kpi={kpi}
+              />
             )}
 
             {/* ── Audio quality KPIs (P3 #16) ───────────────
