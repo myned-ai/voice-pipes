@@ -937,7 +937,7 @@ def _compute_analytics_window(
         # Average & p95 peak worker RSS bytes, maximum container peak memory bytes,
         # and mean turn CPU compute time (ms).
         "avg_peak_rss_bytes": (
-            int(round(sum(peak_rss_window) / len(peak_rss_window)))
+            round(sum(peak_rss_window) / len(peak_rss_window))
             if peak_rss_window else None
         ),
         "p95_peak_rss_bytes": (

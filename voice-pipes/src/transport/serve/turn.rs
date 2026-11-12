@@ -746,8 +746,8 @@ pub(super) fn make_session_record(
     let peak_rss_bytes = aggregator
         .and_then(|a| a.peak_rss_bytes)
         .or_else(crate::telemetry::resources::read_linux_rss);
-    let avg_turn_cpu_ms = aggregator
-        .and_then(|a| (a.turns > 0).then(|| a.total_cpu_time_ms / a.turns as u64));
+    let avg_turn_cpu_ms =
+        aggregator.and_then(|a| (a.turns > 0).then(|| a.total_cpu_time_ms / a.turns as u64));
     let container_peak_memory_bytes = crate::telemetry::resources::read_container_peak_memory();
 
     crate::api::types::SessionRecord {

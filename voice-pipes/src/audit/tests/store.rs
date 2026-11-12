@@ -765,27 +765,26 @@ async fn sqlite_session_store_migrates_legacy_database_without_tenant_id() {
     rm_db(&path);
 
     // Create a legacy schema database WITHOUT tenant_id column
-    {
-        let conn = rusqlite::Connection::open(&path).unwrap();
-        conn.execute_batch(
-            "CREATE TABLE sessions (
-                 id                   TEXT PRIMARY KEY,
-                 worker_id            TEXT NOT NULL,
-                 started_at           TEXT NOT NULL,
-                 ended_at             TEXT,
-                 status               TEXT NOT NULL,
-                 pipeline_name        TEXT,
-                 pipeline_config_hash TEXT,
-                 tags                 TEXT NOT NULL DEFAULT '[]',
-                 turn_count           INTEGER NOT NULL DEFAULT 0,
-                 data                 TEXT NOT NULL
-             );
-             CREATE INDEX idx_sessions_started ON sessions(started_at DESC);
-             CREATE INDEX idx_sessions_status  ON sessions(status);
-             CREATE INDEX idx_sessions_worker  ON sessions(worker_id);",
-        )
-        .unwrap();
-    }
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    conn.execute_batch(
+        "CREATE TABLE sessions (
+             id                   TEXT PRIMARY KEY,
+             worker_id            TEXT NOT NULL,
+             started_at           TEXT NOT NULL,
+             ended_at             TEXT,
+             status               TEXT NOT NULL,
+             pipeline_name        TEXT,
+             pipeline_config_hash TEXT,
+             tags                 TEXT NOT NULL DEFAULT '[]',
+             turn_count           INTEGER NOT NULL DEFAULT 0,
+             data                 TEXT NOT NULL
+         );
+         CREATE INDEX idx_sessions_started ON sessions(started_at DESC);
+         CREATE INDEX idx_sessions_status  ON sessions(status);
+         CREATE INDEX idx_sessions_worker  ON sessions(worker_id);",
+    )
+    .unwrap();
+    drop(conn);
 
     // Opening with SqliteSessionStore must succeed and migrate the schema
     let store = SqliteSessionStore::new(path.clone(), 100).unwrap();

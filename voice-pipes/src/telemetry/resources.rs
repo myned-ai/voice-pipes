@@ -207,8 +207,8 @@ mod tests {
             rss_bytes: 62_000_000,
         };
 
-        let usage = compute_turn_resources(Some(start), Some(end))
-            .expect("should compute resource usage");
+        let usage =
+            compute_turn_resources(Some(start), Some(end)).expect("should compute resource usage");
 
         assert_eq!(usage.cpu_time_ms, Some(250));
         assert_eq!(usage.rss_bytes, Some(62_000_000));

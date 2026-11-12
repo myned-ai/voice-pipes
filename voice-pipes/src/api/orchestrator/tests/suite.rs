@@ -534,10 +534,16 @@ api_key = "super-secret-key-12345"
     let graph = build_pipeline_graph(Some(&cfg));
 
     let rendered = graph.raw_toml.expect("raw_toml should be populated");
-    assert!(!rendered.contains("super-secret-key-12345"), "secret must be redacted");
+    assert!(
+        !rendered.contains("super-secret-key-12345"),
+        "secret must be redacted"
+    );
     assert!(
         rendered.contains(crate::config::redact::REDACTED),
         "secret must be replaced with REDACTED placeholder"
     );
-    assert!(rendered.contains("name = 'secure-pipeline'") || rendered.contains("name = \"secure-pipeline\""));
+    assert!(
+        rendered.contains("name = 'secure-pipeline'")
+            || rendered.contains("name = \"secure-pipeline\"")
+    );
 }
