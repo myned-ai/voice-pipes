@@ -82,7 +82,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
 RUN --mount=type=cache,target=/root/.cache/ort.pyke.io,sharing=locked \
     mkdir -p /app/ort-libs \
     && find /app/target/release /root/.cache/ort.pyke.io -name 'libonnxruntime_providers_*.so' \
-        -exec cp -n {} /app/ort-libs/ \; \
+        -exec cp --update=none {} /app/ort-libs/ \; \
     && ls -l /app/ort-libs/libonnxruntime_providers_shared.so /app/ort-libs/libonnxruntime_providers_cuda.so
 
 # ── Runtime: CUDA + cuDNN runtime libs (cublas/cudart/cudnn for ort & candle) ──
