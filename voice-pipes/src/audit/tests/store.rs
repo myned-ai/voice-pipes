@@ -392,6 +392,9 @@ fn mk_session(id: &str, status: SessionStatus) -> SessionRecord {
         output_sample_rate: Some(24_000),
         tags: vec![],
         turn_count: 0,
+        peak_rss_bytes: None,
+        container_peak_memory_bytes: None,
+        avg_turn_cpu_ms: None,
     }
 }
 

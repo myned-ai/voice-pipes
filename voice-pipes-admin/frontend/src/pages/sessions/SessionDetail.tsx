@@ -287,6 +287,47 @@ export default function SessionDetail() {
                   ({formatDuration(data.metadata.started_at, data.metadata.ended_at)})
                 </span>
               )}
+              {/* Session-level process and runtime resource summary chips */}
+              {data.metadata?.peak_rss_bytes != null && (() => {
+                const rssMb = (data.metadata.peak_rss_bytes / (1024 * 1024)).toFixed(1);
+                const cgroupMb = data.metadata.container_peak_memory_bytes != null
+                  ? (data.metadata.container_peak_memory_bytes / (1024 * 1024)).toFixed(0)
+                  : null;
+                const tip = [
+                  `Peak process physical memory (RSS): ${rssMb} MB`,
+                  cgroupMb ? `Peak container memory (cgroups): ${cgroupMb} MB` : null,
+                  'Deterministic memory management with zero GC pauses',
+                ].filter(Boolean).join(' · ');
+                return (
+                  <>
+                    <span className={isDark ? 'text-slate-600' : 'text-gray-300'}>·</span>
+                    <span
+                      className={`inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded-full ring-1 ${
+                        isDark ? 'bg-cyan-500/15 text-cyan-300 ring-cyan-500/30' : 'bg-cyan-50 text-cyan-700 ring-cyan-300'
+                      }`}
+                      title={tip}
+                    >
+                      <span>⚡ Peak RAM:</span>
+                      <span className="font-bold">{rssMb} MB</span>
+                      {cgroupMb && <span className="opacity-70 text-[10px]">({cgroupMb}M container)</span>}
+                    </span>
+                  </>
+                );
+              })()}
+              {data.metadata?.avg_turn_cpu_ms != null && (
+                <>
+                  <span className={isDark ? 'text-slate-600' : 'text-gray-300'}>·</span>
+                  <span
+                    className={`inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded-full ring-1 ${
+                      isDark ? 'bg-teal-500/15 text-teal-300 ring-teal-500/30' : 'bg-teal-50 text-teal-700 ring-teal-300'
+                    }`}
+                    title={`Average CPU time consumed per turn across this session: ${data.metadata.avg_turn_cpu_ms} ms`}
+                  >
+                    <span>⏱️ Avg Turn CPU:</span>
+                    <span className="font-bold">{data.metadata.avg_turn_cpu_ms} ms</span>
+                  </span>
+                </>
+              )}
             </div>
 
             {/* Action row: report copy + view controls, equal 32px heights.

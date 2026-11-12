@@ -1586,6 +1586,9 @@ fn session_record_from_capture_meta(
         output_sample_rate: u32_field("output_sample_rate"),
         tags,
         turn_count: count_resolved_turns(dir),
+        peak_rss_bytes: None,
+        container_peak_memory_bytes: None,
+        avg_turn_cpu_ms: None,
     }
 }
 

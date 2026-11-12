@@ -125,6 +125,20 @@ this page is the short version.
 | `breaker_open` | `raw` | `engine` | `turn_start` → `turn_end` | Whether circuit breaker opened during turn |
 <!-- generated:end metrics -->
 
+## System & Runtime Resources
+
+Captured per turn and aggregated per session for performance auditing, density planning and demonstrating Rust's low-overhead deterministic execution.
+
+| Key | Unit | Owner | Anchors | Meaning / Includes |
+|---|---|---|---|---|
+| `rss_bytes` | `bytes` | `engine` | `turn_end` | Physical resident memory (RSS) of the worker process at turn completion, read via `/proc/self/statm` |
+| `rss_delta_bytes` | `bytes` | `engine` | `turn_start` → `turn_end` | Net change in process physical RAM across the turn; proves flat, zero-GC memory allocation |
+| `cpu_percent` | `percent` | `engine` | `turn_start` → `turn_end` | Effective multi-core CPU utilization consumed by the worker process during the turn |
+| `cpu_time_ms` | `ms` | `engine` | `turn_start` → `turn_end` | Total CPU time consumed (user + system) during the turn |
+| `peak_rss_bytes` | `bytes` | `engine` | `session_start` → `session_end` | Maximum physical resident RAM observed across the entire session |
+| `container_peak_memory_bytes` | `bytes` | `engine` | `session_start` → `session_end` | Container peak memory usage from Linux cgroups v2 (`/sys/fs/cgroup/memory.peak`) |
+| `avg_turn_cpu_ms` | `ms` | `engine` | `session_start` → `session_end` | Mean CPU processing time consumed per turn across the session |
+
 ## Client-reported
 
 Only the client can measure these; they arrive as `timing_report` and

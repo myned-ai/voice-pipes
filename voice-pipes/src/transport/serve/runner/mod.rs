@@ -157,6 +157,7 @@ pub async fn run_session(session: Box<dyn TransportSession + Send>, state: Arc<T
             tags,
             None,
             &state,
+            None,
         );
         turn::emit_record(tx, rec, "session");
     }

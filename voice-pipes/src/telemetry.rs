@@ -1,5 +1,7 @@
 //! Observability setup -- tracing subscriber and OpenTelemetry export.
 
+pub mod resources;
+
 #[cfg(feature = "telemetry")]
 use opentelemetry::trace::TracerProvider as _;
 #[cfg(feature = "telemetry")]
