@@ -117,6 +117,7 @@ pub fn build_pipeline_graph(cfg: Option<&PipelineConfig>) -> PipelineGraphRespon
                 side: None,
                 tapped_nodes: vec![],
             },
+            raw_toml: None,
         };
     };
 
@@ -419,6 +420,31 @@ pub fn build_pipeline_graph(cfg: Option<&PipelineConfig>) -> PipelineGraphRespon
             side: tap.side.clone(),
             tapped_nodes,
         },
+        raw_toml: render_redacted_toml(cfg),
+    }
+}
+
+fn render_redacted_toml(cfg: &PipelineConfig) -> Option<String> {
+    let mut val = serde_json::to_value(cfg).ok()?;
+    crate::config::redact::redact_secrets(&mut val);
+    prune_nulls(&mut val);
+    toml::to_string_pretty(&val).ok()
+}
+
+fn prune_nulls(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(map) => {
+            map.retain(|_, v| !v.is_null());
+            for v in map.values_mut() {
+                prune_nulls(v);
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for v in items.iter_mut() {
+                prune_nulls(v);
+            }
+        }
+        _ => {}
     }
 }
 
@@ -544,5 +570,6 @@ fn build_realtime_pipeline_graph(
             side: None,
             tapped_nodes: vec![],
         },
+        raw_toml: render_redacted_toml(cfg),
     }
 }

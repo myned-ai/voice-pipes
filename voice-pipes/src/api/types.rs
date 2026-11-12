@@ -651,6 +651,8 @@ pub struct PipelineGraphResponse {
     pub nodes: Vec<PipelineNode>,
     pub edges: Vec<PipelineEdge>,
     pub audit_tap: PipelineAuditTap,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raw_toml: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

@@ -519,3 +519,25 @@ fn pipeline_graph_takes_the_tts_rate_from_the_provider() {
         "a configured output rate still shows"
     );
 }
+
+#[test]
+fn pipeline_graph_raw_toml_rendered_and_redacted() {
+    let raw = r#"
+[pipeline]
+name = "secure-pipeline"
+
+[stt]
+provider = "deepgram"
+api_key = "super-secret-key-12345"
+"#;
+    let cfg: PipelineConfig = toml::from_str(raw).expect("valid pipeline config");
+    let graph = build_pipeline_graph(Some(&cfg));
+
+    let rendered = graph.raw_toml.expect("raw_toml should be populated");
+    assert!(!rendered.contains("super-secret-key-12345"), "secret must be redacted");
+    assert!(
+        rendered.contains(crate::config::redact::REDACTED),
+        "secret must be replaced with REDACTED placeholder"
+    );
+    assert!(rendered.contains("name = 'secure-pipeline'") || rendered.contains("name = \"secure-pipeline\""));
+}

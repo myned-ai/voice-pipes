@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import axios from 'axios'
 import ReactFlow, { Background, Controls, applyNodeChanges, applyEdgeChanges } from 'reactflow'
 import type { Node, Edge, NodeChange, EdgeChange, ReactFlowInstance } from 'reactflow'
-import { Activity, AudioLines, Gauge, WifiOff, Users, Tag, Globe, Hash, Cpu } from 'lucide-react'
+import { Activity, AudioLines, FileCode, Gauge, WifiOff, Users, Tag, Globe, Hash, Cpu } from 'lucide-react'
 import 'reactflow/dist/style.css'
 import { useTheme } from '../contexts/ThemeContext';
 import { API_BASE } from '../config/api';
@@ -12,6 +12,7 @@ import { FLEET_COLORS, healthBadgeStyle } from './livePipeline/styles';
 import type { GraphLayout, HealthSnapshot, LiveMetrics, LiveWorker, OverallMetrics, PatchParamsResp, PipelineFlowNode } from './livePipeline/types';
 import { CustomPipelineNode } from './livePipeline/PipelineNode';
 import { emptyGraphMessage, workerOptionLabel } from './livePipeline/labels';
+import { RawConfigDrawer } from './livePipeline/RawConfigDrawer';
 
 /** Best-effort error text for a failed PATCH: the BFF/orchestrator error body
  *  (`error` / `message`), then the axios/Error message, then a fallback. */
@@ -32,6 +33,9 @@ export default function LivePipeline() {
   const [rfInstance, setRfInstance] = useState<ReactFlowInstance | null>(null);
   const [showMetrics, setShowMetrics] = useState(false);
   const [showResample, setShowResample] = useState(false);
+  const [showRawConfig, setShowRawConfig] = useState(false);
+  const [rawToml, setRawToml] = useState<string | null>(null);
+  const [pipelineName, setPipelineName] = useState<string>('');
   const [showWorkers, setShowWorkers] = useState(false);
   const [workers, setWorkers] = useState<LiveWorker[]>([]);
   const [overallMetrics, setOverallMetrics] = useState<OverallMetrics | null>(null);
@@ -188,9 +192,14 @@ export default function LivePipeline() {
         if (failure) {
           setRawNodes([]);
           setRawEdges([]);
+          setRawToml(null);
           return;
         }
         const pipeline = res.data.data;
+        if (pipeline) {
+          setRawToml(pipeline.raw_toml ?? null);
+          setPipelineName(pipeline.name || 'voice-pipeline');
+        }
         if (pipeline && pipeline.nodes) {
            const mappedNodes: PipelineFlowNode[] = pipeline.nodes.map((n, i) => {
              const metaProvider = n.metadata?.provider;
@@ -475,6 +484,28 @@ export default function LivePipeline() {
               {showResample ? 'Hide Resamplers' : 'Show Resamplers'}
             </button>
 
+            <button 
+              onClick={() => setShowRawConfig(true)}
+              style={{
+                background: showRawConfig ? (isDark ? '#1e3a5f' : '#dbeafe') : 'transparent',
+                border: showRawConfig ? (isDark ? '1px solid #3b82f6' : '1px solid #60a5fa') : '1px solid transparent',
+                color: showRawConfig ? (isDark ? '#60a5fa' : '#2563eb') : (isDark ? '#94a3b8' : '#64748b'),
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 12px',
+                borderRadius: '8px',
+                fontWeight: 600,
+                fontSize: '12px',
+                transition: 'all 0.2s',
+              }}
+              title="View Raw Pipeline Configuration (TOML)"
+            >
+              <FileCode size={16} />
+              Raw Config
+            </button>
+
             <div style={{ width: '1px', height: '24px', background: isDark ? '#334155' : '#e2e8f0' }} />
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: isDark ? '#334155' : '#f1f5f9', padding: '6px 12px', borderRadius: '8px' }}>
@@ -749,6 +780,14 @@ export default function LivePipeline() {
           )}
 
         </main>
+
+        <RawConfigDrawer
+          open={showRawConfig}
+          onClose={() => setShowRawConfig(false)}
+          pipelineName={pipelineName}
+          workerId={selectedWorkerId}
+          tomlContent={rawToml}
+        />
       </div>
   )
 }
