@@ -318,6 +318,13 @@ foreach ($sidecar in $sidecars) {
                 if ($hStatus -eq "healthy") {
                     $ready = $true
                     Write-Host "[+] Sidecar '$sidecar' is healthy and ready." -ForegroundColor Green
+                    if ($sidecar -eq "llama-server") {
+                        try {
+                            $warmupBody = '{"model":"default","messages":[{"role":"user","content":"hi"}],"max_tokens":1}'
+                            Invoke-RestMethod -Uri "http://127.0.0.1:8081/v1/chat/completions" -Method Post -Body $warmupBody -ContentType "application/json" -TimeoutSec 10 2>$null | Out-Null
+                            Write-Host "   llama-server CUDA graphs & KV cache warmed." -ForegroundColor DarkGray
+                        } catch {}
+                    }
                     break
                 }
                 Start-Sleep -Seconds 2

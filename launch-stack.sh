@@ -290,6 +290,12 @@ for sidecar in $SIDECAR_SERVICES; do
                 if [ "$h_status" = "healthy" ]; then
                     ready=true
                     echo "✓ Sidecar '$sidecar' is healthy and ready."
+                    if [ "$sidecar" = "llama-server" ]; then
+                        curl -sf -X POST http://127.0.0.1:8081/v1/chat/completions \
+                            -H "Content-Type: application/json" \
+                            -d '{"model":"default","messages":[{"role":"user","content":"hi"}],"max_tokens":1}' >/dev/null 2>&1 || true
+                        echo "  [+] llama-server CUDA graphs & KV cache warmed."
+                    fi
                     break
                 fi
                 sleep 2
