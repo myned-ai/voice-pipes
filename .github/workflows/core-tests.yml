@@ -333,6 +333,9 @@ jobs:
   sdk-semver:
     name: SDK API compatibility
     # A change that breaks the SDK's public API must say so in its version.
+    # Not on tag pushes: a tag has no `origin/<tag>` branch to compare against,
+    # and the branch push of the same commit already ran this check.
+    if: github.ref_type != 'tag'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
