@@ -4614,6 +4614,7 @@ dependencies = [
  "voice-pipes-tts-elevenlabs",
  "voice-pipes-tts-gemini",
  "voice-pipes-tts-kokoro",
+ "voice-pipes-tts-neutts",
  "voice-pipes-tts-openai",
  "voice-pipes-tts-piper",
  "voice-pipes-tts-pocket",
@@ -4933,6 +4934,27 @@ dependencies = [
  "voice-pipes-onnx",
  "voice-pipes-sdk",
  "zip",
+]
+
+[[package]]
+name = "voice-pipes-tts-neutts"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "candle-core",
+ "candle-transformers",
+ "ort",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "tokenizers",
+ "tokio",
+ "tokio-util",
+ "toml",
+ "tracing",
+ "voice-pipes-onnx",
+ "voice-pipes-sdk",
 ]
 
 [[package]]

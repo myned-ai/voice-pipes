@@ -1,0 +1,40 @@
+[package]
+name = "voice-pipes-tts-neutts"
+version.workspace = true
+edition = "2024"
+description = "Neuphonic NeuTTS-Air text-to-speech (local GGUF Qwen2 + ONNX NeuCodec) as a voice-pipes plugin, on the SDK only"
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+voice-pipes-sdk.workspace = true
+voice-pipes-onnx = { workspace = true, features = ["session"] }
+anyhow.workspace = true
+async-trait.workspace = true
+candle-core.workspace = true
+candle-transformers.workspace = true
+ort.workspace = true
+parking_lot.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+tokenizers = { workspace = true, features = ["onig"] }
+tokio = { workspace = true, features = ["sync", "rt"] }
+tokio-util.workspace = true
+tracing.workspace = true
+
+[features]
+# Run the ONNX vocoder on CUDA when `VP_ORT_EP=cuda` (or the provider's own
+# `execution_provider = "cuda"`).
+ort-cuda = ["ort/cuda", "voice-pipes-onnx/cuda"]
+
+[dev-dependencies]
+voice-pipes-sdk = { workspace = true, features = ["testing"] }
+tokio = { workspace = true, features = ["sync", "rt-multi-thread", "macros"] }
+toml.workspace = true

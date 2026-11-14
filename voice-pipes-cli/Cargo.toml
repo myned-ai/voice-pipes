@@ -45,6 +45,7 @@ ort-cuda = [
     "voice-pipes-stt-nemotron?/ort-cuda",
     "voice-pipes-stt-nemotron35?/ort-cuda",
     "voice-pipes-tts-kokoro?/ort-cuda",
+    "voice-pipes-tts-neutts?/ort-cuda",
 ]
 # A plugin with every linked ONNX provider on CUDA: the same as naming the
 # plugin and `ort-cuda`, kept for the builds that already name it.
@@ -98,6 +99,8 @@ tts-openai = ["dep:voice-pipes-tts-openai"]
 tts-elevenlabs = ["dep:voice-pipes-tts-elevenlabs"]
 # Google Gemini TTS (REST).
 tts-gemini = ["dep:voice-pipes-tts-gemini"]
+# NeuTTS-Air, local GGUF + ONNX NeuCodec.
+tts-neutts = ["dep:voice-pipes-tts-neutts"]
 
 # ── Plugin LLMs ──────────────────────────────────────────────
 # Any server speaking the OpenAI chat-completions API: OpenAI, llama-server
@@ -167,6 +170,7 @@ voice-pipes-s2s-elevenlabs = { workspace = true, optional = true }
 voice-pipes-turn-smart = { workspace = true, optional = true }
 voice-pipes-turn-vap = { workspace = true, optional = true }
 voice-pipes-filter-deepfilter = { workspace = true, optional = true }
+voice-pipes-tts-neutts = { workspace = true, optional = true }
 
 mimalloc.workspace = true
 anyhow.workspace = true
