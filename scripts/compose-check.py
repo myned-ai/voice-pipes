@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check the deploy compose file as Docker resolves it.
 
-Two properties, read from `docker compose config --format json`:
+Three properties, read from `docker compose config --format json`:
 
 * No two services that start together publish the same host port. "Start
   together" is a plain `up` (the services without a profile) and a plain
@@ -9,6 +9,9 @@ Two properties, read from `docker compose config --format json`:
 * A model-server sidecar and a worker's debug API publish on loopback only:
   neither authenticates its callers on that port the way the worker's
   transport does.
+* Service commands and flags are syntactically well-formed: value-taking flags
+  are not left dangling or followed immediately by another flag, and flags
+  with enumerated choices (such as `--flash-attn on|off|auto`) receive valid values.
 
 Takes another compose file as its one argument. Exits 1 and names each
 problem; needs Docker with the Compose plugin.
@@ -17,6 +20,7 @@ problem; needs Docker with the Compose plugin.
 from __future__ import annotations
 
 import json
+import shlex
 import subprocess
 import sys
 from collections import defaultdict
@@ -33,6 +37,80 @@ SIDECARS = {"llama-server", "pocket-tts", "vibevoice"}
 
 # The container port of a worker's debug API.
 DEBUG_PORT = 8085
+
+# Flags that require a following argument across sidecars and workers.
+VALUE_FLAGS = {
+    # llama.cpp / llama-server
+    "-m", "--model",
+    "-c", "--ctx-size",
+    "-ngl", "--n-gpu-layers",
+    "-t", "--threads",
+    "-b", "--batch-size",
+    "-ub", "--ubatch-size",
+    "--port",
+    "--host",
+    "--reasoning-budget",
+    "--chat-template-kwargs",
+    "-fa", "--flash-attn",
+    # voice-pipes engine / workers / orchestrator
+    "--config",
+    "--worker-config",
+    "--orchestrator-config",
+    "--features",
+    "--url",
+    "--filter",
+    "--level",
+}
+
+FLASH_ATTN_CHOICES = {"on", "off", "auto"}
+
+
+def _is_number(s: str) -> bool:
+    try:
+        float(s)
+        return True
+    except ValueError:
+        return False
+
+
+def check_command_tokens(name: str, tokens: list[str]) -> list[str]:
+    problems = []
+    i = 0
+    while i < len(tokens):
+        tok = tokens[i]
+        if tok in VALUE_FLAGS:
+            if i + 1 >= len(tokens):
+                problems.append(f"{name}: flag {tok} is missing a required argument")
+            else:
+                val = tokens[i + 1]
+                if tok in {"-fa", "--flash-attn"}:
+                    if val not in FLASH_ATTN_CHOICES:
+                        problems.append(
+                            f"{name}: invalid value {val!r} for {tok}; expected one of {sorted(FLASH_ATTN_CHOICES)}"
+                        )
+                elif val.startswith("-") and not _is_number(val):
+                    problems.append(
+                        f"{name}: flag {tok} expects an argument but is immediately followed by flag {val}"
+                    )
+            i += 1
+        i += 1
+    return problems
+
+
+def command_syntax(services: dict) -> list[str]:
+    problems = []
+    for name, service in sorted(services.items()):
+        cmd = service.get("command")
+        if not cmd:
+            continue
+        tokens: list[str] = []
+        if isinstance(cmd, list):
+            for part in cmd:
+                tokens.extend(shlex.split(str(part)))
+        elif isinstance(cmd, str):
+            tokens.extend(shlex.split(cmd))
+        problems.extend(check_command_tokens(name, tokens))
+    return problems
 
 
 def resolved(compose: Path) -> dict:
@@ -86,7 +164,7 @@ def problems(services: dict) -> list[str]:
         members = {n for n, s in services.items() if profile in s.get("profiles", [])}
         together = (default - REPLACES.get(profile, set())) | members
         found += collisions(services, together, f"`--profile {profile} up`")
-    return found + exposure(services)
+    return found + exposure(services) + command_syntax(services)
 
 
 def self_test() -> None:
@@ -107,6 +185,16 @@ def self_test() -> None:
     assert problems({"vibevoice": svc("8091:8091")}), "a sidecar on all interfaces"
     assert problems({"w": svc("8086:8085")}), "a debug API on all interfaces"
     assert not problems({"w": svc("8800:8800", "127.0.0.1:8086:8085")}), "a clean worker"
+
+    # Command syntax verification
+    bad_fa = {"llama-server": {"command": ["/app/llama-server --flash-attn --mlock"]}}
+    assert problems(bad_fa), "--flash-attn followed by flag must fail"
+    bad_val = {"llama-server": {"command": ["/app/llama-server --flash-attn invalid"]}}
+    assert problems(bad_val), "--flash-attn with invalid value must fail"
+    trailing = {"worker": {"command": ["voice-pipes --config"]}}
+    assert problems(trailing), "trailing value flag must fail"
+    good_cmd = {"llama-server": {"command": ["/app/llama-server --flash-attn on --mlock -ngl -1"]}}
+    assert not problems(good_cmd), "valid command syntax must pass"
 
 
 def main() -> int:
