@@ -602,7 +602,7 @@ services:
         --host 0.0.0.0
         -ngl $${LLAMA_GPU_LAYERS:-99}
         -c $${LLAMA_CTX:-4096}
-        --flash-attn
+        --flash-attn on
         --mlock
         --jinja
     # The upstream image bakes in a healthcheck against port 8080; the command

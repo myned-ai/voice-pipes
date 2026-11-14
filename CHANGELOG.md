@@ -38,6 +38,8 @@ migration note.
 
 ### Fixed
 
+- Docker: specify `--flash-attn on` for `llama-server` sidecar to prevent
+  `--mlock` from being parsed as an invalid flash-attn option.
 - Audit store: a legacy SQLite schema is migrated before the tenant index is
   created, so existing capture databases open after upgrading.
 - `Dockerfile.cuda`: replaced deprecated `cp -n` with `cp --update=none`.
