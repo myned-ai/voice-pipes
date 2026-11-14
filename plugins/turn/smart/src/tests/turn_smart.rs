@@ -220,7 +220,7 @@ fn the_wizard_entry_writes_what_the_built_in_one_did() {
         .expect("offered in the wizard");
     assert_eq!(
         choice.render_defaults("mode", "smart").toml,
-        "mode = \"smart\"\nsilence_timeout_ms = 2000\n\
+        "mode = \"smart\"\nsilence_timeout_ms = 600\n\
          smart_model_path = \"models/smart-turn-v3.2-cpu.onnx\"\nsmart_threshold = 0.5\n\
          smart_window_secs = 8\nsmart_min_audio_ms = 500\n"
     );

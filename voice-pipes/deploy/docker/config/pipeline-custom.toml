@@ -31,7 +31,7 @@ model = "models/silero_vad.onnx"
 
 [turn_detection]
 mode = "smart"
-silence_timeout_ms = 500
+silence_timeout_ms = 600
 smart_model_path = "models/smart-turn-v3.2-cpu.onnx"
 smart_threshold = 0.5
 smart_window_secs = 8

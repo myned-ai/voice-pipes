@@ -14,7 +14,7 @@ pub fn wizard_choices() -> Vec<WizardChoice> {
                 "https://huggingface.co/pipecat-ai/smart-turn-v3/resolve/main/smart-turn-v3.2-cpu.onnx",
             )],
         }).with_feature(Some(FEATURE.into())).with_fields(vec![
-            WizardField::fixed_literal("silence_timeout_ms", "2000"),
+            WizardField::fixed_literal("silence_timeout_ms", "600"),
             // Relative to the worker's working directory (/app in the
             // images), matching the mounted models/ volume.
             WizardField::path(
