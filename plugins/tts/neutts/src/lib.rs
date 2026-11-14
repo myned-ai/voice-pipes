@@ -188,8 +188,14 @@ impl TtsProvider for NeuTtsAir {
             .await
             .map_err(|e| TtsError::busy(format!("vocoder pool checkout failed: {e}")))?;
 
-        // Phonemize via voice_pipes_sdk::phonemize runner
-        let phonemes = voice_pipes_sdk::phonemize::run_espeak_with_language(&text, "en-us")?;
+        // Run phonemization on blocking threadpool to protect Tokio reactor
+        let text_clone = text.clone();
+        let phonemes = tokio::task::spawn_blocking(move || {
+            voice_pipes_sdk::phonemize::run_espeak_with_language(&text_clone, "en-us")
+        })
+        .await
+        .map_err(|e| TtsError::PhonemizationFailed(format!("phonemize join error: {e}")))?
+        ?;
 
         if cancel.is_cancelled() {
             return Ok(());
@@ -199,7 +205,11 @@ impl TtsProvider for NeuTtsAir {
         let tokens: Vec<i64> = phonemes.chars().map(|c| (c as i64) % 1024).collect();
 
         if !tokens.is_empty() {
-            let samples = slot.decode_tokens(&tokens)?;
+            let samples = tokio::task::spawn_blocking(move || slot.decode_tokens(&tokens))
+                .await
+                .map_err(|e| TtsError::InferenceFailed(format!("decode join error: {e}")))?
+                ?;
+
             if !samples.is_empty() && !cancel.is_cancelled() {
                 let frame = AudioFrame {
                     samples,

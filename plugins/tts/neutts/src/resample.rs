@@ -53,4 +53,14 @@ mod tests {
         let out = resample_24k_to_16k(&input);
         assert_eq!(out.len(), 4);
     }
+
+    #[test]
+    fn preserves_dc_signal() {
+        let input = vec![10_000i16; 30];
+        let out = resample_24k_to_16k(&input);
+        assert_eq!(out.len(), 20);
+        for s in out {
+            assert_eq!(s, 10_000i16);
+        }
+    }
 }
