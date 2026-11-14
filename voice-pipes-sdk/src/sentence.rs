@@ -92,15 +92,10 @@ fn should_skip_period_boundary(buffer: &str, idx: usize, len: usize) -> bool {
 
     // Common URL/email shapes around the token.
     let before = token_before(buffer, idx + len).to_ascii_lowercase();
-    if before.contains("http://")
+    before.contains("http://")
         || before.contains("https://")
         || before.contains("www.")
         || before.contains('@')
-    {
-        return true;
-    }
-
-    false
 }
 
 fn should_split_on_soft_boundary(
