@@ -6,6 +6,10 @@ name = "custom-classic"
 [pipeline.audit]
 enabled = true
 
+[[audio_filter]]
+provider = "deepfilter"
+attenuation_limit_db = 30.0
+
 [stt]
 provider = "parakeet-tdt"
 model_dir = "models/parakeet-tdt"
@@ -22,8 +26,11 @@ top_p = 0.95
 extra_body = { chat_template_kwargs = { enable_thinking = false } }
 
 [tts]
-provider = "piper"
-model = "models/en_US-lessac-medium.onnx"
+provider = "openai"
+endpoint = "http://vibevoice:8091/v1"
+model_name = "VibeVoice-Realtime-0.5B"
+voice = "en-Carter_man"
+api_key = "local"
 
 [vad]
 mode = "auto"
@@ -39,8 +46,8 @@ smart_min_audio_ms = 500
 
 [barge_in]
 enabled = true
-min_chunks = 3
-speech_threshold = 200.0
+min_chunks = 5
+speech_threshold = 2000.0
 
 [output]
 sample_rate = 16000

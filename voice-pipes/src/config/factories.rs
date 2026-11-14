@@ -296,7 +296,7 @@ pub fn build_barge_in_param_store(
     cfg: &PipelineConfig,
 ) -> std::sync::Arc<crate::api::param_store::AtomicParamStore> {
     let bi = cfg.barge_in.as_ref();
-    let speech_threshold = bi.map_or(200.0, |b| b.speech_threshold);
+    let speech_threshold = bi.map_or(2000.0, |b| b.speech_threshold);
     let min_chunks = bi.map_or(3, |b| b.min_chunks) as i64;
     std::sync::Arc::new(
         crate::api::param_store::AtomicParamStore::builder()

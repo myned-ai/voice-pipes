@@ -165,8 +165,8 @@ silence_timeout_ms = 450
 
 [barge_in]
 enabled = true
-min_chunks = 3
-speech_threshold = 200.0
+min_chunks = 5
+speech_threshold = 2000.0
 
 [output]
 sample_rate = 16000

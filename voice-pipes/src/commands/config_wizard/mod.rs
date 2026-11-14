@@ -263,30 +263,23 @@ fn assemble_plan(prompt: &dyn Prompt, registry: &Registry) -> Result<WizardPlan>
     assemble_plan_with(prompt, registry, Menus::registered())
 }
 
-/// [`assemble_plan`] over the given stage menus. A mode whose stages this
-/// build cannot fill is not offered, and with neither mode possible the
-/// wizard stops before asking anything.
-fn assemble_plan_with(
-    prompt: &dyn Prompt,
-    registry: &Registry,
-    menus: Menus,
-) -> Result<WizardPlan> {
+fn select_pipeline_mode(prompt: &dyn Prompt, menus: &Menus) -> Result<bool> {
     const CLASSIC: &str = "Classic Mode (STT -> LLM -> TTS)";
     const REALTIME: &str = "Speech-to-Speech Realtime Mode (one model hears and speaks)";
     let classic_gaps = menus.classic_gaps();
     let realtime_gaps = menus.realtime_gaps();
-    let is_realtime = match (classic_gaps.is_empty(), realtime_gaps.is_empty()) {
-        (true, true) => prompt.select("Select Pipeline Mode", &[CLASSIC, REALTIME], 0)? == 1,
+    match (classic_gaps.is_empty(), realtime_gaps.is_empty()) {
+        (true, true) => Ok(prompt.select("Select Pipeline Mode", &[CLASSIC, REALTIME], 0)? == 1),
         (true, false) => {
             println!("ℹ️  Classic mode only: {}", describe_gaps(&realtime_gaps));
-            false
+            Ok(false)
         }
         (false, true) => {
             println!(
                 "ℹ️  Speech-to-speech mode only: {}",
                 describe_gaps(&classic_gaps)
             );
-            true
+            Ok(true)
         }
         (false, false) => anyhow::bail!(
             "this build cannot configure a pipeline: {}",
@@ -297,7 +290,18 @@ fn assemble_plan_with(
                     .collect::<Vec<_>>()
             )
         ),
-    };
+    }
+}
+
+/// [`assemble_plan`] over the given stage menus. A mode whose stages this
+/// build cannot fill is not offered, and with neither mode possible the
+/// wizard stops before asking anything.
+fn assemble_plan_with(
+    prompt: &dyn Prompt,
+    registry: &Registry,
+    menus: Menus,
+) -> Result<WizardPlan> {
+    let is_realtime = select_pipeline_mode(prompt, &menus)?;
     let Menus {
         stt,
         llm,
@@ -339,6 +343,16 @@ fn assemble_plan_with(
         ctx.toml.push_str("name = \"custom-classic\"\n\n");
         ctx.toml.push_str(audit_block);
 
+        // Ingress noise suppression: emit active filters when linked.
+        for factory in crate::pipeline::filter::filter_factories() {
+            use std::fmt::Write as _;
+            let name = factory.name();
+            let _ = write!(
+                ctx.toml,
+                "[[audio_filter]]\nprovider = \"{name}\"\nattenuation_limit_db = 30.0\n\n"
+            );
+        }
+
         // 1. STT provider
         ctx.toml.push_str("[stt]\n");
         run_stage(&mut ctx, &stt, &mut manifest, &mut downloads)?;
@@ -367,7 +381,7 @@ fn assemble_plan_with(
         ctx.toml.push('\n');
 
         ctx.toml
-            .push_str("[barge_in]\nenabled = true\nmin_chunks = 3\nspeech_threshold = 200.0\n\n");
+            .push_str("[barge_in]\nenabled = true\nmin_chunks = 5\nspeech_threshold = 2000.0\n\n");
     }
 
     // Output chunking is a pipeline setting: the worker file has no such

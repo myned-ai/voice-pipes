@@ -35,14 +35,14 @@ pub fn builtin_choices(stage: Stage) -> Vec<(String, WizardChoice)> {
             (
                 "layered".into(),
                 turn(
-                    "Layered (provider end-of-turn signal, else silence timeout) [default]",
+                    "Layered (provider end-of-turn signal, else silence timeout)",
                     "450",
-                    1,
+                    2,
                 ),
             ),
             (
                 "silence".into(),
-                turn("Silence (fixed silence timeout only)", "700", 2),
+                turn("Silence (fixed silence timeout only)", "700", 3),
             ),
         ],
         // Every recogniser, voice, text processor and speech-to-speech
