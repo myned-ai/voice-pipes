@@ -29,3 +29,22 @@ fn text_processor_unknown_options_skip_the_engines_own() {
         errors[0].message
     );
 }
+
+#[test]
+fn tts_config_sentence_chunking_defaults_to_true() {
+    let cfg = TtsConfig::new("piper");
+    assert!(cfg.sentence_chunking);
+
+    let deserialized: TtsConfig = serde_json::from_str(r#"{"provider": "piper"}"#).unwrap();
+    assert!(deserialized.sentence_chunking);
+}
+
+#[test]
+fn tts_config_sentence_chunking_deserializes_explicit_false() {
+    let deserialized: TtsConfig =
+        serde_json::from_str(r#"{"provider": "openai", "sentence_chunking": false}"#).unwrap();
+    assert!(!deserialized.sentence_chunking);
+
+    let serialized = serde_json::to_string(&deserialized).unwrap();
+    assert!(serialized.contains(r#""sentence_chunking":false"#));
+}

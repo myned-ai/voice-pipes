@@ -390,6 +390,10 @@ impl TtsProvider for OpenAiTts {
         "openai"
     }
 
+    fn sentence_chunking(&self) -> bool {
+        self.config.sentence_chunking
+    }
+
     fn as_component(&self) -> Option<std::sync::Arc<dyn Component>> {
         Some(std::sync::Arc::new(CoreComponent::new(
             std::sync::Arc::clone(&self.core),

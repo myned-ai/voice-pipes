@@ -29,6 +29,17 @@ fn config_defaults() {
     assert_eq!(oc.request_timeout, Duration::from_secs(30));
     assert!(oc.speed.is_none());
     assert!(oc.instructions.is_none());
+    assert!(oc.sentence_chunking);
+}
+
+#[test]
+fn config_sentence_chunking_override() {
+    let cfg = TtsConfig::new("openai")
+        .with_api_key(Some("test-key".into()))
+        .with_sentence_chunking(false);
+
+    let oc = OpenAiConfig::from_tts_config(&cfg).unwrap();
+    assert!(!oc.sentence_chunking);
 }
 
 #[test]

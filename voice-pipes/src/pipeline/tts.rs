@@ -559,6 +559,37 @@ pub async fn tts_task(
                 }
             };
 
+            if !tts.sentence_chunking() && !raw.is_end_of_response {
+                let mut combined_text = raw.text;
+                let mut combined_spoken = raw.spoken_text;
+                let mut hints = raw.hints;
+                let mut is_end = false;
+                while let Some(next_f) = frag_rx.recv().await {
+                    if cancel.is_cancelled() {
+                        return;
+                    }
+                    combined_text.push_str(&next_f.text);
+                    if let Some(spoken) = next_f.spoken_text {
+                        if let Some(ref mut c_spoken) = combined_spoken {
+                            c_spoken.push_str(&spoken);
+                        } else {
+                            combined_spoken = Some(spoken);
+                        }
+                    }
+                    if hints.is_none() && next_f.hints.is_some() {
+                        hints = next_f.hints;
+                    }
+                    if next_f.is_end_of_response {
+                        is_end = true;
+                        break;
+                    }
+                }
+                raw.text = combined_text;
+                raw.spoken_text = combined_spoken;
+                raw.hints = hints;
+                raw.is_end_of_response = is_end;
+            }
+
             let is_end = raw.is_end_of_response;
 
             // Dual-track sanitization: separate display text from spoken text,
@@ -766,7 +797,7 @@ pub async fn tts_task(
                 //    session lock (no overlap to win) and prefetching there was
                 //    the source of a deadlock. The next fragment is
                 //    picked up normally on the following loop iteration.
-                next = frag_rx.recv(), if !has_stateful_session && prefetched.is_none() && deferred_frag.is_none() && !is_end && !frag_rx_closed => {
+                next = frag_rx.recv(), if tts.sentence_chunking() && !has_stateful_session && prefetched.is_none() && deferred_frag.is_none() && !is_end && !frag_rx_closed => {
                     // `None` means the channel closed -- no more fragments
                     // coming. : remember it, or a closed channel is
                     // `Ready(None)` on every poll and this arm spins a core
