@@ -955,6 +955,9 @@ mod plugin_tests {
         assert_eq!(first(Stage::Stt).as_deref(), Some("parakeet-tdt"));
         #[cfg(feature = "tts-piper")]
         assert_eq!(first(Stage::Tts).as_deref(), Some("piper"));
+        #[cfg(feature = "turn-smart")]
+        assert_eq!(first(Stage::Turn).as_deref(), Some("smart"));
+        #[cfg(not(feature = "turn-smart"))]
         assert_eq!(first(Stage::Turn).as_deref(), Some("layered"));
     }
 

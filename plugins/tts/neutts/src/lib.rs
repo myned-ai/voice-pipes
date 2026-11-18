@@ -364,12 +364,13 @@ impl TtsFactory for NeuTtsFactory {
         cfg: &TtsConfig,
         ctx: &BuildContext<'_>,
     ) -> Result<Box<dyn TtsProvider>, BuildError> {
-        let model_path = cfg.model.as_deref().ok_or_else(|| {
-            BuildError::Config(vec![ConfigError::new(
-                "model",
-                "model path required for NeuTTS",
-            )])
-        })?;
+        let errors = self.validate(cfg);
+        if !errors.is_empty() {
+            return Err(BuildError::Config(errors));
+        }
+        let Some(model_path) = cfg.model.as_deref() else {
+            return Err(BuildError::Config(self.validate(cfg)));
+        };
 
         let options = NeuTtsOptions::read(cfg).map_err(voice_pipes_sdk::options::refused)?;
         let vocoder_path = Path::new(&options.vocoder);
