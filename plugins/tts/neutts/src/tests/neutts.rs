@@ -200,6 +200,7 @@ fn engine_decode_tokens_with_real_vocoder() {
 }
 
 #[test]
+#[ignore = "requires espeak-ng"]
 fn phonemize_keeps_numbers_times_and_abbreviations_intact() {
     let out = super::phonemize_preserving_punctuation(
         "Dr. Smith paid $4.99 for 1,500 items at 2:30 PM, right?",
