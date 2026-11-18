@@ -345,7 +345,7 @@ fn assemble_plan_with(
 
         // 1. STT provider
         ctx.toml.push_str("[stt]\n");
-        let stt_provider = run_stage(&mut ctx, &stt, &mut manifest, &mut downloads)?;
+        let stt_choice = run_stage(&mut ctx, &stt, &mut manifest, &mut downloads)?;
         ctx.toml.push('\n');
 
         // 2. LLM / text processor
@@ -365,11 +365,11 @@ fn assemble_plan_with(
 
         // 4b. Turn detection — how the pipeline decides the user has
         // *finished* speaking (consumes Silero's silence signal). See
-        // src/stt/turn.rs. AssemblyAI Streaming v3 (`u3-rt-pro`) runs its
-        // own hybrid semantic + punctuation turn detector (`is_end_of_turn`),
-        // so use `provider` mode instead of double-gating with Smart Turn.
+        // src/stt/turn.rs. When the chosen STT provider includes its own
+        // semantic turn detector, use `provider` mode instead of double-gating
+        // with Smart Turn.
         ctx.toml.push_str("[turn_detection]\n");
-        if stt_provider == "assemblyai" {
+        if stt_choice.choice.provider_turn_detection {
             ctx.toml
                 .push_str("mode = \"provider\"\nsilence_timeout_ms = 1500\n\n");
         } else {
@@ -605,13 +605,13 @@ struct MenuChoice {
 }
 
 /// Shows a stage menu and writes the chosen provider's TOML lines, returning
-/// the selected provider name.
-fn run_stage(
+/// the selected menu choice.
+fn run_stage<'a>(
     ctx: &mut EmitCtx,
-    menu: &StageMenu,
+    menu: &'a StageMenu,
     manifest: &mut StackManifest,
     downloads: &mut Vec<DownloadSpec>,
-) -> Result<String> {
+) -> Result<&'a MenuChoice> {
     let labels: Vec<String> = menu
         .choices
         .iter()
@@ -648,7 +648,7 @@ fn run_stage(
         anyhow::bail!("no menu entry {idx}");
     };
     emit_choice(ctx, menu.stage.provider_key(), chosen, manifest, downloads)?;
-    Ok(chosen.provider.clone())
+    Ok(chosen)
 }
 
 /// Write a choice as the SDK renders it (provider line, then one line per
