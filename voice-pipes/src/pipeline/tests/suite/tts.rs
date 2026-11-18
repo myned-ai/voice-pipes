@@ -1149,6 +1149,6 @@ async fn test_tts_task_sentence_chunking_false_buffers_entire_turn() {
 
     // Verify MockBufferedTts received exactly ONE synthesized string containing the full turn
     let synth = texts.lock().clone();
-    assert_eq!(synth.len(), 1, "Expected 1 synthesis call, got {:?}", synth);
+    assert_eq!(synth.len(), 1, "Expected 1 synthesis call, got {synth:?}");
     assert_eq!(synth[0], "First sentence. Second sentence.");
 }

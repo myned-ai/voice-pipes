@@ -8,6 +8,7 @@ fn choice(fields: Vec<WizardField>) -> WizardChoice {
         fields,
         notes: vec![],
         stage_default: false,
+        provider_turn_detection: false,
         menu_rank: 0,
     }
 }

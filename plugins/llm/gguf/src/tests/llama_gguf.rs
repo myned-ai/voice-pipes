@@ -10,7 +10,7 @@ fn init_backend_succeeds() {
 fn missing_model_fails_cleanly() {
     let result = LlamaGgufBackend::load(Path::new("non_existent_model_file.gguf"), "cpu");
     assert!(result.is_err(), "missing model file should fail");
-    let err = result.err().expect("expected error");
+    let err = result.expect_err("expected error");
     assert!(
         err.message.contains("failed to load GGUF model"),
         "error message should describe model load failure: {}",
