@@ -60,10 +60,7 @@ fn ipa_to_ids_of_spaces_and_unknown_marks_is_empty() {
 
 #[test]
 fn extract_terminators_handles_commas_periods_and_runs() {
-    assert_eq!(
-        extract_clause_terminators("Hello, world!"),
-        vec![',', '!']
-    );
+    assert_eq!(extract_clause_terminators("Hello, world!"), vec![',', '!']);
     assert_eq!(
         extract_clause_terminators("Wait... really? Yes!"),
         vec!['.', '?', '!']

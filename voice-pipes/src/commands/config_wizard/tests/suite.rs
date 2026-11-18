@@ -2144,7 +2144,8 @@ fn assemblyai_stt_uses_provider_turn_detection_instead_of_smart_turn() {
             .with_fields(vec![voice_pipes_sdk::WizardField::fixed(
                 "model_name",
                 "u3-rt-pro",
-            )]),
+            )])
+            .with_provider_turn_detection(true),
         }],
     };
     menus.llm = super::StageMenu {

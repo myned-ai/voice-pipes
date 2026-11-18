@@ -32,11 +32,9 @@ async fn metrics_conformance() {
         Ok(())
     };
 
-    let res = voice_pipes_sdk::testing::assert_tts_metrics_conformance(
-        run,
-        Duration::from_millis(15),
-    )
-    .await;
+    let res =
+        voice_pipes_sdk::testing::assert_tts_metrics_conformance(run, Duration::from_millis(15))
+            .await;
     assert!(res.is_ok(), "{res:?}");
 }
 
@@ -56,23 +54,35 @@ fn test_prompt_tokenization() {
     .expect("engine load");
 
     let input_p = "həlˈoʊ wˈɜːld ðɪs ɪz ɐ ɹˈiːəltˈaɪm spˈiːtʃ tˈɛst ˌɔn sˌiːpˌiːjˈuː";
-    let prompt_tokens = engine.build_prompt_tokens(input_p).expect("build prompt tokens");
+    let prompt_tokens = engine
+        .build_prompt_tokens(input_p)
+        .expect("build prompt tokens");
     assert!(!prompt_tokens.is_empty(), "prompt tokens non-empty");
 
     // Also test real espeak phonemization on the exact phrase from the session:
-    if let Ok(espeak_out) = voice_pipes_sdk::phonemize::run_espeak_with_language("Hello! How can I assist you today?", "en-us") {
+    if let Ok(espeak_out) = voice_pipes_sdk::phonemize::run_espeak_with_language(
+        "Hello! How can I assist you today?",
+        "en-us",
+    ) {
         println!("espeak output: {espeak_out:?}");
-        let tokens = engine.build_prompt_tokens(&espeak_out).expect("tokenize espeak output");
+        let tokens = engine
+            .build_prompt_tokens(&espeak_out)
+            .expect("tokenize espeak output");
         println!("tokens len: {}", tokens.len());
         for &tok in &tokens {
-            let piece = engine.model.vocab().token_to_piece(llama_cpp_2::token::LlamaToken::new(tok as i32), false, None);
+            let piece = engine.model.vocab().token_to_piece(
+                llama_cpp_2::token::LlamaToken::new(tok as i32),
+                false,
+                None,
+            );
             print!("[{}:{}]", tok, String::from_utf8_lossy(&piece));
         }
         println!();
     }
 
     // Verify reference codes start with JO_REFERENCE_CODES[0]
-    let expected_ref0 = super::engine::SPEECH_CODE_OFFSET + super::voices::JO_REFERENCE_CODES[0] as u32;
+    let expected_ref0 =
+        super::engine::SPEECH_CODE_OFFSET + super::voices::JO_REFERENCE_CODES[0] as u32;
     assert!(prompt_tokens.contains(&expected_ref0));
 }
 
@@ -94,11 +104,16 @@ fn test_synthesize_hello() {
     let cancel = CancellationToken::new();
     let (tx, mut rx) = tokio::sync::mpsc::channel(1024);
 
-    let espeak_out = voice_pipes_sdk::phonemize::run_espeak_with_language("Hello, how can I help you today?", "en-us")
-        .expect("espeak hello");
+    let espeak_out = voice_pipes_sdk::phonemize::run_espeak_with_language(
+        "Hello, how can I help you today?",
+        "en-us",
+    )
+    .expect("espeak hello");
 
     let start = std::time::Instant::now();
-    engine.synthesize(&espeak_out, &cancel, &tx).expect("synthesize hello");
+    engine
+        .synthesize(&espeak_out, &cancel, &tx)
+        .expect("synthesize hello");
     let elapsed = start.elapsed();
 
     let mut samples = Vec::new();
@@ -151,7 +166,9 @@ fn engine_decode_tokens_with_real_vocoder() {
     )
     .expect("engine load");
 
-    let samples = engine.decode_tokens(super::voices::JO_REFERENCE_CODES).expect("decode reference codes");
+    let samples = engine
+        .decode_tokens(super::voices::JO_REFERENCE_CODES)
+        .expect("decode reference codes");
     assert!(!samples.is_empty(), "expected non-empty audio samples");
 
     let _ = std::fs::create_dir_all("target");
@@ -175,7 +192,10 @@ fn engine_decode_tokens_with_real_vocoder() {
         for &sample in &samples {
             let _ = file.write_all(&sample.to_le_bytes());
         }
-        println!("Saved reference audio to {wav_path}, len: {}", samples.len());
+        println!(
+            "Saved reference audio to {wav_path}, len: {}",
+            samples.len()
+        );
     }
 }
 
@@ -281,7 +301,10 @@ fn test_neutts_engine_full_synthesis() {
         }
 
         let max_amp = all_samples.iter().map(|&s| s.abs()).max().unwrap_or(0);
-        let rms = (all_samples.iter().map(|&s| (s as f64) * (s as f64)).sum::<f64>()
+        let rms = (all_samples
+            .iter()
+            .map(|&s| (s as f64) * (s as f64))
+            .sum::<f64>()
             / (total_samples as f64))
             .sqrt();
         assert!(max_amp > 1000, "expected non-silent synthesized audio");

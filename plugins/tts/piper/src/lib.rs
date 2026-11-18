@@ -370,12 +370,16 @@ fn piper_options(cfg: &TtsConfig) -> Result<PiperOptions, Vec<ConfigError>> {
         clippy::cast_possible_truncation,
         reason = "bounded f64 converted to f32"
     )]
-    let noise_scale = o.optional_f64_in("noise_scale", 0.0..=2.0).map(|x| x as f32);
+    let noise_scale = o
+        .optional_f64_in("noise_scale", 0.0..=2.0)
+        .map(|x| x as f32);
     #[expect(
         clippy::cast_possible_truncation,
         reason = "bounded f64 converted to f32"
     )]
-    let length_scale = o.optional_f64_in("length_scale", 0.1..=5.0).map(|x| x as f32);
+    let length_scale = o
+        .optional_f64_in("length_scale", 0.1..=5.0)
+        .map(|x| x as f32);
     #[expect(
         clippy::cast_possible_truncation,
         reason = "bounded f64 converted to f32"
@@ -436,8 +440,7 @@ impl TtsFactory for PiperFactory {
         })?;
         let options = piper_options(cfg).map_err(voice_pipes_sdk::options::refused)?;
 
-        let mut tts =
-            PiperTts::with_options(model_path, &options, ctx.text_chunking.clone())?;
+        let mut tts = PiperTts::with_options(model_path, &options, ctx.text_chunking.clone())?;
         tts.audit_tx.clone_from(&ctx.audit_tx);
         Ok(Box::new(tts))
     }

@@ -1,5 +1,7 @@
 # Technical Architecture & Implementation Plan: NeuTTS-Air Plugin (`voice-pipes-tts-neutts`)
 
+**Status:** active
+
 ## 1. Executive Summary
 
 This document specifies the technical design, runtime architecture, and implementation plan for supporting [Neuphonic's NeuTTS-Air](https://github.com/neuphonic/neutts) Speech Language Model (SLM) as a native CPU-optimized Text-to-Speech (TTS) plugin within Voice Pipes.

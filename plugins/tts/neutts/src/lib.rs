@@ -48,8 +48,8 @@ const DEFAULT_THREADS: usize = 4;
 
 /// Resolve default thread count matching upstream `_n_perf_cores()` (physical core count, clamped to 4..=8).
 fn resolve_default_threads() -> usize {
-    let perf_cores = std::thread::available_parallelism()
-        .map_or(DEFAULT_THREADS, |n| (n.get() / 2).clamp(4, 8));
+    let perf_cores =
+        std::thread::available_parallelism().map_or(DEFAULT_THREADS, |n| (n.get() / 2).clamp(4, 8));
     voice_pipes_onnx::intra_threads_from_env(perf_cores)
 }
 
@@ -84,8 +84,13 @@ pub(crate) fn phonemize_preserving_punctuation(text: &str, lang: &str) -> Result
 
     for (i, &ch) in chars.iter().enumerate() {
         if matches!(ch, ';' | ':' | ',' | '.' | '!' | '?') {
-            let prev_digit = i > 0 && chars.get(i.saturating_sub(1)).is_some_and(char::is_ascii_digit);
-            let next_digit = chars.get(i.saturating_add(1)).is_some_and(char::is_ascii_digit);
+            let prev_digit = i > 0
+                && chars
+                    .get(i.saturating_sub(1))
+                    .is_some_and(char::is_ascii_digit);
+            let next_digit = chars
+                .get(i.saturating_add(1))
+                .is_some_and(char::is_ascii_digit);
             let in_number = matches!(ch, '.' | ',' | ':') && prev_digit && next_digit;
             let is_abbrev = ch == '.' && ends_with_abbreviation(&current);
 
@@ -140,11 +145,15 @@ fn build_engine_pool(
 ) -> Result<SessionPool<NeuTtsEngine>, TtsError> {
     let mut engines = Vec::with_capacity(pool_size);
     for _ in 0..pool_size {
-        engines.push(NeuTtsEngine::load(model_path, vocoder_path, target, threads)?);
+        engines.push(NeuTtsEngine::load(
+            model_path,
+            vocoder_path,
+            target,
+            threads,
+        )?);
     }
     info!(pool_size, threads, "NeuTTS session pool created");
-    SessionPool::new(engines, "NeuTTS engines")
-        .map_err(|e| TtsError::ConfigError(e.to_string()))
+    SessionPool::new(engines, "NeuTTS engines").map_err(|e| TtsError::ConfigError(e.to_string()))
 }
 
 /// NeuTTS-Air TTS provider.
@@ -176,7 +185,10 @@ impl std::fmt::Debug for NeuTtsAir {
 }
 
 impl NeuTtsAir {
-    #[expect(clippy::too_many_arguments, reason = "internal constructor holding all validated fields")]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "internal constructor holding all validated fields"
+    )]
     pub(crate) fn load(
         model_path: &Path,
         vocoder_path: &Path,
@@ -286,8 +298,7 @@ impl TtsProvider for NeuTtsAir {
             phonemize_preserving_punctuation(&text_clone, "en-us")
         })
         .await
-        .map_err(|e| TtsError::PhonemizationFailed(format!("phonemize join error: {e}")))?
-        ?;
+        .map_err(|e| TtsError::PhonemizationFailed(format!("phonemize join error: {e}")))??;
 
         if cancel.is_cancelled() || phonemes.trim().is_empty() {
             return Ok(());
@@ -302,12 +313,9 @@ impl TtsProvider for NeuTtsAir {
 
         let cancel_clone = cancel.clone();
         let tx_clone = tx.clone();
-        tokio::task::spawn_blocking(move || {
-            slot.synthesize(&phonemes, &cancel_clone, &tx_clone)
-        })
-        .await
-        .map_err(|e| TtsError::InferenceFailed(format!("synthesis join error: {e}")))?
-        ?;
+        tokio::task::spawn_blocking(move || slot.synthesize(&phonemes, &cancel_clone, &tx_clone))
+            .await
+            .map_err(|e| TtsError::InferenceFailed(format!("synthesis join error: {e}")))??;
 
         self.core.record_ok(start.elapsed());
         Ok(())
@@ -335,7 +343,11 @@ impl TtsFactory for NeuTtsFactory {
 
     fn validate(&self, cfg: &TtsConfig) -> Vec<ConfigError> {
         let mut errors = Vec::new();
-        if cfg.model.as_deref().is_none_or(|p| p.as_os_str().is_empty()) {
+        if cfg
+            .model
+            .as_deref()
+            .is_none_or(|p| p.as_os_str().is_empty())
+        {
             errors.push(ConfigError::new(
                 "model",
                 "model path required for NeuTTS-Air (path to GGUF file)",
@@ -352,10 +364,12 @@ impl TtsFactory for NeuTtsFactory {
         cfg: &TtsConfig,
         ctx: &BuildContext<'_>,
     ) -> Result<Box<dyn TtsProvider>, BuildError> {
-        let model_path = cfg
-            .model
-            .as_deref()
-            .ok_or_else(|| BuildError::Config(vec![ConfigError::new("model", "model path required for NeuTTS")]))?;
+        let model_path = cfg.model.as_deref().ok_or_else(|| {
+            BuildError::Config(vec![ConfigError::new(
+                "model",
+                "model path required for NeuTTS",
+            )])
+        })?;
 
         let options = NeuTtsOptions::read(cfg).map_err(voice_pipes_sdk::options::refused)?;
         let vocoder_path = Path::new(&options.vocoder);
@@ -420,9 +434,7 @@ impl NeuTtsOptions {
 
         o.finish()?;
 
-        let target = if device_option.as_deref() == Some("cuda")
-            || env.as_deref() == Some("cuda")
-        {
+        let target = if device_option.as_deref() == Some("cuda") || env.as_deref() == Some("cuda") {
             ExecutionTarget::Cuda
         } else {
             ExecutionTarget::Cpu

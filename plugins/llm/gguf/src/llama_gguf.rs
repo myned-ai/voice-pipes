@@ -6,12 +6,12 @@ use std::path::Path;
 use std::sync::{Arc, OnceLock};
 
 use candle_core::Tensor;
-use llama_cpp_2::context::params::LlamaContextParams;
 use llama_cpp_2::context::LlamaContext;
+use llama_cpp_2::context::params::LlamaContextParams;
 use llama_cpp_2::llama_backend::LlamaBackend;
 use llama_cpp_2::llama_batch::LlamaBatch;
-use llama_cpp_2::model::params::LlamaModelParams;
 use llama_cpp_2::model::LlamaModel;
+use llama_cpp_2::model::params::LlamaModelParams;
 use llama_cpp_2::token::LlamaToken;
 
 use super::backend::{LlmBackend, LlmBackendError};
@@ -57,12 +57,11 @@ fn get_or_load_model(
 
     let n_gpu_layers = if device == "cuda" { 999 } else { 0 };
     let model_params = LlamaModelParams::default().with_n_gpu_layers(n_gpu_layers);
-    let model = LlamaModel::load_from_file(backend, path, &model_params).map_err(|e| {
-        LlmBackendError {
+    let model =
+        LlamaModel::load_from_file(backend, path, &model_params).map_err(|e| LlmBackendError {
             message: format!("failed to load GGUF model from {}: {e}", path.display()),
             source: None,
-        }
-    })?;
+        })?;
     let leaked: &'static LlamaModel = Box::leak(Box::new(model));
     guard.insert(key, leaked);
     Ok(leaked)
@@ -94,7 +93,10 @@ impl LlamaGgufBackend {
     pub fn load(path: &Path, device: &str) -> Result<Self, LlmBackendError> {
         if !path.exists() {
             return Err(LlmBackendError {
-                message: format!("failed to load GGUF model: file does not exist: {}", path.display()),
+                message: format!(
+                    "failed to load GGUF model: file does not exist: {}",
+                    path.display()
+                ),
                 source: None,
             });
         }
@@ -191,10 +193,12 @@ impl LlmBackend for LlamaGgufBackend {
                 })?;
         }
 
-        self.context.decode(&mut batch).map_err(|e| LlmBackendError {
-            message: format!("decode failed: {e}"),
-            source: None,
-        })?;
+        self.context
+            .decode(&mut batch)
+            .map_err(|e| LlmBackendError {
+                message: format!("decode failed: {e}"),
+                source: None,
+            })?;
 
         self.current_pos = pos.saturating_add(n_tokens);
 

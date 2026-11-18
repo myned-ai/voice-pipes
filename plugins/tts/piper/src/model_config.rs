@@ -64,9 +64,7 @@ fn default_noise_w() -> f32 {
 impl PiperModelConfig {
     /// Return the eSpeak voice/language code, defaulting to "en-us".
     pub fn espeak_voice(&self) -> &str {
-        self.espeak
-            .as_ref()
-            .map_or("en-us", |e| e.voice.as_str())
+        self.espeak.as_ref().map_or("en-us", |e| e.voice.as_str())
     }
 
     /// Override inference and eSpeak parameters from user pipeline config.
@@ -87,7 +85,9 @@ impl PiperModelConfig {
             self.inference.noise_w = nw;
         }
         if let Some(v) = espeak_voice {
-            self.espeak = Some(EspeakConfig { voice: v.to_string() });
+            self.espeak = Some(EspeakConfig {
+                voice: v.to_string(),
+            });
         }
     }
     /// Load and parse the JSON config file next to the `.onnx` model.

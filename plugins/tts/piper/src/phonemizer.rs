@@ -57,8 +57,12 @@ pub fn extract_clause_terminators(text: &str) -> Vec<char> {
             } else if is_clause_punct(c) {
                 let is_decimal = c == '.'
                     && i > 0
-                    && chars.get(i.saturating_sub(1)).is_some_and(char::is_ascii_digit)
-                    && chars.get(i.saturating_add(1)).is_some_and(char::is_ascii_digit);
+                    && chars
+                        .get(i.saturating_sub(1))
+                        .is_some_and(char::is_ascii_digit)
+                    && chars
+                        .get(i.saturating_add(1))
+                        .is_some_and(char::is_ascii_digit);
 
                 if !is_decimal {
                     if has_spoken {
@@ -82,7 +86,11 @@ pub fn extract_clause_terminators(text: &str) -> Vec<char> {
 /// Reconstruct clause boundaries and terminal punctuation into the raw IPA output.
 pub fn reconstruct_clause_punctuation(text: &str, raw_ipa: &str) -> String {
     let terminators = extract_clause_terminators(text);
-    let lines: Vec<&str> = raw_ipa.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
+    let lines: Vec<&str> = raw_ipa
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .collect();
     if lines.is_empty() {
         return String::new();
     }

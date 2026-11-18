@@ -1,8 +1,6 @@
 //! Setup wizard entries for NeuTTS-Air.
 
-use voice_pipes_sdk::{
-    WizardChoice, WizardDeploy, WizardDownload, WizardField, WizardLayout,
-};
+use voice_pipes_sdk::{WizardChoice, WizardDeploy, WizardDownload, WizardField, WizardLayout};
 
 const HF_AIR_BASE: &str = "https://huggingface.co/neuphonic/neutts-air-q4-gguf/resolve/main";
 const HF_CODEC_BASE: &str = "https://huggingface.co/neuphonic/neucodec-onnx-decoder/resolve/main";

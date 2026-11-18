@@ -11,8 +11,8 @@ This module only creates the app, wires middleware + startup, and mounts
 the routers.  Launch unchanged:  uvicorn app.main:app
 """
 import asyncio
-from contextlib import asynccontextmanager
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

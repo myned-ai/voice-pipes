@@ -134,7 +134,7 @@ USER vp
 # `voice_pipes_stt_google`), so every one that logs is named here -- the binary's
 # own `EnvFilter` falls back to `info` when `RUST_LOG` is unset, so a bare `ENV`
 # keeps every target loud enough without masking `RUST_LOG` from compose.
-ENV RUST_LOG=info,voice_pipes=info,voice_pipes_sdk=info,voice_pipes_net=info,voice_pipes_onnx=info
+ENV RUST_LOG=info,voice_pipes=info,voice_pipes_sdk=info,voice_pipes_net=info,voice_pipes_onnx=info,voice_pipes_bench=info
 
 EXPOSE 8800 8085 9090
 

@@ -4,21 +4,21 @@ use std::num::NonZeroU32;
 use std::path::Path;
 use std::sync::{Arc, OnceLock};
 
-use llama_cpp_2::context::params::LlamaContextParams;
 use llama_cpp_2::context::LlamaContext;
+use llama_cpp_2::context::params::LlamaContextParams;
 use llama_cpp_2::llama_backend::LlamaBackend;
 use llama_cpp_2::llama_batch::LlamaBatch;
-use llama_cpp_2::model::params::LlamaModelParams;
 use llama_cpp_2::model::LlamaModel;
+use llama_cpp_2::model::params::LlamaModelParams;
 use llama_cpp_2::sampling::LlamaSampler;
 use llama_cpp_2::token::LlamaToken;
 use ort::session::Session;
 use ort::value::Tensor as OrtTensor;
 use tracing::instrument;
 
-use voice_pipes_onnx::{open_session, ExecutionTarget, SessionOptions};
-use voice_pipes_sdk::audio::f32_to_i16;
+use voice_pipes_onnx::{ExecutionTarget, SessionOptions, open_session};
 use voice_pipes_sdk::TtsError;
+use voice_pipes_sdk::audio::f32_to_i16;
 
 use crate::voices::{JO_REFERENCE_CODES, JO_REFERENCE_PHONEMES};
 
@@ -183,7 +183,10 @@ impl NeuTtsEngine {
     }
 
     /// Decode discrete acoustic tokens into 24 kHz i16 audio frames.
-    #[allow(dead_code, reason = "batch decode helper for tests and offline synthesis")]
+    #[allow(
+        dead_code,
+        reason = "batch decode helper for tests and offline synthesis"
+    )]
     #[instrument(skip_all, fields(token_count = tokens.len()))]
     pub fn decode_tokens(&mut self, tokens: &[i32]) -> Result<Vec<i16>, TtsError> {
         let raw_24k = self.decode_codes_24k(tokens)?;
@@ -345,14 +348,7 @@ impl NeuTtsEngine {
         let n_vocab = model.n_vocab();
         LlamaSampler::chain_simple([
             LlamaSampler::penalties(n_vocab, 24, 1.0, 1.0, 0.2),
-            LlamaSampler::dry(
-                model,
-                1.2,
-                1.75,
-                2,
-                48,
-                std::iter::empty::<&str>(),
-            ),
+            LlamaSampler::dry(model, 1.2, 1.75, 2, 48, std::iter::empty::<&str>()),
             LlamaSampler::top_k(40),
             LlamaSampler::top_p(0.90, 1),
             LlamaSampler::min_p(0.10, 1),
@@ -406,7 +402,8 @@ impl NeuTtsEngine {
             .clamp(60, 1800)
             .min(2048usize.saturating_sub(prompt_len));
 
-        let mut token_cache: Vec<i32> = Vec::with_capacity(JO_REFERENCE_CODES.len() + max_new_tokens);
+        let mut token_cache: Vec<i32> =
+            Vec::with_capacity(JO_REFERENCE_CODES.len() + max_new_tokens);
         token_cache.extend_from_slice(JO_REFERENCE_CODES);
         let mut n_decoded_tokens = JO_REFERENCE_CODES.len();
         let mut n_decoded_samples = 0usize;

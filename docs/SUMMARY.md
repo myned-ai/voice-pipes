@@ -118,6 +118,10 @@
 - [Engineering rules](contributing/engineering-rules.md)
 - [Dependencies](contributing/dependencies.md)
 - [Testing](contributing/testing.md)
+
+# Proposals
+
+- [NeuTTS-Air plugin architecture](proposals/neutts-tts-plugin-architecture-plan.md)
 - [Documentation style](contributing/docs-style.md)
 - [Release process](contributing/release-process.md)
 - [Roadmap](roadmap.md)
