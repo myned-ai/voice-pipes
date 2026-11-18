@@ -17,13 +17,15 @@ pub fn wizard_choices() -> Vec<WizardChoice> {
                 layout: WizardLayout::File,
                 files: vec![
                     WizardDownload::new(
-                        "neutts-air-q4_k_m.gguf",
-                        &format!("{HF_AIR_BASE}/neutts-air-q4_k_m.gguf"),
-                    ),
+                        "neutts-air-Q4_0.gguf",
+                        &format!("{HF_AIR_BASE}/neutts-air-Q4_0.gguf"),
+                    )
+                    .with_alt_names(vec!["neutts-air-q4_k_m.gguf".into()]),
                     WizardDownload::new(
                         "neucodec_decoder.onnx",
-                        &format!("{HF_CODEC_BASE}/neucodec_decoder.onnx"),
-                    ),
+                        &format!("{HF_CODEC_BASE}/model.onnx"),
+                    )
+                    .with_alt_names(vec!["model.onnx".into()]),
                 ],
             },
         )
@@ -32,7 +34,7 @@ pub fn wizard_choices() -> Vec<WizardChoice> {
             WizardField::path(
                 "model",
                 "NeuTTS-Air GGUF model path",
-                "models/neutts-air-q4_k_m.gguf",
+                "models/neutts-air-Q4_0.gguf",
             ),
             WizardField::fixed("vocoder", "models/neucodec_decoder.onnx"),
         ])

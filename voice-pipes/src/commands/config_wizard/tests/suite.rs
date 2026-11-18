@@ -165,8 +165,8 @@ silence_timeout_ms = 450
 
 [barge_in]
 enabled = true
-min_chunks = 5
-speech_threshold = 2000.0
+min_chunks = 3
+speech_threshold = 1200.0
 
 [output]
 sample_rate = 16000
@@ -2122,4 +2122,52 @@ fn a_stage_fallback_is_a_registered_provider_named_once() {
         register_fallback(Stage::Turn, "silence"),
         Err(RegistrationError::FallbackTaken { .. })
     ));
+}
+
+#[test]
+fn assemblyai_stt_uses_provider_turn_detection_instead_of_smart_turn() {
+    let mut menus = super::Menus::registered();
+    menus.realtime = super::StageMenu {
+        choices: Vec::new(),
+        ..menus.realtime
+    };
+    menus.stt = super::StageMenu {
+        stage: Stage::Stt,
+        choices: vec![super::MenuChoice {
+            provider: "assemblyai".into(),
+            choice: WizardChoice::new(
+                "AssemblyAI (Cloud API)",
+                WizardDeploy::Cloud {
+                    key_env: "ASSEMBLYAI_API_KEY".into(),
+                },
+            )
+            .with_fields(vec![voice_pipes_sdk::WizardField::fixed(
+                "model_name",
+                "u3-rt-pro",
+            )]),
+        }],
+    };
+    menus.llm = super::StageMenu {
+        stage: Stage::Llm,
+        choices: vec![super::MenuChoice {
+            provider: "stub-llm".into(),
+            choice: WizardChoice::new("Stub LLM", WizardDeploy::None),
+        }],
+    };
+    menus.tts = super::StageMenu {
+        stage: Stage::Tts,
+        choices: vec![super::MenuChoice {
+            provider: "stub-tts".into(),
+            choice: WizardChoice::new("Stub TTS", WizardDeploy::None),
+        }],
+    };
+    let prompt = AutoPrompt::new(&[]);
+    let reg = test_registry();
+    let plan = super::assemble_plan_with(&prompt, &reg, menus).expect("assemble plan");
+    assert!(
+        plan.pipeline_toml
+            .contains("[turn_detection]\nmode = \"provider\"\nsilence_timeout_ms = 1500\n"),
+        "expected provider turn_detection for assemblyai:\n{}",
+        plan.pipeline_toml
+    );
 }

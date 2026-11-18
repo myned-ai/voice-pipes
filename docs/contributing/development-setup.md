@@ -15,8 +15,11 @@ adds the admin console and the conventions.
 - Windows: Visual Studio 2022 Build Tools with the C++ workload. Linux:
   `libasound2-dev` (for the `audio-device` feature, which the default build
   and `batteries` include). macOS: Xcode command-line tools.
+- CMake 3.16+ and LLVM/Clang (`libclang` for bindgen), required to build embedded
+  `llama.cpp` for local GGUF and NeuTTS. Windows: `winget install Kitware.CMake LLVM.LLVM`
+  and set `LIBCLANG_PATH`. Linux: `sudo apt install -y cmake clang libclang-dev`.
 - `protoc` is vendored; nothing to install.
-- eSpeak NG for Piper TTS at runtime.
+- eSpeak NG for Piper and NeuTTS at runtime.
 - Admin console: Python 3.12 (exactly) and Node 24 or 22.13+; see
   [Admin console › Running it](../guides/admin-console.md#running-it).
 - Optional: `cargo-deny` (`cargo install cargo-deny --locked`) to run the

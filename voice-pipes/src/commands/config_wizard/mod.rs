@@ -343,19 +343,9 @@ fn assemble_plan_with(
         ctx.toml.push_str("name = \"custom-classic\"\n\n");
         ctx.toml.push_str(audit_block);
 
-        // Ingress noise suppression: emit active filters when linked.
-        for factory in crate::pipeline::filter::filter_factories() {
-            use std::fmt::Write as _;
-            let name = factory.name();
-            let _ = write!(
-                ctx.toml,
-                "[[audio_filter]]\nprovider = \"{name}\"\nattenuation_limit_db = 30.0\n\n"
-            );
-        }
-
         // 1. STT provider
         ctx.toml.push_str("[stt]\n");
-        run_stage(&mut ctx, &stt, &mut manifest, &mut downloads)?;
+        let stt_provider = run_stage(&mut ctx, &stt, &mut manifest, &mut downloads)?;
         ctx.toml.push('\n');
 
         // 2. LLM / text processor
@@ -375,13 +365,20 @@ fn assemble_plan_with(
 
         // 4b. Turn detection — how the pipeline decides the user has
         // *finished* speaking (consumes Silero's silence signal). See
-        // src/stt/turn.rs.
+        // src/stt/turn.rs. AssemblyAI Streaming v3 (`u3-rt-pro`) runs its
+        // own hybrid semantic + punctuation turn detector (`is_end_of_turn`),
+        // so use `provider` mode instead of double-gating with Smart Turn.
         ctx.toml.push_str("[turn_detection]\n");
-        run_stage(&mut ctx, &turn, &mut manifest, &mut downloads)?;
-        ctx.toml.push('\n');
+        if stt_provider == "assemblyai" {
+            ctx.toml
+                .push_str("mode = \"provider\"\nsilence_timeout_ms = 1500\n\n");
+        } else {
+            run_stage(&mut ctx, &turn, &mut manifest, &mut downloads)?;
+            ctx.toml.push('\n');
+        }
 
         ctx.toml
-            .push_str("[barge_in]\nenabled = true\nmin_chunks = 5\nspeech_threshold = 2000.0\n\n");
+            .push_str("[barge_in]\nenabled = true\nmin_chunks = 3\nspeech_threshold = 1200.0\n\n");
     }
 
     // Output chunking is a pipeline setting: the worker file has no such
@@ -607,13 +604,14 @@ struct MenuChoice {
     choice: voice_pipes_sdk::WizardChoice,
 }
 
-/// Shows a stage menu and writes the chosen provider's TOML lines.
+/// Shows a stage menu and writes the chosen provider's TOML lines, returning
+/// the selected provider name.
 fn run_stage(
     ctx: &mut EmitCtx,
     menu: &StageMenu,
     manifest: &mut StackManifest,
     downloads: &mut Vec<DownloadSpec>,
-) -> Result<()> {
+) -> Result<String> {
     let labels: Vec<String> = menu
         .choices
         .iter()
@@ -649,7 +647,8 @@ fn run_stage(
     let Some(chosen) = menu.choices.get(idx) else {
         anyhow::bail!("no menu entry {idx}");
     };
-    emit_choice(ctx, menu.stage.provider_key(), chosen, manifest, downloads)
+    emit_choice(ctx, menu.stage.provider_key(), chosen, manifest, downloads)?;
+    Ok(chosen.provider.clone())
 }
 
 /// Write a choice as the SDK renders it (provider line, then one line per

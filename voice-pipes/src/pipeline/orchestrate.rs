@@ -261,61 +261,20 @@ pub async fn process_utterance(
             // be the last sender so `tts_task` sees the fragment stream end.
             drop(tts_frag_tx);
             let cancel_fwd_clone = cancel.clone();
-            let sentence_chunking = tts.sentence_chunking();
             // The forwarder stands in for the bridge in this path; keep its
             // handle so teardown aborts it with the others.
             bridge_handle = tokio::spawn(async move {
-                if sentence_chunking {
-                    for frag in buffered_fragments {
-                        if tts_frag_tx_clone.send(frag).await.is_err() {
-                            return;
-                        }
+                for frag in buffered_fragments {
+                    if tts_frag_tx_clone.send(frag).await.is_err() {
+                        return;
                     }
-                    while let Some(frag) = subsequent_fragments_rx.recv().await {
-                        if cancel_fwd_clone.is_cancelled() {
-                            break;
-                        }
-                        if tts_frag_tx_clone.send(frag).await.is_err() {
-                            break;
-                        }
+                }
+                while let Some(frag) = subsequent_fragments_rx.recv().await {
+                    if cancel_fwd_clone.is_cancelled() {
+                        break;
                     }
-                } else {
-                    let mut accumulated = String::new();
-                    let mut latest_hints = None;
-                    for frag in buffered_fragments {
-                        accumulated.push_str(&frag.text);
-                        if frag.hints.is_some() {
-                            latest_hints = frag.hints;
-                        }
-                        if frag.is_end_of_response {
-                            let combined = TextFragment::new(accumulated.clone())
-                                .with_is_end_of_response(true)
-                                .with_hints(latest_hints.take());
-                            let _ = tts_frag_tx_clone.send(combined).await;
-                            return;
-                        }
-                    }
-                    while let Some(frag) = subsequent_fragments_rx.recv().await {
-                        if cancel_fwd_clone.is_cancelled() {
-                            break;
-                        }
-                        accumulated.push_str(&frag.text);
-                        if frag.hints.is_some() {
-                            latest_hints = frag.hints;
-                        }
-                        if frag.is_end_of_response {
-                            let combined = TextFragment::new(accumulated.clone())
-                                .with_is_end_of_response(true)
-                                .with_hints(latest_hints.take());
-                            let _ = tts_frag_tx_clone.send(combined).await;
-                            return;
-                        }
-                    }
-                    if !accumulated.is_empty() {
-                        let combined = TextFragment::new(accumulated)
-                            .with_is_end_of_response(true)
-                            .with_hints(latest_hints.take());
-                        let _ = tts_frag_tx_clone.send(combined).await;
+                    if tts_frag_tx_clone.send(frag).await.is_err() {
+                        break;
                     }
                 }
             });
@@ -407,7 +366,6 @@ pub async fn process_utterance(
         let sentence_chunking = tts.sentence_chunking();
         bridge_handle = tokio::spawn(async move {
             let mut accumulated = String::new();
-            let mut latest_hints = None;
             let llm_start = std::time::Instant::now();
             let mut ttft_tx = Some(ttft_tx);
             let mut first_frag_tx = Some(first_frag_tx);
@@ -436,13 +394,10 @@ pub async fn process_utterance(
                                 let _ = tx.send(std::time::Instant::now());
                             }
                         }
-                        accumulated.push_str(&f.text);
-                        if f.hints.is_some() {
-                            latest_hints = f.hints.clone();
-                        }
                         if f.token_count.is_some() {
                             real_token_count = f.token_count;
                         }
+                        accumulated.push_str(&f.text);
                         // The response text is complete at the final
                         // fragment; hand it to the audio loop now, before
                         // the fragment reaches TTS. The LLM stream may
@@ -455,32 +410,21 @@ pub async fn process_utterance(
                         {
                             let _ = tx.send(accumulated.clone());
                         }
-                        if sentence_chunking {
-                            if tts_frag_tx.send(f).await.is_err() {
-                                break;
-                            }
-                        } else if f.is_end_of_response {
-                            if let Some(tx) = first_frag_tx.take() {
-                                let _ = tx.send(std::time::Instant::now());
-                            }
-                            let combined = TextFragment::new(accumulated.clone())
-                                .with_is_end_of_response(true)
-                                .with_token_count(real_token_count)
-                                .with_hints(latest_hints.take());
-                            if tts_frag_tx.send(combined).await.is_err() {
-                                break;
-                            }
+                        if !sentence_chunking
+                            && f.is_end_of_response
+                            && let Some(tx) = first_frag_tx.take()
+                        {
+                            let _ = tx.send(std::time::Instant::now());
+                        }
+                        if tts_frag_tx.send(f).await.is_err() {
+                            break;
                         }
                     } else {
-                        if !sentence_chunking && !accumulated.is_empty() {
-                            if let Some(tx) = first_frag_tx.take() {
-                                let _ = tx.send(std::time::Instant::now());
-                            }
-                            let combined = TextFragment::new(accumulated.clone())
-                                .with_is_end_of_response(true)
-                                .with_token_count(real_token_count)
-                                .with_hints(latest_hints.take());
-                            let _ = tts_frag_tx.send(combined).await;
+                        if !sentence_chunking
+                            && !accumulated.is_empty()
+                            && let Some(tx) = first_frag_tx.take()
+                        {
+                            let _ = tx.send(std::time::Instant::now());
                         }
                         break;
                     },

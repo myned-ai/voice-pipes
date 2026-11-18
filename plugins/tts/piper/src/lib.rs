@@ -84,24 +84,30 @@ impl std::fmt::Debug for PiperTts {
 }
 
 impl PiperTts {
-    /// Load the voice at `model_path` (a `.onnx` with its `.onnx.json`
-    /// config beside it), `pool_size` engines for concurrent synthesis.
-    pub(crate) fn with_pool_size(
+    /// Load the voice applying user-configured synthesis options and overrides.
+    pub(crate) fn with_options(
         model_path: &Path,
-        pool_size: usize,
-        threads: usize,
+        options: &PiperOptions,
         text_chunking: TextChunkingConfig,
     ) -> Result<Self, TtsError> {
         let core = Arc::new(ComponentCore::new("tts:piper", ComponentKind::Tts));
         let config_path = model_path.with_extension("onnx.json");
-        let config = match PiperModelConfig::load(&config_path) {
+        let mut config = match PiperModelConfig::load(&config_path) {
             Ok(c) => c,
             Err(e) => {
                 core.mark_unhealthy(format!("config load failed: {e}"));
                 return Err(e);
             }
         };
-        let pool = match build_pool(model_path, pool_size, threads) {
+
+        config.apply_overrides(
+            options.noise_scale,
+            options.length_scale,
+            options.noise_w,
+            options.espeak_voice.as_deref(),
+        );
+
+        let pool = match build_pool(model_path, options.pool_size, options.threads) {
             Ok(p) => p,
             Err(e) => {
                 core.mark_unhealthy(format!("model load failed: {e}"));
@@ -112,8 +118,12 @@ impl PiperTts {
         info!(
             model = %model_path.display(),
             sample_rate = config.audio.sample_rate,
-            pool_size,
-            threads,
+            pool_size = options.pool_size,
+            threads = options.threads,
+            espeak_voice = config.espeak_voice(),
+            noise_scale = config.inference.noise_scale,
+            length_scale = config.inference.length_scale,
+            noise_w = config.inference.noise_w,
             "Piper TTS loaded"
         );
 
@@ -339,14 +349,48 @@ pub fn factory() -> Box<dyn TtsFactory> {
 #[derive(Debug)]
 struct PiperFactory;
 
-/// Piper's options (`pool_size` and `threads`); any other key is refused.
-fn piper_options(cfg: &TtsConfig) -> Result<(usize, usize), Vec<ConfigError>> {
+#[derive(Debug, Clone)]
+pub(crate) struct PiperOptions {
+    pub pool_size: usize,
+    pub threads: usize,
+    pub noise_scale: Option<f32>,
+    pub length_scale: Option<f32>,
+    pub noise_w: Option<f32>,
+    pub espeak_voice: Option<String>,
+}
+
+/// Piper's options (`pool_size`, `threads`, `noise_scale`, `length_scale`, `noise_w`, `espeak_voice`);
+/// any other key is refused.
+fn piper_options(cfg: &TtsConfig) -> Result<PiperOptions, Vec<ConfigError>> {
     let mut o = cfg.options();
     let pool_size = o.usize_in("pool_size", 1..=128, DEFAULT_POOL_SIZE);
     let default_threads = voice_pipes_onnx::intra_threads_from_env(DEFAULT_THREADS);
     let threads = o.usize_in("threads", 0..=256, default_threads);
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "bounded f64 converted to f32"
+    )]
+    let noise_scale = o.optional_f64_in("noise_scale", 0.0..=2.0).map(|x| x as f32);
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "bounded f64 converted to f32"
+    )]
+    let length_scale = o.optional_f64_in("length_scale", 0.1..=5.0).map(|x| x as f32);
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "bounded f64 converted to f32"
+    )]
+    let noise_w = o.optional_f64_in("noise_w", 0.0..=2.0).map(|x| x as f32);
+    let espeak_voice = o.string("espeak_voice");
     o.finish()?;
-    Ok((pool_size, threads))
+    Ok(PiperOptions {
+        pool_size,
+        threads,
+        noise_scale,
+        length_scale,
+        noise_w,
+        espeak_voice,
+    })
 }
 
 impl TtsFactory for PiperFactory {
@@ -390,10 +434,10 @@ impl TtsFactory for PiperFactory {
         let model_path = cfg.model.as_ref().ok_or_else(|| {
             BuildError::failed("[tts] provider = \"piper\" requires a model path (set tts.model)")
         })?;
-        let (pool_size, threads) = piper_options(cfg).map_err(voice_pipes_sdk::options::refused)?;
+        let options = piper_options(cfg).map_err(voice_pipes_sdk::options::refused)?;
 
         let mut tts =
-            PiperTts::with_pool_size(model_path, pool_size, threads, ctx.text_chunking.clone())?;
+            PiperTts::with_options(model_path, &options, ctx.text_chunking.clone())?;
         tts.audit_tx.clone_from(&ctx.audit_tx);
         Ok(Box::new(tts))
     }

@@ -69,7 +69,7 @@ session-sqlite = ["voice-pipes/session-sqlite"]
 # built-in one. A new plugin is one dependency, one feature and one pair of
 # registration lines; listing it in `default-plugins` below builds it by default.
 
-# NVIDIA Parakeet TDT, the default recogniser.
+# NVIDIA Parakeet TDT, the default recogniser (and wizard default).
 stt-parakeet = ["dep:voice-pipes-stt-parakeet"]
 # NVIDIA Nemotron 3.5 ASR (40 locales, cache-aware streaming) as a voice-pipes plugin.
 stt-nemotron35 = ["dep:voice-pipes-stt-nemotron35"]
@@ -80,7 +80,7 @@ stt-nemotron = ["dep:voice-pipes-stt-nemotron"]
 stt-nemotron-cuda = ["stt-nemotron", "ort-cuda"]
 # Google Cloud Speech-to-Text v2 (Chirp 3), streaming over gRPC.
 stt-google = ["dep:voice-pipes-stt-google"]
-# AssemblyAI streaming STT (v3 WebSocket). The wizard's default recogniser.
+# AssemblyAI streaming STT (v3 WebSocket).
 stt-assemblyai = ["dep:voice-pipes-stt-assemblyai"]
 stt-nemotron35-cuda = ["stt-nemotron35", "ort-cuda"]
 

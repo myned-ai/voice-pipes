@@ -663,6 +663,53 @@ fn worker_capacity(
     }
 }
 
+/// Notify the orchestrator that this worker is starting up and initializing its models.
+/// This allows the orchestrator and admin dashboard to know about the worker immediately
+/// during heavy cold-starts (e.g. `NeuTTS` or Whisper model loading).
+async fn notify_orchestrator_initializing(
+    state: &WorkerState,
+    actual_debug_port: u16,
+    internal_auth: &api::auth::SurfaceAuth,
+) {
+    let Some(endpoint) = state.worker_config.orchestrator.endpoint.as_deref() else {
+        return;
+    };
+    let Ok(client) = api::auth::http_client_with_bearer_and_timeout(
+        internal_auth,
+        std::time::Duration::from_secs(3),
+    ) else {
+        return;
+    };
+    let pipeline_config_json = crate::config::redact::to_redacted_json(&state.config).ok();
+    let reg_url = format!("{endpoint}/internal/workers/register");
+    let payload = api::types::WorkerRegistration {
+        worker_id: state.worker_id.clone(),
+        address: registered_debug_address(&state.worker_config, actual_debug_port),
+        capacity: api::types::WorkerCapacity {
+            max_concurrent: state.worker_config.max_concurrent,
+            active_sessions: 0,
+        },
+        pipeline_config_hash: config::config_hash(&state.config),
+        pipeline_name: state.config.pipeline.name.clone(),
+        pipeline_config: pipeline_config_json,
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        tags: state.worker_config.tags.clone(),
+        transport_address: None,
+        public_transport_address: None,
+        available_configs: Vec::new(),
+        status: Some(api::types::WorkerStatus::Initializing),
+    };
+    if client
+        .post(&reg_url)
+        .json(&payload)
+        .send()
+        .await
+        .is_ok_and(|resp| resp.status().is_success())
+    {
+        info!("notified orchestrator: worker initializing models");
+    }
+}
+
 /// 3) Orchestrator client lifecycle -- registers the worker and runs the
 ///    heartbeat loop with re-registration on failure.  No-op when no
 ///    orchestrator endpoint is configured.
@@ -722,6 +769,7 @@ fn spawn_orchestrator_client(
             transport_address: actual_transport_address,
             public_transport_address,
             available_configs,
+            status: Some(api::types::WorkerStatus::Active),
         };
 
         // Initial registration (retry until success).
@@ -1135,6 +1183,9 @@ pub async fn run_serve(
     // we hand it to the orchestrator client.
     let (debug_listener, actual_debug_port, debug_app) =
         bind_debug_api(&state, &internal_auth).await?;
+
+    // Early registration: notify the orchestrator that this worker is starting up and warming its models.
+    notify_orchestrator_initializing(&state, actual_debug_port, &internal_auth).await;
 
     // 2) Transport bootstrap (optional).
     let shutdown = tokio_util::sync::CancellationToken::new();

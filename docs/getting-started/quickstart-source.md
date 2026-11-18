@@ -24,7 +24,18 @@ Before building from source, ensure you have:
   - **Windows:** Visual Studio 2022 Build Tools with the *Desktop development with C++* workload (`winget install Microsoft.VisualStudio.2022.BuildTools`).
   - **Linux (Ubuntu/Debian):** `sudo apt update && sudo apt install -y build-essential libasound2-dev pkg-config`.
   - **macOS:** Xcode command-line tools (`xcode-select --install`).
-- **eSpeak NG** (used by the local Piper voice at runtime for phonemization):
+- **CMake 3.16 or newer** (required to compile the embedded `llama.cpp` runtime):
+  - **Windows:** `winget install Kitware.CMake` (ensure `cmake.exe` is added to your system `PATH`).
+  - **Linux (Ubuntu/Debian):** `sudo apt install -y cmake`.
+  - **macOS:** `brew install cmake`.
+- **LLVM / Clang (`libclang`)** (required by `bindgen` to generate bindings for embedded C++ engines):
+  - **Windows:** `winget install LLVM.LLVM`. In your PowerShell session or environment variables, set `LIBCLANG_PATH`:
+    ```powershell
+    $env:LIBCLANG_PATH = "C:\Program Files\LLVM\bin"
+    ```
+  - **Linux (Ubuntu/Debian):** `sudo apt install -y libclang-dev clang`.
+  - **macOS:** `brew install llvm` (set `LIBCLANG_PATH="$(brew --prefix llvm)/lib"`).
+- **eSpeak NG** (used by local Piper and NeuTTS voices at runtime for phonemization):
   - **Windows:** `winget install espeak-ng.espeak-ng` (open a new terminal after installation so it is on `PATH`).
   - **Linux:** `sudo apt install -y espeak-ng`.
   - **macOS:** `brew install espeak-ng`.
@@ -185,6 +196,8 @@ Voice Pipes includes an automated benchmarking harness to compare two or more pi
 ## 8. Troubleshooting & Common Pitfalls
 
 - **`command not found: voice-pipes`:** Ensure Cargo's bin directory (`~/.cargo/bin` on Linux/macOS or `%USERPROFILE%\.cargo\bin` on Windows) is in your system's `PATH`.
+- **`Unable to find libclang` / `couldn't find any valid shared libraries matching: ['libclang.so']`:** `llama-cpp-sys-2` requires `libclang` to generate C++ FFI bindings at compile time. Ensure LLVM is installed and export `LIBCLANG_PATH` (e.g. `$env:LIBCLANG_PATH = "C:\Program Files\LLVM\bin"` on Windows, or `sudo apt install -y libclang-dev` on Ubuntu/Debian).
+- **`program not found: cmake` or `is cmake not installed?`:** Building the local GGUF LLM and NeuTTS engines compiles an embedded `llama.cpp` runtime via CMake. Ensure CMake 3.16+ is installed and present in your terminal's `PATH`.
 - **`phonemization failed: espeak not found`:** eSpeak NG is missing or not detected on `PATH`. Install it via your package manager and restart your terminal.
 - **`model not found`:** Ensure you ran `voice-pipes models fetch` from inside the `voice-pipes/` directory.
 - **Speech-to-Speech vs Cascade commands:**

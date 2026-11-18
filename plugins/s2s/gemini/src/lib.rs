@@ -116,7 +116,7 @@ pub(crate) const NATIVE_INPUT_SR: u32 = 16_000;
 /// Sample rate Gemini Live emits on downlinked audio.
 pub(crate) const NATIVE_OUTPUT_SR: u32 = 24_000;
 /// Default model used when the scenario does not pin one.
-pub(crate) const DEFAULT_MODEL: &str = "models/gemini-2.5-flash-native-audio-latest";
+pub(crate) const DEFAULT_MODEL: &str = "models/gemini-3.8-live";
 
 /// Gemini Live protocol descriptor.
 #[derive(Debug, Clone)]

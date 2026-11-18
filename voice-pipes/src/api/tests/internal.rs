@@ -90,6 +90,7 @@ fn registration(id: &str, address: &str) -> WorkerRegistration {
         transport_address: None,
         public_transport_address: None,
         available_configs: Vec::new(),
+        status: None,
     }
 }
 

@@ -14,7 +14,7 @@ pub fn wizard_choices() -> Vec<WizardChoice> {
                 "https://huggingface.co/pipecat-ai/smart-turn-v3/resolve/main/smart-turn-v3.2-cpu.onnx",
             )],
         }).with_feature(Some(FEATURE.into())).with_fields(vec![
-            WizardField::fixed_literal("silence_timeout_ms", "600"),
+            WizardField::fixed_literal("silence_timeout_ms", "1500"),
             // Relative to the worker's working directory (/app in the
             // images), matching the mounted models/ volume.
             WizardField::path(
@@ -24,7 +24,7 @@ pub fn wizard_choices() -> Vec<WizardChoice> {
             ),
             WizardField::fixed_literal("smart_threshold", "0.5"),
             WizardField::fixed_literal("smart_window_secs", "8"),
-            WizardField::fixed_literal("smart_min_audio_ms", "500"),
+            WizardField::fixed_literal("smart_min_audio_ms", "250"),
         ]).with_notes(vec![
             "Smart Turn semantic end-of-turn detection reduces mid-thought cutoffs; it runs on \
              CPU (~tens of ms). silence_timeout_ms is the hard fallback."

@@ -1,4 +1,4 @@
-//! A local GGUF language model (candle), as a voice-pipes text-processor
+//! A local GGUF language model (llama.cpp), as a voice-pipes text-processor
 //! plugin: model loading, inference, and chat templating. The binary
 //! registers [`factory`] and [`wizard_choices`]; `[[text_processor]] type =
 //! "llm"` selects it.
@@ -7,7 +7,7 @@
 //! struct with its live parameter cells, and the `TextProcessor` impl. The
 //! heavy lifting lives in submodules: `generation` (blocking-pool token
 //! loops), `factory` (TOML-driven construction), `backend` /
-//! `candle_gguf` (forward pass + KV-cache), `chat_template`, `prefill`,
+//! `llama_gguf` (forward pass + KV-cache), `chat_template`, `prefill`,
 //! and `schema`.
 
 #![forbid(unsafe_code)]
@@ -22,10 +22,10 @@
 )]
 
 mod backend;
-mod candle_gguf;
 mod chat_template;
 mod factory;
 mod generation;
+mod llama_gguf;
 mod memory;
 mod prefill;
 mod schema;
@@ -327,10 +327,10 @@ impl LlmProcessor {
         text_chunking: voice_pipes_sdk::TextChunkingConfig,
     ) -> Result<Self, TextProcessorError> {
         let pool_size = config.pool_size.max(1);
+        let device = Self::resolve_device(&config.device)?;
         let mut backends: Vec<Box<dyn LlmBackend>> = Vec::with_capacity(pool_size);
         for _ in 0..pool_size {
-            let device = Self::resolve_device(&config.device)?;
-            let backend = candle_gguf::CandleGgufBackend::load(&config.model_path, device)
+            let backend = llama_gguf::LlamaGgufBackend::load(&config.model_path, device)
                 .map_err(|e| TextProcessorError::new("llm", e.message))?;
             backends.push(Box::new(backend));
         }
@@ -363,16 +363,12 @@ impl LlmProcessor {
         Self::with_backends(backends, tokenizer, template, config, text_chunking)
     }
 
-    /// Resolve a candle `Device` from a config string.
-    fn resolve_device(name: &str) -> Result<candle_core::Device, TextProcessorError> {
+    /// Resolve a device identifier from a config string.
+    fn resolve_device(name: &str) -> Result<&'static str, TextProcessorError> {
         match name {
-            "cpu" => Ok(candle_core::Device::Cpu),
-            "cuda" => candle_core::Device::new_cuda(0).map_err(|e| {
-                TextProcessorError::new("llm", format!("CUDA device init failed: {e}"))
-            }),
-            "metal" => candle_core::Device::new_metal(0).map_err(|e| {
-                TextProcessorError::new("llm", format!("Metal device init failed: {e}"))
-            }),
+            "cpu" => Ok("cpu"),
+            "cuda" => Ok("cuda"),
+            "metal" => Ok("metal"),
             other => Err(TextProcessorError::new(
                 "llm",
                 format!("unsupported device: \"{other}\" (use cpu, cuda, or metal)"),

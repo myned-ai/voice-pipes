@@ -322,13 +322,13 @@ export function SessionSummaryDialog({
               {/* STT */}
               <div className={`p-2.5 rounded-xl border ${isDark ? 'bg-slate-800/40 border-slate-700/40' : 'bg-gray-50 border-gray-200'} space-y-1`}>
                 <div className="flex items-center justify-between text-xs font-semibold text-sky-400 gap-1">
-                  <span className="truncate">STT: {providers?.stt?.provider ?? metadata?.stt_provider ?? 'Unknown'}</span>
+                  <span className="truncate">STT: {providers?.stt?.provider ?? metadata?.stt_provider ?? '—'}</span>
                   {renderDeviceBadge(providers?.stt?.device)}
                 </div>
                 <p className={`text-xs font-mono truncate ${isDark ? 'text-slate-300' : 'text-gray-700'}`} title={providers?.stt?.model}>
-                  {providers?.stt?.model ?? 'Default Model'}
+                  {providers?.stt?.model ?? '—'}
                 </p>
-                {providers?.stt?.mode && (
+                {providers?.stt?.mode && providers.stt.mode !== 'unknown' && (
                   <span className={`inline-block text-[10px] px-1.5 py-0.2 rounded ${isDark ? 'bg-slate-700 text-slate-300' : 'bg-gray-200 text-gray-700'}`}>
                     {providers.stt.mode} mode
                   </span>
@@ -338,15 +338,15 @@ export function SessionSummaryDialog({
               {/* LLM */}
               <div className={`p-2.5 rounded-xl border ${isDark ? 'bg-slate-800/40 border-slate-700/40' : 'bg-gray-50 border-gray-200'} space-y-1`}>
                 <div className="flex items-center justify-between text-xs font-semibold text-amber-400 gap-1">
-                  <span className="truncate">LLM: {providers?.llm?.provider ?? 'Text Processor'}</span>
+                  <span className="truncate">LLM: {providers?.llm?.provider ?? '—'}</span>
                   {renderDeviceBadge(providers?.llm?.device)}
                 </div>
                 <p className={`text-xs font-mono truncate ${isDark ? 'text-slate-300' : 'text-gray-700'}`} title={providers?.llm?.model}>
-                  {providers?.llm?.model ?? 'In-process Model'}
+                  {providers?.llm?.model ?? '—'}
                 </p>
                 {metrics?.totalPromptTokens != null && (
                   <span className="block text-[10px] text-slate-400 truncate">
-                    {metrics.totalPromptTokens} prompt / {metrics.totalOutputTokens ?? 0} out
+                    {metrics.totalPromptTokens} prompt / {metrics.totalOutputTokens ?? '—'} out
                   </span>
                 )}
               </div>
@@ -354,15 +354,17 @@ export function SessionSummaryDialog({
               {/* TTS */}
               <div className={`p-2.5 rounded-xl border ${isDark ? 'bg-slate-800/40 border-slate-700/40' : 'bg-gray-50 border-gray-200'} space-y-1`}>
                 <div className="flex items-center justify-between text-xs font-semibold text-violet-400 gap-1">
-                  <span className="truncate">TTS: {providers?.tts?.provider ?? metadata?.tts_provider ?? 'Unknown'}</span>
+                  <span className="truncate">TTS: {providers?.tts?.provider ?? metadata?.tts_provider ?? '—'}</span>
                   {renderDeviceBadge(providers?.tts?.device)}
                 </div>
                 <p className={`text-xs font-mono truncate ${isDark ? 'text-slate-300' : 'text-gray-700'}`} title={providers?.tts?.model}>
-                  {providers?.tts?.model ?? providers?.tts?.voice ?? 'Default Voice'}
+                  {providers?.tts?.model ?? providers?.tts?.voice ?? '—'}
                 </p>
-                <span className="block text-[10px] text-slate-400 truncate">
-                  {metrics?.totalUnderruns === 0 ? '0 underruns (clean)' : `${metrics?.totalUnderruns ?? 0} underruns`}
-                </span>
+                {metrics?.totalUnderruns != null && (
+                  <span className="block text-[10px] text-slate-400 truncate">
+                    {metrics.totalUnderruns === 0 ? '0 underruns (clean)' : `${metrics.totalUnderruns} underruns`}
+                  </span>
+                )}
               </div>
             </div>
           </div>

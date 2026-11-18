@@ -41,4 +41,5 @@ Then the files are published to the Hugging Face repository
 [codavidgarcia/nemotron-3.5-asr-streaming-onnx](https://github.com/codavidgarcia/nemotron-3.5-asr-streaming-onnx),
 Apache-2.0 (`vendor/LICENSE`), unchanged; the commit is recorded in
 `vendor/UPSTREAM`. `LICENSE-OpenMDW-1.1` is NVIDIA's license for the weights
-and is copied into every export next to the NOTICE the script writes.
+and is copied into every export next to the `NOTICE` the script writes and
+`MODEL_CARD.md` (copied as `README.md` for the Hugging Face repository).

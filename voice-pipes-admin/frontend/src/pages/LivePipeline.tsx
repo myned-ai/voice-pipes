@@ -386,6 +386,11 @@ export default function LivePipeline() {
     [workers, selectedWorkerId],
   );
 
+  const hasInitializingWorkers = useMemo(
+    () => workers.some(w => w.status === 'initializing') || health?.status === 'initializing' || (health?.workers?.initializing ?? 0) > 0,
+    [workers, health],
+  );
+
   return (
       <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: isDark ? '#0f172a' : '#f8fafc', transition: 'background-color 0.3s ease' }}>
         <header style={{ padding: '1rem 2rem', background: isDark ? '#1e293b' : '#ffffff', color: isDark ? '#f8fafc' : '#0f172a', borderBottom: isDark ? '1px solid #334155' : '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontFamily: 'system-ui, sans-serif', transition: 'all 0.3s ease' }}>
@@ -516,12 +521,46 @@ export default function LivePipeline() {
               </div>
               <div style={{ width: '1px', height: '16px', background: isDark ? '#475569' : '#cbd5e1' }} />
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <div style={{ width: 8, height: 8, borderRadius: '50%', background: health && health.status !== 'offline' ? '#22c55e' : '#ef4444', boxShadow: health && health.status !== 'offline' ? '0 0 8px rgba(34, 197, 94, 0.5)' : 'none' }} />
-                <span style={{ fontSize: '12px', fontWeight: 600 }}>{health && health.status !== 'offline' ? 'Online' : 'Offline'}</span>
+                <div style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  background: isOffline ? '#ef4444' : hasInitializingWorkers ? '#f59e0b' : '#22c55e',
+                  boxShadow: isOffline ? 'none' : hasInitializingWorkers ? '0 0 8px rgba(245, 158, 11, 0.5)' : '0 0 8px rgba(34, 197, 94, 0.5)',
+                }} />
+                <span style={{ fontSize: '12px', fontWeight: 600 }}>
+                  {isOffline ? 'Offline' : hasInitializingWorkers ? 'Initializing' : 'Online'}
+                </span>
               </div>
             </div>
           </div>
         </header>
+
+        {hasInitializingWorkers && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            padding: '10px 2rem',
+            background: isDark ? 'rgba(217, 119, 6, 0.15)' : '#fef3c7',
+            borderBottom: isDark ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid #fde68a',
+            color: isDark ? '#fbbf24' : '#b45309',
+            fontSize: '13px',
+            fontWeight: 500,
+          }}>
+            <span style={{
+              width: 10,
+              height: 10,
+              borderRadius: '50%',
+              backgroundColor: '#f59e0b',
+              boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.25)',
+              flexShrink: 0,
+            }} />
+            <span>
+              <strong>Pipeline Warming Up:</strong> Worker is loading neural models on CPU. The live graph and audio controls will activate when cold-start completes.
+            </span>
+          </div>
+        )}
 
         {/* P15 — fleet overview: every pipeline at a glance (fraction-healthy),
             click a pipeline to drill its first worker into the graph below. */}
@@ -593,12 +632,16 @@ export default function LivePipeline() {
               fontFamily: 'system-ui, sans-serif',
               color: isDark ? '#94a3b8' : '#64748b',
             }}>
-              <Users size={48} style={{ color: isDark ? '#475569' : '#94a3b8' }} />
+              {hasInitializingWorkers ? (
+                <Cpu size={48} style={{ color: isDark ? '#f59e0b' : '#d97706' }} />
+              ) : (
+                <Users size={48} style={{ color: isDark ? '#475569' : '#94a3b8' }} />
+              )}
               <span style={{ fontSize: '18px', fontWeight: 600, color: isDark ? '#cbd5e1' : '#334155' }}>
-                {emptyGraphMessage(pipelineError, workers.length).title}
+                {emptyGraphMessage(pipelineError, workers.length, hasInitializingWorkers).title}
               </span>
               <span style={{ fontSize: '13px', textAlign: 'center', maxWidth: '520px', lineHeight: '1.5' }}>
-                {emptyGraphMessage(pipelineError, workers.length).detail}
+                {emptyGraphMessage(pipelineError, workers.length, hasInitializingWorkers).detail}
               </span>
             </div>
           ) : (

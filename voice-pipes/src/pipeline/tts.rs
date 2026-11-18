@@ -417,6 +417,51 @@ struct PrefetchedFragment {
 /// audio is resampled chunk-by-chunk using `StreamingResampler`.
 ///
 /// Checks `cancel` before each fragment; exits early when cancelled.
+/// Helper to buffer and combine streamed fragments into a single turn-level fragment
+/// when `sentence_chunking` is disabled.
+#[derive(Default)]
+struct TurnFragmentAccumulator {
+    text: String,
+    spoken_text: Option<String>,
+    hints: Option<voice_pipes_sdk::SynthesisHints>,
+    token_count: Option<u32>,
+}
+
+impl TurnFragmentAccumulator {
+    fn push(&mut self, frag: &TextFragment) {
+        self.text.push_str(&frag.text);
+        if let Some(ref spoken) = frag.spoken_text {
+            if let Some(ref mut c_spoken) = self.spoken_text {
+                c_spoken.push_str(spoken);
+            } else {
+                self.spoken_text = Some(spoken.clone());
+            }
+        }
+        if self.hints.is_none() && frag.hints.is_some() {
+            self.hints.clone_from(&frag.hints);
+        }
+        if frag.token_count.is_some() {
+            self.token_count = frag.token_count;
+        }
+    }
+
+    fn to_combined_fragment(&self) -> Option<TextFragment> {
+        if self.text.is_empty() {
+            return None;
+        }
+        let mut f = TextFragment::new(self.text.clone())
+            .with_is_end_of_response(true)
+            .with_hints(self.hints.clone());
+        if let Some(ref spoken) = self.spoken_text {
+            f = f.with_spoken_text(Some(spoken.clone()));
+        }
+        if let Some(tokens) = self.token_count {
+            f = f.with_token_count(Some(tokens));
+        }
+        Some(f)
+    }
+}
+
 pub async fn tts_task(
     mut frag_rx: mpsc::Receiver<TextFragment>,
     audio_tx: mpsc::Sender<AudioChunk>,
@@ -560,34 +605,21 @@ pub async fn tts_task(
             };
 
             if !tts.sentence_chunking() && !raw.is_end_of_response {
-                let mut combined_text = raw.text;
-                let mut combined_spoken = raw.spoken_text;
-                let mut hints = raw.hints;
-                let mut is_end = false;
+                let mut acc = TurnFragmentAccumulator::default();
+                acc.push(&raw);
                 while let Some(next_f) = frag_rx.recv().await {
                     if cancel.is_cancelled() {
                         return;
                     }
-                    combined_text.push_str(&next_f.text);
-                    if let Some(spoken) = next_f.spoken_text {
-                        if let Some(ref mut c_spoken) = combined_spoken {
-                            c_spoken.push_str(&spoken);
-                        } else {
-                            combined_spoken = Some(spoken);
-                        }
-                    }
-                    if hints.is_none() && next_f.hints.is_some() {
-                        hints = next_f.hints;
-                    }
-                    if next_f.is_end_of_response {
-                        is_end = true;
+                    let is_end = next_f.is_end_of_response;
+                    acc.push(&next_f);
+                    if is_end {
                         break;
                     }
                 }
-                raw.text = combined_text;
-                raw.spoken_text = combined_spoken;
-                raw.hints = hints;
-                raw.is_end_of_response = is_end;
+                if let Some(combined) = acc.to_combined_fragment() {
+                    raw = combined;
+                }
             }
 
             let is_end = raw.is_end_of_response;

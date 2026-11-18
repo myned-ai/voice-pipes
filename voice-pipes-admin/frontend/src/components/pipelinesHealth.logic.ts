@@ -44,7 +44,7 @@ export interface WorkerComponentsRollup {
 
 export interface WorkerListItem {
   id: string;
-  status: "active" | "draining" | "dead";
+  status: "active" | "initializing" | "draining" | "dead";
   pipeline_name?: string | null;
   pipeline_config_hash?: string;
   last_heartbeat?: string;

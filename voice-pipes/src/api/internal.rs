@@ -75,7 +75,12 @@ pub fn reap_workers(
 ) -> usize {
     workers.iter_mut().for_each(|mut entry| {
         let w = entry.value_mut();
-        if w.status != WorkerStatus::Dead && now - w.last_heartbeat > heartbeat_timeout {
+        let timeout = if w.status == WorkerStatus::Initializing {
+            chrono::Duration::seconds(300)
+        } else {
+            heartbeat_timeout
+        };
+        if w.status != WorkerStatus::Dead && now - w.last_heartbeat > timeout {
             tracing::info!(worker_id = %w.id, "marking worker as dead (heartbeat timeout)");
             w.status = WorkerStatus::Dead;
         }
@@ -173,7 +178,7 @@ async fn register_worker(
         address: reg.address,
         registered_at: Utc::now(),
         last_heartbeat: Utc::now(),
-        status: WorkerStatus::Active,
+        status: reg.status.unwrap_or(WorkerStatus::Active),
         capacity: reg.capacity,
         pipeline_config_hash: reg.pipeline_config_hash,
         pipeline_name: reg.pipeline_name,

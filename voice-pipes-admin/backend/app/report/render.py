@@ -180,7 +180,7 @@ def _build_report_for_llm(
     flat_turns = [_flatten_turn(u, started_at, first_utt_id, providers) for u in utterances]
     _apply_tool_context(flat_turns, utterances, client_tool_calls)
     aggregates = _component_aggregates(flat_turns, events, client_tool_calls)
-    anomalies = _detect_anomalies(flat_turns, targets, client_tool_calls)
+    anomalies = _detect_anomalies(flat_turns, targets, client_tool_calls, providers=providers)
     active_model = _health_model(health_model)
     verdict = _compute_verdict(flat_turns, aggregates, anomalies, providers,
                                model=active_model, grading=grading)

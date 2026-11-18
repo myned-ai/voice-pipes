@@ -419,12 +419,10 @@ export const FragmentPlayer = ({ entries, sessionId, concatUrl, asHeardUrl, frag
       {timelineFragments && (
         <FragmentTimeline
           fragments={timelineFragments}
-          fragmentTexts={fragmentTexts}
           heard={heardModel}
           mode={activeIdx === -2 ? 'heard' : 'server'}
           activeFragment={activeIdx >= 0 ? activeIdx : null}
           audioRef={audioRef}
-          onSelectFragment={selectFragment}
           isDark={isDark}
         />
       )}

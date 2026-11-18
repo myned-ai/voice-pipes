@@ -139,7 +139,6 @@ pub fn wizard_choices() -> Vec<voice_pipes_sdk::WizardChoice> {
             WizardField::fixed("model_name", "u3-rt-pro"),
             WizardField::secret("ASSEMBLYAI_API_KEY", "Enter ASSEMBLYAI_API_KEY"),
         ])
-        .with_stage_default(true)
         .with_menu_rank(30),
     ]
 }

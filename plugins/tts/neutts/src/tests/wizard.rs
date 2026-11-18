@@ -10,7 +10,7 @@ fn the_wizard_entry_renders_expected_config() {
     assert_eq!(choice.feature.as_deref(), Some("tts-neutts"));
     assert_eq!(
         choice.render_defaults("provider", "neutts").toml,
-        "provider = \"neutts\"\nmodel = \"models/neutts-air-q4_k_m.gguf\"\nvocoder = \"models/neucodec_decoder.onnx\"\n"
+        "provider = \"neutts\"\nmodel = \"models/neutts-air-Q4_0.gguf\"\nvocoder = \"models/neucodec_decoder.onnx\"\n"
     );
 }
 
@@ -22,8 +22,7 @@ fn the_wizard_downloads_air_and_codec_files() {
     };
     assert_eq!(layout, WizardLayout::File);
     let names: Vec<_> = files.iter().map(|f| f.name.as_str()).collect();
-    assert_eq!(names, ["neutts-air-q4_k_m.gguf", "neucodec_decoder.onnx"]);
-    for f in &files {
-        assert!(f.url.ends_with(&format!("/{}", f.name)), "{}", f.url);
-    }
+    assert_eq!(names, ["neutts-air-Q4_0.gguf", "neucodec_decoder.onnx"]);
+    assert!(files[0].url.ends_with("/neutts-air-Q4_0.gguf"));
+    assert!(files[1].url.ends_with("/model.onnx"));
 }

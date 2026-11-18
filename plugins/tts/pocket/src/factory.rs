@@ -95,6 +95,7 @@ impl TtsFactory for PocketHttpTtsFactory {
             config,
             audit_tx,
             core: std::sync::Arc::new(ComponentCore::new("tts:pocket-http", ComponentKind::Tts)),
+            serialize: tokio::sync::Mutex::new(()),
         }))
     }
 

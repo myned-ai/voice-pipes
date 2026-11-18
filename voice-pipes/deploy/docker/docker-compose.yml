@@ -1,5 +1,6 @@
 services:
   orchestrator:
+    image: ${VP_IMAGE:-ghcr.io/myned-ai/voice-pipes:latest}
     build:
       context: ../../..
       dockerfile: voice-pipes/Dockerfile
@@ -11,7 +12,7 @@ services:
         # registered" node — e.g. VibeVoice-as-openai showed only "Provider: openai"
         # with no Model/Voice/Endpoint rows. The orchestrator never runs synthesis,
         # so these are schema-only. The one list every worker builds is defined here.
-        - &worker-features FEATURES=realtime,text-grpc,tts-kokoro,tts-pocket,stt-moonshine,tts-openai,tts-elevenlabs,stt-assemblyai,stt-google,tts-gemini,stt-nemotron,stt-nemotron35,turn-smart
+        - &worker-features FEATURES=realtime,text-grpc,tts-kokoro,tts-pocket,stt-moonshine,tts-openai,tts-elevenlabs,stt-assemblyai,stt-google,tts-gemini,stt-nemotron,stt-nemotron35,turn-smart,tts-neutts,llm-gguf
     command:
       - orchestrate
       - --orchestrator-config
@@ -48,6 +49,7 @@ services:
   # dispatch by tag. Behind a profile so a plain `up` does not start them;
   # their host ports are their own, so they run beside the default workers.
   worker-a:
+    image: ${VP_IMAGE:-ghcr.io/myned-ai/voice-pipes:latest}
     build:
       context: ../../..
       dockerfile: voice-pipes/Dockerfile
@@ -86,6 +88,7 @@ services:
     restart: unless-stopped
 
   worker-b:
+    image: ${VP_IMAGE:-ghcr.io/myned-ai/voice-pipes:latest}
     build:
       context: ../../..
       dockerfile: voice-pipes/Dockerfile
@@ -124,6 +127,7 @@ services:
     restart: unless-stopped
 
   worker-gpu:
+    image: ${VP_CUDA_IMAGE:-ghcr.io/myned-ai/voice-pipes:latest-cuda}
     build:
       context: ../../..
       dockerfile: voice-pipes/Dockerfile.cuda
@@ -165,13 +169,14 @@ services:
     restart: unless-stopped
 
   worker-custom:
+    image: ${VP_IMAGE:-ghcr.io/myned-ai/voice-pipes:latest}
     build:
       context: ../../..
       dockerfile: voice-pipes/Dockerfile
       args:
         # tts-openai: the wizard's "OpenAI TTS (Cloud)" and VibeVoice (host GPU
         # sidecar, reached via the openai provider) options both need it.
-        # stt-assemblyai: the wizard's default STT choice needs it.
+        # stt-assemblyai: AssemblyAI streaming STT provider option.
         # tts-gemini: the wizard's Gemini TTS option; stt-nemotron: legacy manual Nemotron STT.
         # stt-nemotron35: the Nemotron 3.5 plugin recogniser (40 locales).
         # text-grpc: the agent-grpc gateway + gRPC agent tool backend, used for
@@ -230,6 +235,7 @@ services:
   # API key, and starts with the stack. Its reason to exist is
   # `record_session_audio` in pipeline-english-corpus.toml.
   worker-english-corpus:
+    image: ${VP_IMAGE:-ghcr.io/myned-ai/voice-pipes:latest}
     build:
       context: ../../..
       dockerfile: voice-pipes/Dockerfile
@@ -278,6 +284,7 @@ services:
   # the recogniser alone, so they can be compared from the Playground by
   # picking the pipeline. See config/pipeline-english-{moonshine,nemotron,nemotron35}.toml.
   worker-english-nemotron35:
+    image: ${VP_IMAGE:-ghcr.io/myned-ai/voice-pipes:latest}
     build:
       context: ../../..
       dockerfile: voice-pipes/Dockerfile
@@ -310,6 +317,7 @@ services:
     restart: unless-stopped
 
   worker-english-moonshine:
+    image: ${VP_IMAGE:-ghcr.io/myned-ai/voice-pipes:latest}
     build:
       context: ../../..
       dockerfile: voice-pipes/Dockerfile
@@ -345,6 +353,7 @@ services:
   # (scripts/README-export-nemotron.md); without it the worker cannot start
   # and `restart: unless-stopped` would loop it.
   worker-english-nemotron:
+    image: ${VP_IMAGE:-ghcr.io/myned-ai/voice-pipes:latest}
     build:
       context: ../../..
       dockerfile: voice-pipes/Dockerfile
@@ -378,6 +387,7 @@ services:
     restart: unless-stopped
 
   worker-custom-gpu:
+    image: ${VP_CUDA_IMAGE:-ghcr.io/myned-ai/voice-pipes:latest-cuda}
     build:
       context: ../../..
       dockerfile: voice-pipes/Dockerfile.cuda
@@ -445,6 +455,7 @@ services:
   #   docker compose --profile bench-s2s up -d
   # See scripts/bench-s2s-compare.ps1 for the suite/experiment seeding.
   worker-s2s-openai:
+    image: ${VP_IMAGE:-ghcr.io/myned-ai/voice-pipes:latest}
     build:
       context: ../../..
       dockerfile: voice-pipes/Dockerfile
@@ -481,6 +492,7 @@ services:
     restart: unless-stopped
 
   worker-s2s-gemini:
+    image: ${VP_IMAGE:-ghcr.io/myned-ai/voice-pipes:latest}
     build:
       context: ../../..
       dockerfile: voice-pipes/Dockerfile
@@ -519,6 +531,7 @@ services:
   # pipeline-s2s-elevenlabs.toml) before it can start — start it explicitly
   # once configured; bench-s2s-compare.ps1 treats this variant as optional.
   worker-s2s-elevenlabs:
+    image: ${VP_IMAGE:-ghcr.io/myned-ai/voice-pipes:latest}
     build:
       context: ../../..
       dockerfile: voice-pipes/Dockerfile
@@ -644,6 +657,11 @@ services:
       - HOME=/cache
       - UV_CACHE_DIR=/cache/uv
       - HF_HOME=/cache/huggingface
+      # Cap OpenMP/BLAS threads so concurrent sentence_chunking syntheses
+      # don't oversubscribe CPU cores.
+      - OMP_NUM_THREADS=${POCKET_TTS_THREADS:-4}
+      - MKL_NUM_THREADS=${POCKET_TTS_THREADS:-4}
+      - OPENBLAS_NUM_THREADS=${POCKET_TTS_THREADS:-4}
     # Entrypoint launches `pocket-tts serve` and fires one warm-up synthesis
     # so the first real turn doesn't pay the ~1.4s cold first-byte cost.
     entrypoint: ["sh", "/usr/local/bin/pocket-tts-entrypoint.sh"]

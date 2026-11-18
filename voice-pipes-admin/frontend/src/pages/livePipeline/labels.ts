@@ -15,7 +15,17 @@ export interface EmptyGraphMessage {
 /** Why the graph is empty. "No workers" only when there are none: a fleet
  *  with workers whose graph could not be built says so, with the reason the
  *  orchestrator gave when it gave one. */
-export function emptyGraphMessage(pipelineError: string | null, workerCount: number): EmptyGraphMessage {
+export function emptyGraphMessage(
+  pipelineError: string | null,
+  workerCount: number,
+  hasInitializing: boolean = false,
+): EmptyGraphMessage {
+  if (hasInitializing) {
+    return {
+      title: 'Pipeline Warming Up',
+      detail: 'Worker is initializing and loading neural models on CPU. The live pipeline graph and controls will activate once cold-start completes.',
+    };
+  }
   if (pipelineError) {
     return {
       title: 'Pipeline Unavailable',

@@ -35,6 +35,7 @@ and no audio leaving the machine.
 | [OpenAI TTS](tts/openai.md) | `openai` | cloud or any compatible endpoint | `tts-openai` (CLI crate; plugin) | `/v1/audio/speech`, chunked streaming |
 | [Gemini TTS](tts/gemini.md) | `gemini` | cloud | `tts-gemini` (CLI crate; plugin) | Generative-language REST API |
 | [ElevenLabs TTS](tts/elevenlabs.md) | `elevenlabs` | cloud | `tts-elevenlabs` (CLI crate; plugin) | Streaming with word timestamps for karaoke captions |
+| [NeuTTS](tts/neutts.md) | `neutts` | local, GGUF + ONNX NeuCodec | `tts-neutts` (CLI crate; plugin) | Zero-shot voice cloning, Qwen2 backbone, runs on CPU |
 | [gRPC](tts/grpc.md) | `grpc` | remote component server | `tts-grpc` | Any provider behind the split-mode server |
 
 ## LLM and text processors

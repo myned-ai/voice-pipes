@@ -38,6 +38,25 @@ fn phoneme_lookup() {
     assert_eq!(config.phoneme_to_ids("missing"), None);
 }
 
+#[test]
+fn espeak_voice_defaults_and_parses() {
+    let config: PiperModelConfig = serde_json::from_str(MINIMAL_CONFIG).unwrap();
+    assert_eq!(config.espeak_voice(), "en-us");
+
+    let with_espeak = MINIMAL_CONFIG.replace(
+        "\"audio\"",
+        "\"espeak\": { \"voice\": \"en-gb\" }, \"audio\"",
+    );
+    let mut config_gb: PiperModelConfig = serde_json::from_str(&with_espeak).unwrap();
+    assert_eq!(config_gb.espeak_voice(), "en-gb");
+
+    config_gb.apply_overrides(Some(0.35), Some(1.06), Some(0.5), Some("en-us"));
+    assert_eq!(config_gb.espeak_voice(), "en-us");
+    assert_eq!(config_gb.inference.noise_scale, 0.35);
+    assert_eq!(config_gb.inference.length_scale, 1.06);
+    assert_eq!(config_gb.inference.noise_w, 0.5);
+}
+
 /// A voice whose config states no sample rate or no channels cannot be
 /// played: it is refused at load, naming the file, instead of producing
 /// frames a sink cannot interpret.

@@ -19,6 +19,7 @@ import { TelemetryPanel } from './detail/TelemetryPanel';
 import { ClientToolCallCard, ClientToolsPanel } from './detail/ClientToolsPanel';
 import { SessionDescriptorsContext } from '../playground/SessionDescriptorsContext';
 import { SessionSummaryDialog } from './detail/SessionSummaryDialog';
+import { ResourceBreakdownModal } from './detail/ResourceBreakdownModal';
 
 const API = API_BASE;
 
@@ -61,6 +62,7 @@ export default function SessionDetail() {
   const [eventsLoaded, setEventsLoaded] = useState(0);
   const [reportCopyState, setReportCopyState] = useState<'idle' | 'loading' | 'copied' | 'error'>('idle');
   const [showSummary, setShowSummary] = useState(false);
+  const [showResourceModal, setShowResourceModal] = useState(false);
   const [idCopied, setIdCopied] = useState(false);
   // Server-detected anomalies grouped by utterance id.  Sourced from the
   // same `/report-for-llm?format=json` bundle so we don't re-implement the
@@ -296,36 +298,44 @@ export default function SessionDetail() {
                 const tip = [
                   `Peak process physical memory (RSS): ${rssMb} MB`,
                   cgroupMb ? `Peak container memory (cgroups): ${cgroupMb} MB` : null,
-                  'Deterministic memory management with zero GC pauses',
+                  'Click to open System Resources & Turn Memory Profile',
                 ].filter(Boolean).join(' · ');
                 return (
                   <>
                     <span className={isDark ? 'text-slate-600' : 'text-gray-300'}>·</span>
-                    <span
-                      className={`inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded-full ring-1 ${
-                        isDark ? 'bg-cyan-500/15 text-cyan-300 ring-cyan-500/30' : 'bg-cyan-50 text-cyan-700 ring-cyan-300'
+                    <button
+                      type="button"
+                      onClick={() => setShowResourceModal(true)}
+                      className={`inline-flex items-center gap-1.5 text-[11px] font-mono px-2.5 py-0.5 rounded-full ring-1 transition-all cursor-pointer ${
+                        isDark
+                          ? 'bg-cyan-500/15 text-cyan-300 ring-cyan-500/30 hover:bg-cyan-500/25 hover:ring-cyan-500/50'
+                          : 'bg-cyan-50 text-cyan-700 ring-cyan-300 hover:bg-cyan-100 hover:ring-cyan-400'
                       }`}
                       title={tip}
                     >
                       <span>⚡ Peak RAM:</span>
                       <span className="font-bold">{rssMb} MB</span>
                       {cgroupMb && <span className="opacity-70 text-[10px]">({cgroupMb}M container)</span>}
-                    </span>
+                    </button>
                   </>
                 );
               })()}
               {data.metadata?.avg_turn_cpu_ms != null && (
                 <>
                   <span className={isDark ? 'text-slate-600' : 'text-gray-300'}>·</span>
-                  <span
-                    className={`inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded-full ring-1 ${
-                      isDark ? 'bg-teal-500/15 text-teal-300 ring-teal-500/30' : 'bg-teal-50 text-teal-700 ring-teal-300'
+                  <button
+                    type="button"
+                    onClick={() => setShowResourceModal(true)}
+                    className={`inline-flex items-center gap-1.5 text-[11px] font-mono px-2.5 py-0.5 rounded-full ring-1 transition-all cursor-pointer ${
+                      isDark
+                        ? 'bg-teal-500/15 text-teal-300 ring-teal-500/30 hover:bg-teal-500/25 hover:ring-teal-500/50'
+                        : 'bg-teal-50 text-teal-700 ring-teal-300 hover:bg-teal-100 hover:ring-teal-400'
                     }`}
-                    title={`Average CPU time consumed per turn across this session: ${data.metadata.avg_turn_cpu_ms} ms`}
+                    title={`Average CPU time consumed per turn: ${data.metadata.avg_turn_cpu_ms} ms · Click to inspect memory & CPU profile`}
                   >
                     <span>⏱️ Avg Turn CPU:</span>
                     <span className="font-bold">{data.metadata.avg_turn_cpu_ms} ms</span>
-                  </span>
+                  </button>
                 </>
               )}
             </div>
@@ -662,6 +672,16 @@ export default function SessionDetail() {
           anomaliesByUtt={anomaliesByUtt}
           onCopyReportForLlm={copyReportForLlm}
           reportCopyState={reportCopyState}
+        />
+      )}
+
+      {/* Resource Breakdown & Leak Inspector Modal */}
+      {data && (
+        <ResourceBreakdownModal
+          isOpen={showResourceModal}
+          onClose={() => setShowResourceModal(false)}
+          data={data}
+          sessionId={id ?? ''}
         />
       )}
     </div>

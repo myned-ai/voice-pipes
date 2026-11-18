@@ -83,6 +83,13 @@ class EndpointingAttributionTests(unittest.TestCase):
         self.assertEqual(_endpointing_attribution(899.0, 500.0, 700.0)[0], "turn_detection")
         self.assertIsNone(_endpointing_attribution(901.0, 500.0, 700.0)[0])
 
+    def test_provider_and_smart_modes_do_not_blame_fallback_timeout_as_floor(self):
+        for mode in ("provider", "smart"):
+            with self.subTest(mode=mode):
+                owner, why = _endpointing_attribution(1571.0, 500.0, 1500.0, turn_detection_mode=mode)
+                self.assertIsNone(owner)
+                self.assertIn("slow turn-taking", why)
+
 
 class VerdictNamesTheRealCauseTests(unittest.TestCase):
     def _verdict(self, turns, model="v2"):

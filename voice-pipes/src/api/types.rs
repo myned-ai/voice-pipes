@@ -91,6 +91,7 @@ impl ApiResponse<()> {
 #[serde(rename_all = "snake_case")]
 pub enum WorkerStatus {
     Active,
+    Initializing,
     Draining,
     Dead,
 }
@@ -380,6 +381,9 @@ pub struct WorkerRegistration {
     /// load. Older workers omit this field.
     #[serde(default)]
     pub available_configs: Vec<crate::config::discover::ConfigEntry>,
+    /// Initial or current operational status reported by the worker.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<WorkerStatus>,
 }
 
 /// A worker leaving the fleet on purpose (a graceful shutdown).
@@ -421,10 +425,12 @@ pub struct OrchestratorHealthResponse {
     pub sessions: SessionSummary,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct WorkerFleetSummary {
     pub total: usize,
     pub active: usize,
+    #[serde(default)]
+    pub initializing: usize,
     pub draining: usize,
     pub dead: usize,
 }

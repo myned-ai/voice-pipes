@@ -128,6 +128,24 @@ class UnansweredWaitTest(unittest.TestCase):
     def test_an_ordinary_turn_is_left_alone(self):
         self.assertNotIn("turn.unanswered_wait", [k for _, k, _ in _kinds([_turn()])])
 
+    def test_s2s_falls_back_to_input_audio_speech_ms_for_heard_discount(self):
+        # S2S turns leave `stt.audio_duration_ms` null, so `input_audio.speech_ms`
+        # supplies the heard-audio discount against an early client_speech_end.
+        t = _turn(felt=4548.0, timed=988.0, heard=None)
+        t["input_audio"] = {"speech_ms": 458.0}
+        s2s_targets = {**TARGETS, "unanswered_wait_ms": 4500}
+        self.assertNotIn(
+            "turn.unanswered_wait",
+            [a["kind"] for a in _detect_anomalies([t], s2s_targets)],
+        )
+        # Genuine 10+ s lost turns still trigger on S2S.
+        lost = _turn(felt=12906.0, timed=968.0, heard=None)
+        lost["input_audio"] = {"speech_ms": 458.0}
+        self.assertIn(
+            "turn.unanswered_wait",
+            [a["kind"] for a in _detect_anomalies([lost], s2s_targets)],
+        )
+
 
 class ToolInvocationWaitTest(unittest.TestCase):
     """Session eeae8199: a clean request for a song, then 21.8 s of silence

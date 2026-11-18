@@ -84,6 +84,7 @@ _PROVIDER_TARGETS: dict[str, dict] = {
 _S2S_TARGETS: dict[str, float] = {
     "ttfb_ms": 1200,
     "endpointing_ms": 1200,
+    "unanswered_wait_ms": 4500,
 }
 
 

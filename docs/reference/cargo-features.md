@@ -125,7 +125,7 @@ Forward the engine's optional parts so deployers can select them on this binary 
 
 | Feature | Enables | Notes |
 |---|---|---|
-| `ort-cuda` | `voice-pipes-stt-parakeet?/ort-cuda`, `voice-pipes-stt-moonshine?/ort-cuda`, `voice-pipes-tts-piper?/ort-cuda`, `voice-pipes-stt-nemotron?/ort-cuda`, `voice-pipes-stt-nemotron35?/ort-cuda`, `voice-pipes-tts-kokoro?/ort-cuda` | CUDA for every linked ONNX plugin. |
+| `ort-cuda` | `voice-pipes-stt-parakeet?/ort-cuda`, `voice-pipes-stt-moonshine?/ort-cuda`, `voice-pipes-tts-piper?/ort-cuda`, `voice-pipes-stt-nemotron?/ort-cuda`, `voice-pipes-stt-nemotron35?/ort-cuda`, `voice-pipes-tts-kokoro?/ort-cuda`, `voice-pipes-tts-neutts?/ort-cuda` | CUDA for every linked ONNX plugin. |
 | `stt-moonshine-cuda` | `stt-moonshine`, `ort-cuda` | A plugin with every linked ONNX provider on CUDA: the same as naming the plugin and `ort-cuda`, kept for the builds that already name it. |
 | `stt-grpc` | `voice-pipes/stt-grpc` |  |
 | `tts-grpc` | `voice-pipes/tts-grpc` |  |
@@ -142,13 +142,13 @@ Out-of-tree providers built on the SDK. The engine knows nothing of them: this c
 
 | Feature | Enables | Notes |
 |---|---|---|
-| `stt-parakeet` | `dep:voice-pipes-stt-parakeet` | NVIDIA Parakeet TDT, the default recogniser. |
+| `stt-parakeet` | `dep:voice-pipes-stt-parakeet` | NVIDIA Parakeet TDT, the default recogniser (and wizard default). |
 | `stt-nemotron35` | `dep:voice-pipes-stt-nemotron35` | NVIDIA Nemotron 3.5 ASR (40 locales, cache-aware streaming) as a voice-pipes plugin. |
 | `stt-moonshine` | `dep:voice-pipes-stt-moonshine` | Useful Sensors Moonshine (English), local ONNX. |
 | `stt-nemotron` | `dep:voice-pipes-stt-nemotron` | NVIDIA Nemotron-Speech-Streaming (English), from a one-time ONNX export. |
 | `stt-nemotron-cuda` | `stt-nemotron`, `ort-cuda` | An alias: `stt-nemotron` with `ort-cuda`. |
 | `stt-google` | `dep:voice-pipes-stt-google` | Google Cloud Speech-to-Text v2 (Chirp 3), streaming over gRPC. |
-| `stt-assemblyai` | `dep:voice-pipes-stt-assemblyai` | AssemblyAI streaming STT (v3 WebSocket). The wizard's default recogniser. |
+| `stt-assemblyai` | `dep:voice-pipes-stt-assemblyai` | AssemblyAI streaming STT (v3 WebSocket). |
 | `stt-nemotron35-cuda` | `stt-nemotron35`, `ort-cuda` | An alias: `stt-nemotron35` with `ort-cuda`. |
 
 ### Plugin voices
@@ -162,6 +162,7 @@ Out-of-tree providers built on the SDK. The engine knows nothing of them: this c
 | `tts-openai` | `dep:voice-pipes-tts-openai` | OpenAI TTS, and servers speaking its API (the VibeVoice sidecar). |
 | `tts-elevenlabs` | `dep:voice-pipes-tts-elevenlabs` | ElevenLabs TTS (REST streaming, word timestamps). |
 | `tts-gemini` | `dep:voice-pipes-tts-gemini` | Google Gemini TTS (REST). |
+| `tts-neutts` | `dep:voice-pipes-tts-neutts` | NeuTTS-Air, local GGUF + ONNX NeuCodec. |
 
 ### Plugin LLMs
 

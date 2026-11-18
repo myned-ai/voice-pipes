@@ -27,6 +27,7 @@
   - [OpenAI TTS and compatible endpoints](guides/providers/tts/openai.md)
   - [Gemini TTS](guides/providers/tts/gemini.md)
   - [ElevenLabs TTS](guides/providers/tts/elevenlabs.md)
+  - [NeuTTS](guides/providers/tts/neutts.md)
   - [gRPC TTS client](guides/providers/tts/grpc.md)
   - [Local GGUF LLM](guides/providers/llm/local-gguf.md)
   - [OpenAI-compatible LLM](guides/providers/llm/openai-compatible.md)

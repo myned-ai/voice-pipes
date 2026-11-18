@@ -51,7 +51,7 @@ Then open **http://localhost:3000** (sign in using `ADMIN_UI_TOKEN` from `voice-
 
 ### Option B: Install the Native Rust CLI from Source
 
-Requires Rust 1.91+ (on Linux, install `libasound2-dev` for ALSA audio; `espeak-ng` at runtime for Piper TTS):
+Requires Rust 1.91+, a C/C++ compiler, CMake 3.16+, and LLVM/Clang (`libclang`) (on Linux: `build-essential libasound2-dev cmake clang libclang-dev`; `espeak-ng` at runtime for local voices):
 
 ```sh
 cargo install --locked --git https://github.com/myned-ai/voice-pipes voice-pipes-cli

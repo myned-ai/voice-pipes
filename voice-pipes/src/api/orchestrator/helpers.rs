@@ -10,20 +10,22 @@ use crate::audit::store::{AuditStore, StoredBlob};
 
 // ── Helpers ─────────────────────────────────────────────────
 
-pub fn worker_counts(state: &OrchestratorState) -> (usize, usize, usize, usize) {
+pub fn worker_counts(state: &OrchestratorState) -> (usize, usize, usize, usize, usize) {
     let mut total = 0usize;
     let mut active = 0usize;
+    let mut initializing = 0usize;
     let mut draining = 0usize;
     let mut dead = 0usize;
     for entry in state.workers.iter() {
         total += 1;
         match entry.value().status {
             WorkerStatus::Active => active += 1,
+            WorkerStatus::Initializing => initializing += 1,
             WorkerStatus::Draining => draining += 1,
             WorkerStatus::Dead => dead += 1,
         }
     }
-    (total, active, draining, dead)
+    (total, active, initializing, draining, dead)
 }
 
 pub fn compute_histogram(values: &[u64]) -> HistogramSummary {

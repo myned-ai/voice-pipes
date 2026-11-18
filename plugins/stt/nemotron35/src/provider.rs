@@ -33,7 +33,7 @@ const DEFAULT_THREADS: usize = 4;
 /// The locale prompt when the pipeline names none and the session sends
 /// none. The model's own default is `auto`; a session should name its
 /// locale, since `auto` costs accuracy on short utterances.
-const DEFAULT_LOCALE: &str = "auto";
+const DEFAULT_LOCALE: &str = "en-US";
 /// Silence appended to every utterance before the engine is flushed.
 ///
 /// The model emits a token only once it has seen speech end: flushing the
@@ -217,7 +217,7 @@ impl Nemotron35Stt {
             .first()
             .and_then(|&id| self.tokens.locale_of(id))
             .map(str::to_string)
-            .or_else(|| (locale != DEFAULT_LOCALE).then(|| locale.to_string()));
+            .or_else(|| (locale != "auto").then(|| locale.to_string()));
         let inference_metrics = is_final.then(|| {
             InferenceMetrics::measured(total_audio_secs, inference_wall, chunks_run)
                 // The chunk plus the lookahead it was exported with, in audio time.

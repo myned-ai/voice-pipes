@@ -451,3 +451,96 @@ async fn metric_conformance() {
     .await;
     assert!(res.is_ok(), "{res:?}");
 }
+
+#[tokio::test]
+async fn concurrent_synthesize_streams_are_serialized_and_cancel_fast() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let active = Arc::new(AtomicUsize::new(0));
+    let max_active = Arc::new(AtomicUsize::new(0));
+    let hits = Arc::new(AtomicUsize::new(0));
+    let body = wav(&speech(0.2));
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let active_s = Arc::clone(&active);
+    let max_s = Arc::clone(&max_active);
+    let hits_s = Arc::clone(&hits);
+    tokio::spawn(async move {
+        while let Ok((mut sock, _)) = listener.accept().await {
+            let active_s = Arc::clone(&active_s);
+            let max_s = Arc::clone(&max_s);
+            let hits_s = Arc::clone(&hits_s);
+            let body = body.clone();
+            tokio::spawn(async move {
+                let mut buf = [0u8; 1024];
+                let _ = sock.read(&mut buf).await;
+                hits_s.fetch_add(1, Ordering::SeqCst);
+                let cur = active_s.fetch_add(1, Ordering::SeqCst) + 1;
+                max_s.fetch_max(cur, Ordering::SeqCst);
+                tokio::time::sleep(std::time::Duration::from_millis(40)).await;
+                let hdr = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: audio/wav\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                let _ = sock.write_all(hdr.as_bytes()).await;
+                let _ = sock.write_all(&body).await;
+                active_s.fetch_sub(1, Ordering::SeqCst);
+            });
+        }
+    });
+
+    let tts: Arc<dyn TtsProvider> = Arc::from(provider_for(&format!("http://{addr}"), &[]));
+    let (tx1, mut rx1) = tokio::sync::mpsc::channel(16);
+    let (tx2, mut rx2) = tokio::sync::mpsc::channel(16);
+    let (tx3, _rx3) = tokio::sync::mpsc::channel(16);
+    let cancel_3 = tokio_util::sync::CancellationToken::new();
+    let cancel_3_trigger = cancel_3.clone();
+
+    let t1 = {
+        let tts = Arc::clone(&tts);
+        tokio::spawn(async move {
+            tts.synthesize_stream(
+                voice_pipes_sdk::SynthesisRequest::new("First sentence."),
+                tx1,
+                tokio_util::sync::CancellationToken::new(),
+            )
+            .await
+        })
+    };
+    let t2 = {
+        let tts = Arc::clone(&tts);
+        tokio::spawn(async move {
+            tts.synthesize_stream(
+                voice_pipes_sdk::SynthesisRequest::new("Second sentence."),
+                tx2,
+                tokio_util::sync::CancellationToken::new(),
+            )
+            .await
+        })
+    };
+    let t3 = {
+        let tts = Arc::clone(&tts);
+        tokio::spawn(async move {
+            tts.synthesize_stream(
+                voice_pipes_sdk::SynthesisRequest::new("Cancelled while waiting."),
+                tx3,
+                cancel_3,
+            )
+            .await
+        })
+    };
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    cancel_3_trigger.cancel();
+
+    let (r1, r2, r3) = tokio::join!(t1, t2, t3);
+    r1.unwrap().unwrap();
+    r2.unwrap().unwrap();
+    r3.unwrap().unwrap();
+    assert!(rx1.recv().await.is_some());
+    assert!(rx2.recv().await.is_some());
+    assert_eq!(max_active.load(Ordering::SeqCst), 1);
+    assert_eq!(hits.load(Ordering::SeqCst), 2);
+}

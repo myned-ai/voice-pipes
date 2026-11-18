@@ -3,8 +3,8 @@
 //! NeuTTS-Air is an open-source (Apache 2.0) on-device speech language model
 //! producing natural speech with instant zero-shot voice cloning capabilities.
 //!
-//! Output audio is natively 24 kHz, downsampled in-memory to Voice Pipes standard
-//! 16 kHz mono PCM (`TARGET_SAMPLE_RATE = 16_000`).
+//! Output audio is natively 24 kHz; the pipeline engine automatically resamples
+//! chunk-by-chunk to the pipeline standard (16 kHz) via `StreamingResampler`.
 
 #![forbid(unsafe_code)]
 #![cfg_attr(
@@ -18,8 +18,8 @@
 )]
 
 mod engine;
-mod resample;
 mod schema;
+mod voices;
 mod wizard;
 
 pub use wizard::wizard_choices;
@@ -30,7 +30,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tracing::{info, instrument};
 
-use engine::{NeuTtsEngine, TARGET_SAMPLE_RATE};
+use engine::{NATIVE_SAMPLE_RATE, NeuTtsEngine};
 use voice_pipes_onnx::{EXECUTION_PROVIDER_VAR, ExecutionTarget, SessionPool};
 use voice_pipes_sdk::component::{
     Component, ComponentCore, ComponentKind, CoreComponent, DeviceInfo,
@@ -40,14 +40,99 @@ use voice_pipes_sdk::{
     TraceEvent, TtsConfig, TtsError, TtsFactory, TtsProvider,
 };
 
-/// Default pool size of vocoder engines.
-const DEFAULT_POOL_SIZE: usize = 2;
+/// Default pool size of `NeuTTS` engines (1 slot minimizes CPU memory and cold-start time).
+const DEFAULT_POOL_SIZE: usize = 1;
 
-/// Default intra-op threads per session.
+/// Default intra-op threads per session (fallback when parallelism query fails).
 const DEFAULT_THREADS: usize = 4;
 
-/// Build the bounded session pool for `NeuCodec` vocoders.
-fn build_vocoder_pool(
+/// Resolve default thread count matching upstream `_n_perf_cores()` (physical core count, clamped to 4..=8).
+fn resolve_default_threads() -> usize {
+    let perf_cores = std::thread::available_parallelism()
+        .map_or(DEFAULT_THREADS, |n| (n.get() / 2).clamp(4, 8));
+    voice_pipes_onnx::intra_threads_from_env(perf_cores)
+}
+
+/// Check whether the current buffer ends with a common title/abbreviation before a period.
+fn ends_with_abbreviation(buf: &str) -> bool {
+    let last_word = buf
+        .rsplit(|c: char| !c.is_ascii_alphabetic())
+        .next()
+        .unwrap_or("");
+    matches!(
+        last_word.to_ascii_lowercase().as_str(),
+        "mr" | "mrs" | "ms" | "dr" | "prof" | "sr" | "jr" | "st" | "vs" | "etc"
+    )
+}
+
+/// Phonemize text via `espeak-ng` while preserving clause punctuation (`;`, `:`, `,`, `.`, `!`, `?`),
+/// matching Python `phonemizer`'s `EspeakBackend(preserve_punctuation=True, with_stress=True)`
+/// used by upstream `neuphonic/neutts-air`, while keeping numbers (`3.14`, `1,500`, `2:30`)
+/// and abbreviations (`Dr.`, `Mr.`) intact in a single `espeak-ng` context.
+pub(crate) fn phonemize_preserving_punctuation(text: &str, lang: &str) -> Result<String, TtsError> {
+    let chars: Vec<char> = text
+        .chars()
+        .map(|c| match c {
+            '‘' | '’' => '\'',
+            '“' | '”' => '"',
+            other => other,
+        })
+        .collect();
+
+    let mut clauses: Vec<(String, Option<char>)> = Vec::new();
+    let mut current = String::new();
+
+    for (i, &ch) in chars.iter().enumerate() {
+        if matches!(ch, ';' | ':' | ',' | '.' | '!' | '?') {
+            let prev_digit = i > 0 && chars.get(i.saturating_sub(1)).is_some_and(char::is_ascii_digit);
+            let next_digit = chars.get(i.saturating_add(1)).is_some_and(char::is_ascii_digit);
+            let in_number = matches!(ch, '.' | ',' | ':') && prev_digit && next_digit;
+            let is_abbrev = ch == '.' && ends_with_abbreviation(&current);
+
+            if in_number || is_abbrev {
+                current.push(ch);
+            } else if current.chars().any(char::is_alphanumeric) {
+                clauses.push((std::mem::take(&mut current), Some(ch)));
+            } else if let Some(last) = clauses.last_mut() {
+                last.1 = Some(ch);
+                current.clear();
+            } else {
+                current.clear();
+            }
+        } else {
+            current.push(ch);
+        }
+    }
+    if current.chars().any(char::is_alphanumeric) {
+        clauses.push((current, None));
+    }
+
+    if clauses.is_empty() {
+        return Ok(String::new());
+    }
+
+    let mut out_parts = Vec::with_capacity(clauses.len());
+    let last_idx = clauses.len().saturating_sub(1);
+    for (idx, (clause, punct)) in clauses.into_iter().enumerate() {
+        let raw_ipa = voice_pipes_sdk::phonemize::run_espeak_with_language(clause.trim(), lang)?;
+        let clean_ipa = raw_ipa.split_whitespace().collect::<Vec<_>>().join(" ");
+        if clean_ipa.is_empty() {
+            continue;
+        }
+        let suffix = match punct {
+            Some(p) => p,
+            None if idx == last_idx => '.',
+            None => ',',
+        };
+        out_parts.push(format!("{clean_ipa}{suffix}"));
+    }
+
+    Ok(out_parts.join(" "))
+}
+
+/// Build the bounded session pool for `NeuTTS` engines.
+fn build_engine_pool(
+    model_path: &Path,
     vocoder_path: &Path,
     pool_size: usize,
     target: ExecutionTarget,
@@ -55,10 +140,10 @@ fn build_vocoder_pool(
 ) -> Result<SessionPool<NeuTtsEngine>, TtsError> {
     let mut engines = Vec::with_capacity(pool_size);
     for _ in 0..pool_size {
-        engines.push(NeuTtsEngine::load_vocoder(vocoder_path, target, threads)?);
+        engines.push(NeuTtsEngine::load(model_path, vocoder_path, target, threads)?);
     }
-    info!(pool_size, threads, "NeuTTS vocoder session pool created");
-    SessionPool::new(engines, "NeuTTS vocoder engines")
+    info!(pool_size, threads, "NeuTTS session pool created");
+    SessionPool::new(engines, "NeuTTS engines")
         .map_err(|e| TtsError::ConfigError(e.to_string()))
 }
 
@@ -68,6 +153,7 @@ pub(crate) struct NeuTtsAir {
     model_path: PathBuf,
     vocoder_path: PathBuf,
     default_voice: String,
+    sentence_chunking: bool,
     #[expect(dead_code, reason = "staged for voice cloning reference audio")]
     reference_audio: Option<PathBuf>,
     #[expect(dead_code, reason = "staged for voice cloning reference transcript")]
@@ -84,6 +170,7 @@ impl std::fmt::Debug for NeuTtsAir {
             .field("model_path", &self.model_path)
             .field("vocoder_path", &self.vocoder_path)
             .field("default_voice", &self.default_voice)
+            .field("sentence_chunking", &self.sentence_chunking)
             .finish_non_exhaustive()
     }
 }
@@ -94,6 +181,7 @@ impl NeuTtsAir {
         model_path: &Path,
         vocoder_path: &Path,
         default_voice: &str,
+        sentence_chunking: bool,
         reference_audio: Option<PathBuf>,
         reference_text: Option<String>,
         pool_size: usize,
@@ -102,7 +190,8 @@ impl NeuTtsAir {
         target: ExecutionTarget,
     ) -> Result<Self, TtsError> {
         let core = Arc::new(ComponentCore::new("tts:neutts", ComponentKind::Tts));
-        let pool = Arc::new(build_vocoder_pool(
+        let pool = Arc::new(build_engine_pool(
+            model_path,
             vocoder_path,
             pool_size,
             target,
@@ -114,6 +203,7 @@ impl NeuTtsAir {
             model_path: model_path.to_path_buf(),
             vocoder_path: vocoder_path.to_path_buf(),
             default_voice: default_voice.to_string(),
+            sentence_chunking,
             reference_audio,
             reference_text,
             text_chunking,
@@ -130,7 +220,11 @@ impl TtsProvider for NeuTtsAir {
     }
 
     fn sample_rate(&self) -> u32 {
-        TARGET_SAMPLE_RATE
+        NATIVE_SAMPLE_RATE
+    }
+
+    fn sentence_chunking(&self) -> bool {
+        self.sentence_chunking
     }
 
     fn as_component(&self) -> Option<Arc<dyn Component>> {
@@ -144,15 +238,20 @@ impl TtsProvider for NeuTtsAir {
     #[instrument(skip_all, fields(text_len = text.len()))]
     async fn synthesize(&self, text: &str) -> Result<AudioFrame, TtsError> {
         let req = SynthesisRequest::new(text);
-        let (tx, mut rx) = tokio::sync::mpsc::channel(16);
+        let (tx, mut rx) = tokio::sync::mpsc::channel(64);
         let cancel = tokio_util::sync::CancellationToken::new();
 
-        self.synthesize_stream(req, tx, cancel).await?;
+        let stream_fut = self.synthesize_stream(req, tx, cancel);
+        let collect_fut = async {
+            let mut all_samples = Vec::new();
+            while let Some(frame) = rx.recv().await {
+                all_samples.extend_from_slice(&frame.samples);
+            }
+            all_samples
+        };
 
-        let mut all_samples = Vec::new();
-        while let Some(frame) = rx.recv().await {
-            all_samples.extend_from_slice(&frame.samples);
-        }
+        let (stream_res, all_samples) = tokio::join!(stream_fut, collect_fut);
+        stream_res?;
 
         if all_samples.is_empty() {
             return Err(TtsError::InferenceFailed(
@@ -162,7 +261,7 @@ impl TtsProvider for NeuTtsAir {
 
         Ok(AudioFrame {
             samples: all_samples,
-            sample_rate: TARGET_SAMPLE_RATE,
+            sample_rate: NATIVE_SAMPLE_RATE,
             channels: 1,
         })
     }
@@ -179,46 +278,36 @@ impl TtsProvider for NeuTtsAir {
         }
 
         let start = std::time::Instant::now();
-        let pool = Arc::clone(&self.pool);
         let text = req.text.to_string();
 
-        // Check out a vocoder slot from the pool
-        let mut slot = pool
-            .checkout()
-            .await
-            .map_err(|e| TtsError::busy(format!("vocoder pool checkout failed: {e}")))?;
-
-        // Run phonemization on blocking threadpool to protect Tokio reactor
+        // 1. Run phonemization first (does not hold an engine slot!)
         let text_clone = text.clone();
         let phonemes = tokio::task::spawn_blocking(move || {
-            voice_pipes_sdk::phonemize::run_espeak_with_language(&text_clone, "en-us")
+            phonemize_preserving_punctuation(&text_clone, "en-us")
         })
         .await
         .map_err(|e| TtsError::PhonemizationFailed(format!("phonemize join error: {e}")))?
         ?;
 
-        if cancel.is_cancelled() {
+        if cancel.is_cancelled() || phonemes.trim().is_empty() {
             return Ok(());
         }
 
-        // Placeholder token synthesis until full GGUF Qwen2 weights are invoked
-        let tokens: Vec<i64> = phonemes.chars().map(|c| (c as i64) % 1024).collect();
+        // 2. Check out an engine slot (allow up to 30s wait on CPU for preceding sentences)
+        let pool = Arc::clone(&self.pool);
+        let mut slot = pool
+            .checkout_within(std::time::Duration::from_secs(30))
+            .await
+            .map_err(|e| TtsError::busy(format!("engine pool checkout failed: {e}")))?;
 
-        if !tokens.is_empty() {
-            let samples = tokio::task::spawn_blocking(move || slot.decode_tokens(&tokens))
-                .await
-                .map_err(|e| TtsError::InferenceFailed(format!("decode join error: {e}")))?
-                ?;
-
-            if !samples.is_empty() && !cancel.is_cancelled() {
-                let frame = AudioFrame {
-                    samples,
-                    sample_rate: TARGET_SAMPLE_RATE,
-                    channels: 1,
-                };
-                let _ = tx.send(frame).await;
-            }
-        }
+        let cancel_clone = cancel.clone();
+        let tx_clone = tx.clone();
+        tokio::task::spawn_blocking(move || {
+            slot.synthesize(&phonemes, &cancel_clone, &tx_clone)
+        })
+        .await
+        .map_err(|e| TtsError::InferenceFailed(format!("synthesis join error: {e}")))?
+        ?;
 
         self.core.record_ok(start.elapsed());
         Ok(())
@@ -252,11 +341,8 @@ impl TtsFactory for NeuTtsFactory {
                 "model path required for NeuTTS-Air (path to GGUF file)",
             ));
         }
-        if !cfg.options.contains_key("vocoder") {
-            errors.push(ConfigError::new(
-                "vocoder",
-                "vocoder path required for NeuTTS-Air (path to neucodec_decoder.onnx)",
-            ));
+        if let Err(opt_errs) = NeuTtsOptions::read(cfg) {
+            errors.extend(opt_errs);
         }
         errors
     }
@@ -279,6 +365,7 @@ impl TtsFactory for NeuTtsFactory {
             model_path,
             vocoder_path,
             default_voice,
+            cfg.sentence_chunking,
             options.reference_audio,
             options.reference_text,
             options.pool_size,
@@ -297,7 +384,7 @@ impl TtsFactory for NeuTtsFactory {
     }
 
     fn output_sample_rate(&self, _cfg: &TtsConfig) -> Option<u32> {
-        Some(TARGET_SAMPLE_RATE)
+        Some(NATIVE_SAMPLE_RATE)
     }
 }
 
@@ -322,7 +409,7 @@ impl NeuTtsOptions {
         let ref_audio = o.string("reference_audio").map(PathBuf::from);
         let ref_text = o.string("reference_text");
         let pool_size = o.usize_in("pool_size", 1..=64, DEFAULT_POOL_SIZE);
-        let default_threads = voice_pipes_onnx::intra_threads_from_env(DEFAULT_THREADS);
+        let default_threads = resolve_default_threads();
         let threads = o.usize_in("threads", 0..=128, default_threads);
 
         let device_option = o
