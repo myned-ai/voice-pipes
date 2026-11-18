@@ -155,6 +155,7 @@ def main() -> int:
     for name in ("decoder.onnx", "joiner.onnx", "nemotron_onnx_config.json", "tokens.txt"):
         shutil.copyfile(fp32 / name, out / name)
     shutil.copyfile(HERE / "LICENSE-OpenMDW-1.1", out / "LICENSE-OpenMDW-1.1")
+    shutil.copyfile(HERE / "MODEL_CARD.md", out / "README.md")
     (out / "NOTICE").write_text(NOTICE.format(
         model_id=args.model_id, checkpoint_rev=checkpoint_revision(args.model_id),
         today=date.today().isoformat(), rev=args.rev, chunk_ms=CHUNK_MS,

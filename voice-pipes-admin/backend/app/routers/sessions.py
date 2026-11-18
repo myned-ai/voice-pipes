@@ -58,6 +58,31 @@ def merge_session_metadata(local_meta: dict, orch_data: dict) -> dict:
     return merged
 
 
+def _merge_turn_resources(utterances: list[dict], orch_data: dict | None) -> None:
+    """Attach orchestrator `TurnRecord` resource_usage onto matching capture utterances."""
+    if not orch_data or not isinstance(orch_data.get("turns"), list):
+        return
+    turns = orch_data["turns"]
+    by_uid = {
+        t["utterance_id"]: t
+        for t in turns
+        if t.get("utterance_id") is not None
+    }
+    positional = [t for t in turns if t.get("utterance_id") is None]
+    pos_idx = 0
+    for u in utterances:
+        uid = u.get("utterance_id")
+        matched = by_uid.get(uid) if uid in by_uid else None
+        if matched is None and not is_empty_turn(u) and pos_idx < len(positional):
+            matched = positional[pos_idx]
+            pos_idx += 1
+        if matched is None:
+            continue
+        res = (matched.get("detail") or {}).get("resource_usage") or matched.get("resource_usage")
+        if res and not u.get("resource_usage"):
+            u["resource_usage"] = res
+
+
 def _extract_tenant_id(request: Request | None, query_tenant: str | None) -> str | None:
     if isinstance(query_tenant, str):
         return query_tenant
@@ -204,6 +229,7 @@ def _local_session_detail(
     # so TurnCards can render "(streaming)" and "(est.)" hints without
     # cross-referencing other event payloads.
     utts = result.get("utterances") or []
+    _merge_turn_resources(utts, orch_data)
     providers = _extract_provider_identity(utts, result.get("metadata") or {})
     result["providers"] = providers
 
@@ -349,18 +375,8 @@ def _report_for_llm_response(
 
     utterances = artifacts.get("utterances") or []
     if orch_data and isinstance(orch_data.get("turns"), list):
-        turns_by_id = {}
-        for idx, t in enumerate(orch_data["turns"]):
-            uid = t.get("utterance_id") if t.get("utterance_id") is not None else idx
-            turns_by_id[uid] = t
         if utterances:
-            for u in utterances:
-                uid = u.get("utterance_id")
-                if uid in turns_by_id:
-                    t = turns_by_id[uid]
-                    res = (t.get("detail") or {}).get("resource_usage") or t.get("resource_usage")
-                    if res and "resource_usage" not in u:
-                        u["resource_usage"] = res
+            _merge_turn_resources(utterances, orch_data)
         else:
             for idx, t in enumerate(orch_data["turns"]):
                 detail = t.get("detail") or {}

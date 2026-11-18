@@ -320,12 +320,20 @@ impl TextProcessor for OpenAiCompatProcessor {
     /// Bypasses `process_inner` so it doesn't touch conversation
     /// history or emit user-visible audit events.
     async fn warm_up(&self) -> Result<(), TextProcessorError> {
+        let mut messages = Vec::with_capacity(2);
+        if !self.config.system_prompt.is_empty() {
+            messages.push(ChatMessage {
+                role: "system".into(),
+                content: self.config.system_prompt.clone(),
+            });
+        }
+        messages.push(ChatMessage {
+            role: "user".into(),
+            content: ".".into(),
+        });
         let body = ChatCompletionRequest {
             model: self.config.model.clone(),
-            messages: vec![ChatMessage {
-                role: "user".into(),
-                content: ".".into(),
-            }],
+            messages,
             stream: false,
             temperature: Some(0.0),
             top_p: None,
@@ -340,7 +348,10 @@ impl TextProcessor for OpenAiCompatProcessor {
             stream_options: None,
             tools: None,
             tool_choice: None,
-            extra: serde_json::Map::new(),
+            // Forward `extra_body` (e.g. `chat_template_kwargs.enable_thinking = false`)
+            // so thinking-capable local models don't spend seconds thinking on warm-up
+            // and the prompt cache prefix matches real turns.
+            extra: self.config.extra_body.clone().unwrap_or_default(),
         };
         // Single attempt, no retries — warm-up is best-effort and
         // mustn't delay session readiness if the provider is sluggish.

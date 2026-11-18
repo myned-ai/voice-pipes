@@ -397,3 +397,64 @@ export function formatDeviceBadge(device?: DeviceInfo | null): DeviceBadge | nul
     .join(' · ');
   return { label, tone, title };
 }
+
+// ── Turn Resource Badges ───────────────────────────────────────────────────
+
+export interface TurnResourceBadge {
+  ramLabel: string | null;
+  ramStyle: string;
+  cpuPct: string | null;
+  tipParts: string;
+}
+
+/**
+ * Format a turn's resource usage (RAM RSS, delta, CPU%) into badge labels and styles.
+ */
+export function formatTurnResourceBadges(
+  res: {
+    rss_bytes?: number | null;
+    rss_delta_bytes?: number | null;
+    cpu_percent?: number | null;
+    cpu_time_ms?: number | null;
+    container_peak_memory_bytes?: number | null;
+  } | null | undefined,
+  isDark: boolean,
+): TurnResourceBadge | null {
+  if (!res) return null;
+  const mb = res.rss_bytes != null ? (res.rss_bytes / (1024 * 1024)).toFixed(1) : null;
+  const deltaMb = res.rss_delta_bytes != null ? (res.rss_delta_bytes / (1024 * 1024)).toFixed(2) : null;
+  const cpuPct = res.cpu_percent != null ? `${res.cpu_percent.toFixed(0)}%` : null;
+  const cpuMs = res.cpu_time_ms != null ? `${res.cpu_time_ms}ms` : null;
+  const cgroupMb = res.container_peak_memory_bytes != null ? `${(res.container_peak_memory_bytes / (1024 * 1024)).toFixed(0)} MB` : null;
+
+  const tipParts = [
+    mb ? `Process physical resident memory (RSS): ${mb} MB` : null,
+    deltaMb ? `Turn memory delta: ${Number(deltaMb) > 0 ? '+' : ''}${deltaMb} MB` : null,
+    cpuPct ? `Turn CPU utilization: ${cpuPct} (${cpuMs ?? ''} CPU time)` : null,
+    cgroupMb ? `Container peak memory: ${cgroupMb}` : null,
+    'Deterministic Rust runtime with zero GC pauses',
+  ].filter(Boolean).join(' · ');
+
+  let ramLabel = mb ? `RAM ${mb}M` : null;
+  let ramStyle = isDark ? 'bg-cyan-500/15 text-cyan-300 ring-cyan-500/30' : 'bg-cyan-50 text-cyan-700 ring-cyan-300';
+  if (deltaMb != null) {
+    const numDelta = Number(deltaMb);
+    if (numDelta >= 25.0) {
+      ramLabel = `RAM Δ+${deltaMb}M`;
+      ramStyle = isDark ? 'bg-rose-500/15 text-rose-300 ring-rose-500/30' : 'bg-rose-50 text-rose-700 ring-rose-300';
+    } else if (numDelta >= 10.0) {
+      ramLabel = `RAM Δ+${deltaMb}M`;
+      ramStyle = isDark ? 'bg-amber-500/15 text-amber-300 ring-amber-500/30' : 'bg-amber-50 text-amber-700 ring-amber-300';
+    } else if (Math.abs(numDelta) >= 0.05) {
+      ramLabel = `RAM Δ${numDelta > 0 ? '+' : ''}${deltaMb}M`;
+      ramStyle = numDelta < 0
+        ? (isDark ? 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/30' : 'bg-emerald-50 text-emerald-700 ring-emerald-300')
+        : (isDark ? 'bg-cyan-500/15 text-cyan-300 ring-cyan-500/30' : 'bg-cyan-50 text-cyan-700 ring-cyan-300');
+    } else {
+      ramLabel = 'RAM flat';
+      ramStyle = isDark ? 'bg-slate-800 text-slate-400 ring-slate-700' : 'bg-gray-100 text-gray-500 ring-gray-200';
+    }
+  }
+
+  return { ramLabel, ramStyle, cpuPct, tipParts };
+}

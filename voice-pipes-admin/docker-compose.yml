@@ -1,5 +1,6 @@
 services:
   backend:
+    image: ${VP_ADMIN_BACKEND_IMAGE:-ghcr.io/myned-ai/voice-pipes-admin-backend:latest}
     build:
       context: ./backend
     ports:
@@ -51,6 +52,7 @@ services:
   # or switch this service to the Dockerfile's `dev` target (target: dev)
   # and volume-mount ./frontend/src:/app/src for containerized HMR.
   frontend:
+    image: ${VP_ADMIN_FRONTEND_IMAGE:-ghcr.io/myned-ai/voice-pipes-admin-frontend:latest}
     build:
       context: ./frontend
       # VITE_API_URL / VITE_WS_URL are BUILD args for the static bundle;

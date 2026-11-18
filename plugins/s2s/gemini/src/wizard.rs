@@ -14,20 +14,15 @@ pub fn wizard_choices() -> Vec<WizardChoice> {
             WizardField::text(
                 "model",
                 "Gemini model name",
-                "gemini-2.5-flash-native-audio-latest",
+                "gemini-3.8-live",
             ),
             WizardField::text("voice", "Gemini voice identifier", "Puck"),
             WizardField::fixed("vad", "server_vad"),
             WizardField::fixed("api_key_env", "GEMINI_API_KEY"),
             WizardField::fixed(
                 "instructions",
-                "You are a concise voice assistant. Speak English unless the user explicitly asks for another language.",
+                "You are a concise voice assistant. RESPOND IN ENGLISH. YOU MUST RESPOND UNMISTAKABLY IN ENGLISH, even if the user's speech sounds like another language or you are unsure what they said. If you did not understand, ask them in English to repeat.",
             ),
-            WizardField::comment(
-                "Native-audio models default to dynamic thinking, which adds a\n\
-                 variable pre-speech delay; 0 disables it (-1 = dynamic, 1..32768 = cap).",
-            ),
-            WizardField::fixed_literal("options.thinking_budget", "0"),
             WizardField::comment(
                 "Gemini decides when the caller has finished. At its defaults a clean\n\
                  request followed by silence once went unanswered for 21 s; these make\n\

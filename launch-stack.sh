@@ -7,18 +7,59 @@
 # --skip-wizard: start the stack on the configuration already under
 #               voice-pipes/deploy/docker/config/ (from an earlier run, or from
 #               `voice-pipes config-wizard` run natively) instead of asking again.
+# --full: compile all providers including llama.cpp-backed ones (in-process
+#         GGUF LLMs like SmolLM2, and NeuTTS-Air). Omit for much faster builds
+#         using ONNX, cloud, and sidecar (llama-server) providers.
 
 set -e
+
+print_help() {
+    cat <<'EOF'
+Usage: ./launch-stack.sh [OPTIONS]
+
+Unified Docker-based fleet configurator & launcher for Voice Pipes (Linux/macOS).
+
+Options:
+  --take-ports    Also stop FOREIGN containers (other compose projects) holding
+                  ports this stack needs; without it, foreign holders are named
+                  and the launch aborts.
+  --skip-wizard   Start the stack using the existing configuration under
+                  voice-pipes/deploy/docker/config/ instead of running the wizard.
+  --cpu, --no-gpu Force CPU-only execution (disables GPU pass-through probing).
+  --build         Compile images locally from source instead of pulling
+                  prebuilt images from GHCR.
+  --rebuild       Force recompiling the voice-pipes-builder wizard container
+                  (implies --build).
+  --full          Include all providers when building locally, including
+                  llama.cpp-backed ones (in-process GGUF LLMs like SmolLM2,
+                  and NeuTTS-Air). Prebuilt GHCR images already include all
+                  providers.
+  -h, --help, -?  Print this help message and exit.
+
+Examples:
+  ./launch-stack.sh                     # Pull prebuilt images + interactive wizard
+  ./launch-stack.sh --build             # Fast local compile + interactive wizard
+  ./launch-stack.sh --build --full      # Full local compile including SmolLM2 GGUF
+  ./launch-stack.sh --skip-wizard       # Reuse existing config
+EOF
+}
 
 TAKE_PORTS=0
 SKIP_WIZARD=0
 FORCE_CPU=0
+BUILD_LOCAL=0
+REBUILD=0
+FULL_BUILD=0
 for arg in "$@"; do
     case "$arg" in
         --take-ports) TAKE_PORTS=1 ;;
         --skip-wizard) SKIP_WIZARD=1 ;;
         --cpu|--no-gpu) FORCE_CPU=1 ;;
-        *) echo "Unknown option: $arg (supported: --take-ports, --skip-wizard, --cpu, --no-gpu)"; exit 2 ;;
+        --build) BUILD_LOCAL=1 ;;
+        --rebuild) REBUILD=1; BUILD_LOCAL=1 ;;
+        --full) FULL_BUILD=1 ;;
+        -h|--help|-\?) print_help; exit 0 ;;
+        *) echo "Unknown option: $arg (run with --help for usage)"; exit 2 ;;
     esac
 done
 
@@ -67,18 +108,55 @@ else
     fi
 fi
 
+LITE_FEATURES="realtime,stt-parakeet,tts-piper,vad-silero,filter-deepfilter,llm-openai-compat,s2s-gemini,s2s-openai,s2s-elevenlabs,telemetry,wizard,audio-device,session-sqlite,text-grpc,tts-kokoro,tts-pocket,stt-moonshine,tts-openai,tts-elevenlabs,stt-assemblyai,stt-google,tts-gemini,stt-nemotron,stt-nemotron35,turn-smart"
+CFG_PATH="voice-pipes/deploy/docker/config/pipeline-custom.toml"
+if [ "$FULL_BUILD" -eq 0 ] && [ "$SKIP_WIZARD" -eq 1 ] && [ -f "$CFG_PATH" ] && grep -Eq 'provider\s*=\s*["'"'"'](neutts|gguf)["'"'"']' "$CFG_PATH"; then
+    FULL_BUILD=1
+    echo "ℹ️  Detected neutts/gguf in $CFG_PATH; enabling --full build features."
+fi
+
+builder_build_args=()
+compose_build_args=()
+if [ "$FULL_BUILD" -eq 1 ]; then
+    echo "🔨 Build profile: full (includes in-process GGUF LLMs)."
+else
+    echo "⚡ Build profile: fast (skipping optional llama.cpp C++/CUDA build)."
+    echo "   (Pass --full if you plan to use in-process GGUF LLMs like SmolLM2 or NeuTTS-Air)"
+    builder_build_args=(--build-arg "CARGO_FLAGS=--no-default-features" --build-arg "FEATURES=$LITE_FEATURES")
+    compose_build_args=(--build-arg "CARGO_FLAGS=--no-default-features" --build-arg "FEATURES=$LITE_FEATURES" --build-arg "GPU_FEATURES=ort-cuda")
+fi
+
 if [ "$SKIP_WIZARD" = 1 ]; then
-    if [ ! -f voice-pipes/deploy/docker/config/pipeline-custom.toml ]; then
-        echo "❌ Error: --skip-wizard needs an existing configuration (voice-pipes/deploy/docker/config/pipeline-custom.toml); run without it first."
+    if [ ! -f "$CFG_PATH" ]; then
+        echo "❌ Error: --skip-wizard needs an existing configuration ($CFG_PATH); run without it first."
         exit 1
     fi
     echo "⏭️  Skipping the wizard; using the existing configuration."
 else
-# 3. Build the builder container for the config wizard
-# Build context is the repo root so the `voice-pipes` crate can see its
-# `../voice-pipes-sdk` path dependency.
-echo "🔨 Preparing configuration wizard container..."
-docker build -t voice-pipes-builder -f voice-pipes/Dockerfile .
+# 3. Prepare wizard container (pull prebuilt image by default, or build locally with --build/--rebuild)
+WIZARD_IMAGE=""
+PREBUILT_IMAGE="${VP_IMAGE:-ghcr.io/myned-ai/voice-pipes:latest}"
+if [ "$BUILD_LOCAL" -eq 0 ]; then
+    echo "📥 Pulling prebuilt wizard image ($PREBUILT_IMAGE)..."
+    if docker pull "$PREBUILT_IMAGE"; then
+        WIZARD_IMAGE="$PREBUILT_IMAGE"
+    else
+        echo "⚠️  Could not pull $PREBUILT_IMAGE; falling back to local build (--build)."
+        BUILD_LOCAL=1
+    fi
+fi
+
+if [ -z "$WIZARD_IMAGE" ]; then
+    builder_id=$(docker images -q voice-pipes-builder 2>/dev/null | head -n 1)
+    if [ -n "$builder_id" ] && [ "$REBUILD" -ne 1 ]; then
+        echo "✅ Using existing voice-pipes-builder image (${builder_id:0:12})."
+        echo "   (Pass --rebuild to recompile the wizard container)"
+    else
+        echo "🔨 Preparing configuration wizard container..."
+        docker build "${builder_build_args[@]}" -t voice-pipes-builder -f voice-pipes/Dockerfile .
+    fi
+    WIZARD_IMAGE="voice-pipes-builder"
+fi
 
 # 3b. Resolve a HuggingFace token (needed only for gated repos, e.g. Gemma 3).
 # The wizard downloads models inside the container, so the token must be passed
@@ -104,7 +182,7 @@ if [ -n "${HF_TOKEN:-}" ]; then hf_env=(-e HF_TOKEN); fi
 echo "🚀 Launching interactive configuration wizard..."
 # VP_WIZARD_FROM_LAUNCHER tells the wizard this script starts the stack
 # next, so it prints no next step of its own.
-docker run -it --rm "${hf_env[@]}" -e VP_WIZARD_FROM_LAUNCHER=1 -v "$(pwd)/voice-pipes:/app" voice-pipes-builder config-wizard
+docker run -it --rm "${hf_env[@]}" -e VP_WIZARD_FROM_LAUNCHER=1 -v "$(pwd)/voice-pipes:/app" "$WIZARD_IMAGE" config-wizard
 fi
 
 # 5. Start the backend services (Orchestrator + Worker)
@@ -227,8 +305,31 @@ if ! resolve_port_conflicts "voice-pipes/deploy/docker/docker-compose.yml" "$TAK
     exit 1
 fi
 
+# Re-check pipeline-custom.toml after wizard in case the user picked neutts/gguf
+if [ "$FULL_BUILD" -eq 0 ] && [ -f "$CFG_PATH" ] && grep -Eq 'provider\s*=\s*["'"'"'](neutts|gguf)["'"'"']' "$CFG_PATH"; then
+    FULL_BUILD=1
+    compose_build_args=()
+    echo "ℹ️  Detected neutts/gguf in $CFG_PATH; enabling llama.cpp build features for worker."
+fi
+
+# Pull prebuilt images by default, or build locally when --build is set
+if [ "$BUILD_LOCAL" -eq 0 ]; then
+    echo "📥 Pulling prebuilt backend fleet container images..."
+    if ! docker compose -f voice-pipes/deploy/docker/docker-compose.yml pull orchestrator "$WORKER"; then
+        echo "⚠️  Pull failed; falling back to local build (--build)."
+        BUILD_LOCAL=1
+    fi
+fi
+if [ "$BUILD_LOCAL" -eq 1 ]; then
+    # Build images sequentially to prevent apt mirror rate-limiting and port-80 connection collisions
+    echo "🔨 Preparing backend fleet container images..."
+    docker compose -f voice-pipes/deploy/docker/docker-compose.yml build "${compose_build_args[@]}" orchestrator
+    # shellcheck disable=SC2086
+    docker compose -f voice-pipes/deploy/docker/docker-compose.yml build "${compose_build_args[@]}" "$WORKER"
+fi
+
 # shellcheck disable=SC2086 # SIDECAR_SERVICES is a space-separated list
-docker compose -f voice-pipes/deploy/docker/docker-compose.yml up --build -d --remove-orphans orchestrator "$WORKER" $SIDECAR_SERVICES
+docker compose -f voice-pipes/deploy/docker/docker-compose.yml up -d --remove-orphans orchestrator "$WORKER" $SIDECAR_SERVICES
 
 # 6. Start the Admin UI
 # The admin backend refuses to start without ADMIN_UI_TOKEN. Compose
@@ -247,14 +348,40 @@ if ! resolve_port_conflicts "voice-pipes-admin/docker-compose.yml" "$TAKE_PORTS"
     echo "❌ Error: Port conflicts unresolved — see messages above (or re-run with --take-ports)."
     exit 1
 fi
-docker compose -f voice-pipes-admin/docker-compose.yml up --build -d
+if [ "$BUILD_LOCAL" -eq 0 ]; then
+    if ! docker compose -f voice-pipes-admin/docker-compose.yml pull; then
+        echo "⚠️  Admin UI pull failed; falling back to local build."
+        docker compose -f voice-pipes-admin/docker-compose.yml up --build -d
+    else
+        docker compose -f voice-pipes-admin/docker-compose.yml up -d
+    fi
+else
+    docker compose -f voice-pipes-admin/docker-compose.yml up --build -d
+fi
 
 # 6.5 Verify Worker & Fleet Readiness
 echo "⏳ Verifying backend fleet readiness..."
 worker_id=$(docker compose -f voice-pipes/deploy/docker/docker-compose.yml ps -q "$WORKER" 2>/dev/null)
 if [ -n "$worker_id" ]; then
-    for i in $(seq 1 15); do
-        sleep 1
+    cfg_path="voice-pipes/deploy/docker/config/pipeline-custom.toml"
+    is_heavy=false
+    if [ -f "$cfg_path" ] && grep -E 'provider\s*=\s*["'"'"']neutts["'"'"']' "$cfg_path" >/dev/null 2>&1; then
+        is_heavy=true
+        echo "   ℹ️  NeuTTS-Air detected: loading neural speech model & vocoder on CPU."
+        echo "   ℹ️  Initial model allocation may take 1-3 minutes. Please wait..."
+    fi
+
+    worker_timeout=60
+    if [ "$is_heavy" = true ]; then
+        worker_timeout=240
+    fi
+
+    echo "Waiting for worker '$WORKER' readiness..."
+    worker_ready=false
+    elapsed=0
+    while [ $elapsed -lt $worker_timeout ]; do
+        sleep 2
+        elapsed=$((elapsed + 2))
         status=$(docker inspect --format '{{.State.Status}}' "$worker_id" 2>/dev/null)
         if [ "$status" = "restarting" ] || [ "$status" = "exited" ]; then
             echo ""
@@ -264,10 +391,22 @@ if [ -n "$worker_id" ]; then
             echo "💡 To view full diagnostic logs: docker compose -f voice-pipes/deploy/docker/docker-compose.yml logs $WORKER"
             exit 1
         fi
-        if [ "$status" = "running" ] && [ "$i" -ge 2 ]; then
+
+        h_status=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}unknown{{end}}' "$worker_id" 2>/dev/null)
+        if [ "$h_status" = "healthy" ]; then
+            worker_ready=true
+            echo "✅ Worker '$WORKER' is healthy and registered with orchestrator."
             break
         fi
+
+        if [ $((elapsed % 10)) -eq 0 ]; then
+            echo "   ... still warming up models (${elapsed}s elapsed)"
+        fi
     done
+
+    if [ "$worker_ready" = false ]; then
+        echo "⚠️  Note: Worker '$WORKER' is still initializing in the background. It will become active as soon as models finish loading."
+    fi
 fi
 
 # Wait for sidecar healthchecks (e.g. pocket-tts, llama-server) before opening fleet

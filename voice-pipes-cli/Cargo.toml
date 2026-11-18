@@ -45,6 +45,7 @@ ort-cuda = [
     "voice-pipes-stt-nemotron?/ort-cuda",
     "voice-pipes-stt-nemotron35?/ort-cuda",
     "voice-pipes-tts-kokoro?/ort-cuda",
+    "voice-pipes-tts-neutts?/ort-cuda",
 ]
 # A plugin with every linked ONNX provider on CUDA: the same as naming the
 # plugin and `ort-cuda`, kept for the builds that already name it.
@@ -68,7 +69,7 @@ session-sqlite = ["voice-pipes/session-sqlite"]
 # built-in one. A new plugin is one dependency, one feature and one pair of
 # registration lines; listing it in `default-plugins` below builds it by default.
 
-# NVIDIA Parakeet TDT, the default recogniser.
+# NVIDIA Parakeet TDT, the default recogniser (and wizard default).
 stt-parakeet = ["dep:voice-pipes-stt-parakeet"]
 # NVIDIA Nemotron 3.5 ASR (40 locales, cache-aware streaming) as a voice-pipes plugin.
 stt-nemotron35 = ["dep:voice-pipes-stt-nemotron35"]
@@ -79,7 +80,7 @@ stt-nemotron = ["dep:voice-pipes-stt-nemotron"]
 stt-nemotron-cuda = ["stt-nemotron", "ort-cuda"]
 # Google Cloud Speech-to-Text v2 (Chirp 3), streaming over gRPC.
 stt-google = ["dep:voice-pipes-stt-google"]
-# AssemblyAI streaming STT (v3 WebSocket). The wizard's default recogniser.
+# AssemblyAI streaming STT (v3 WebSocket).
 stt-assemblyai = ["dep:voice-pipes-stt-assemblyai"]
 stt-nemotron35-cuda = ["stt-nemotron35", "ort-cuda"]
 
@@ -98,6 +99,8 @@ tts-openai = ["dep:voice-pipes-tts-openai"]
 tts-elevenlabs = ["dep:voice-pipes-tts-elevenlabs"]
 # Google Gemini TTS (REST).
 tts-gemini = ["dep:voice-pipes-tts-gemini"]
+# NeuTTS-Air, local GGUF + ONNX NeuCodec.
+tts-neutts = ["dep:voice-pipes-tts-neutts"]
 
 # ── Plugin LLMs ──────────────────────────────────────────────
 # Any server speaking the OpenAI chat-completions API: OpenAI, llama-server
@@ -167,6 +170,7 @@ voice-pipes-s2s-elevenlabs = { workspace = true, optional = true }
 voice-pipes-turn-smart = { workspace = true, optional = true }
 voice-pipes-turn-vap = { workspace = true, optional = true }
 voice-pipes-filter-deepfilter = { workspace = true, optional = true }
+voice-pipes-tts-neutts = { workspace = true, optional = true }
 
 mimalloc.workspace = true
 anyhow.workspace = true

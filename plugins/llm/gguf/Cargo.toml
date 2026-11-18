@@ -2,7 +2,7 @@
 name = "voice-pipes-llm-gguf"
 version.workspace = true
 edition = "2024"
-description = "A local GGUF language model (candle) as a voice-pipes text-processor plugin, on the SDK only"
+description = "A local GGUF language model (llama.cpp) as a voice-pipes text-processor plugin, on the SDK only"
 license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
@@ -28,6 +28,7 @@ candle-core.workspace = true
 candle-transformers.workspace = true
 # Only to switch its kernels to CUDA with the rest of candle.
 candle-nn = { workspace = true, optional = true }
+llama-cpp-2 = "0.1.161"
 parking_lot.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
@@ -40,7 +41,7 @@ tracing.workspace = true
 
 [features]
 # Run the model on an NVIDIA GPU.
-cuda = ["candle-core/cuda", "dep:candle-nn", "candle-nn/cuda"]
+cuda = ["llama-cpp-2/cuda", "candle-core/cuda", "dep:candle-nn", "candle-nn/cuda"]
 
 [dev-dependencies]
 voice-pipes-sdk = { workspace = true, features = ["testing"] }

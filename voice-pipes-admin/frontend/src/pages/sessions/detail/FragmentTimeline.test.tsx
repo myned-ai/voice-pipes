@@ -1,7 +1,7 @@
-// FragmentTimeline: renders the track being played, seeks on click, and
-// switches to selection when the player is on a single fragment.
+// FragmentTimeline: renders the track being played with underrun markers,
+// barge-in cut, and playhead (non-interactive).
 
-import { describe, it, expect, afterEach, beforeAll, vi } from "vitest";
+import { describe, it, expect, afterEach, beforeAll } from "vitest";
 import { render, cleanup, fireEvent } from "@testing-library/react";
 import { createRef } from "react";
 import { FragmentTimeline } from "./FragmentTimeline";
@@ -37,7 +37,6 @@ afterEach(cleanup);
 /** Mount the bar with an <audio> and a 1000 px wide bar so clientX == pct*10. */
 function mount(props: Partial<React.ComponentProps<typeof FragmentTimeline>> = {}) {
   const audioRef = createRef<HTMLAudioElement>();
-  const onSelectFragment = vi.fn();
   const utils = render(
     <>
       <audio ref={audioRef} />
@@ -47,7 +46,6 @@ function mount(props: Partial<React.ComponentProps<typeof FragmentTimeline>> = {
         mode="server"
         activeFragment={null}
         audioRef={audioRef}
-        onSelectFragment={onSelectFragment}
         isDark
         {...props}
       />
@@ -55,7 +53,7 @@ function mount(props: Partial<React.ComponentProps<typeof FragmentTimeline>> = {
   );
   const bar = utils.getByRole("img");
   bar.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1000, height: 16, right: 1000, bottom: 16, x: 0, y: 0, toJSON: () => ({}) });
-  return { ...utils, bar, audioRef, onSelectFragment };
+  return { ...utils, bar, audioRef };
 }
 
 describe("FragmentTimeline", () => {
@@ -80,31 +78,18 @@ describe("FragmentTimeline", () => {
     expect(heardView.getByText(/1 underrun · 250 ms silent/)).toBeInTheDocument();
   });
 
-  it("clicking seeks the shared audio to that point on the track and plays", () => {
-    const { bar, audioRef } = mount();
-    const play = vi.spyOn(audioRef.current!, "play");
-    fireEvent.click(bar, { clientX: 600 }); // 60% of 1000 ms
-    expect(audioRef.current!.currentTime).toBeCloseTo(0.6, 5);
-    expect(play).toHaveBeenCalled();
-  });
-
-  it("in single-fragment mode a click selects the fragment under it instead of seeking", () => {
-    const { bar, onSelectFragment, audioRef } = mount({ activeFragment: 0 });
-    audioRef.current!.currentTime = 0;
-    fireEvent.click(bar, { clientX: 800 }); // 800 ms → fragment #3
-    expect(onSelectFragment).toHaveBeenCalledWith(2);
-    expect(audioRef.current!.currentTime).toBe(0);
-  });
-
   it("draws the barge-in cut and names it in the legend", () => {
     const { container, getByText } = mount({ heard: { gaps: [], cutMs: 600 } });
     expect(container.querySelector("[data-cut]")).not.toBeNull();
     expect(getByText(/barge-in at 600 ms/)).toBeInTheDocument();
   });
 
-  it("hovering a fragment shows its index, offset and duration", () => {
-    const { bar, getByText } = mount({ fragmentTexts: { tts_frag_001: "Second sentence here." } });
+  it("clicking or hovering the bar does not seek audio or render a tooltip", () => {
+    const { bar, audioRef, queryByText } = mount();
+    audioRef.current!.currentTime = 0;
     fireEvent.mouseMove(bar, { clientX: 600 });
-    expect(getByText(/#2 · 500 ms · 250 ms · “Second sentence here.”/)).toBeInTheDocument();
+    expect(queryByText(/#2 · 500 ms/)).toBeNull();
+    fireEvent.click(bar, { clientX: 600 });
+    expect(audioRef.current!.currentTime).toBe(0);
   });
 });

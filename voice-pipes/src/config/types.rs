@@ -928,7 +928,7 @@ fn default_silence_timeout_ms() -> u64 {
 /// [barge_in]
 /// enabled = true
 /// min_chunks = 3            # consecutive speech chunks to trigger (default 3)
-/// speech_threshold = 200.0  # RMS threshold for speech detection
+/// speech_threshold = 2000.0 # RMS threshold for speech detection
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

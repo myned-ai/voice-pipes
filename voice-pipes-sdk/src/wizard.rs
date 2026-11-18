@@ -47,6 +47,9 @@ pub struct WizardChoice {
     /// entry that claims it for the same stage. What a pipeline without the
     /// stage's section runs is separate: the binary registers that.
     pub stage_default: bool,
+    /// True when an STT provider ships its own semantic end-of-turn signal
+    /// and the wizard should default `[turn_detection]` to `mode = "provider"`.
+    pub provider_turn_detection: bool,
     /// Where this entry sits in its stage's menu: lower first. The engine's
     /// built-in choices rank 1, 2, … in their own order and come before a
     /// plugin entry of the same rank; plugin ties go by label. The order
@@ -71,6 +74,7 @@ impl WizardChoice {
             fields: Vec::new(),
             notes: Vec::new(),
             stage_default: false,
+            provider_turn_detection: false,
             menu_rank: Self::DEFAULT_MENU_RANK,
         }
     }
@@ -80,6 +84,7 @@ impl WizardChoice {
         with_fields => fields: Vec<WizardField>,
         with_notes => notes: Vec<String>,
         with_stage_default => stage_default: bool,
+        with_provider_turn_detection => provider_turn_detection: bool,
         with_menu_rank => menu_rank: u16,
     }
 }

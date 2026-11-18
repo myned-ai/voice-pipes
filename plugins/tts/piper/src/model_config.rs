@@ -7,18 +7,30 @@ use std::path::Path;
 use voice_pipes_sdk::TtsError;
 
 /// Top-level Piper model configuration (the `.json` sidecar file).
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct PiperModelConfig {
     pub audio: AudioConfig,
     pub inference: InferenceConfig,
     pub phoneme_id_map: HashMap<String, Vec<i64>>,
+    #[serde(default)]
+    pub espeak: Option<EspeakConfig>,
     #[serde(default)]
     pub num_speakers: u32,
     #[serde(default)]
     pub speaker_id_map: HashMap<String, i64>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct EspeakConfig {
+    #[serde(default = "default_espeak_voice")]
+    pub voice: String,
+}
+
+fn default_espeak_voice() -> String {
+    "en-us".into()
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AudioConfig {
     pub sample_rate: u32,
     #[serde(default = "default_channels")]
@@ -29,7 +41,7 @@ fn default_channels() -> u16 {
     1
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct InferenceConfig {
     #[serde(default = "default_noise_scale")]
     pub noise_scale: f32,
@@ -50,6 +62,34 @@ fn default_noise_w() -> f32 {
 }
 
 impl PiperModelConfig {
+    /// Return the eSpeak voice/language code, defaulting to "en-us".
+    pub fn espeak_voice(&self) -> &str {
+        self.espeak.as_ref().map_or("en-us", |e| e.voice.as_str())
+    }
+
+    /// Override inference and eSpeak parameters from user pipeline config.
+    pub fn apply_overrides(
+        &mut self,
+        noise_scale: Option<f32>,
+        length_scale: Option<f32>,
+        noise_w: Option<f32>,
+        espeak_voice: Option<&str>,
+    ) {
+        if let Some(ns) = noise_scale {
+            self.inference.noise_scale = ns;
+        }
+        if let Some(ls) = length_scale {
+            self.inference.length_scale = ls;
+        }
+        if let Some(nw) = noise_w {
+            self.inference.noise_w = nw;
+        }
+        if let Some(v) = espeak_voice {
+            self.espeak = Some(EspeakConfig {
+                voice: v.to_string(),
+            });
+        }
+    }
     /// Load and parse the JSON config file next to the `.onnx` model.
     pub fn load(path: &Path) -> Result<Self, TtsError> {
         let data = std::fs::read_to_string(path)

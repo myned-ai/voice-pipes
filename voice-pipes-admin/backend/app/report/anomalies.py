@@ -70,31 +70,23 @@ _TURN_DETECTION = "turn_detection"
 
 
 def _endpointing_attribution(
-    observed: float, target: float, silence_timeout_ms
+    observed: float,
+    target: float,
+    silence_timeout_ms,
+    turn_detection_mode: str | None = None,
 ) -> tuple[str | None, str]:
     """Who owns an `endpointing_ms` breach, and the sentence that says why.
 
     `endpointing_ms` is the wait between the speaker stopping and the turn
-    committing. It has a floor nobody can beat: the pipeline waits
-    `silence_timeout_ms` of silence before it will call a turn finished, so a
-    700 ms timeout means at least 700 ms here however fast the recogniser is.
-    The rest -- observed minus that floor -- is what the recogniser added by
-    delivering its final transcript after the silence had already elapsed.
-
-    Every breach used to be filed under the recogniser. On a session with a
-    700 ms timeout and a 500 ms target that named Parakeet "the primary
-    bottleneck" for turns where it had added 16 to 75 ms; the other 700 were a
-    line in a config file. Blame follows the larger share of the overage:
-
-      * the setting's share is how far the floor alone is past target;
-      * the recogniser's share is everything above the floor.
-
-    Returns `(None, ...)` for the default owner (the recogniser) and the
-    turn-detection owner otherwise. With no timeout on record -- captures
-    written before the engine recorded it -- nothing is known about the
-    floor, and the old attribution stands rather than a guessed one.
+    committing. In `silence` mode (or legacy captures where mode is unknown),
+    the pipeline waits `silence_timeout_ms` of silence before it will call a
+    turn finished; in `provider` or `smart` mode, `silence_timeout_ms` is a
+    fallback ceiling rather than a fixed floor, so it must not be blamed as a
+    minimum wait.
     """
     default = "VAD endpointing took longer than target (slow turn-taking)"
+    if turn_detection_mode is not None and turn_detection_mode != "silence":
+        return None, default
     if (
         not isinstance(silence_timeout_ms, (int, float))
         or isinstance(silence_timeout_ms, bool)
@@ -255,9 +247,12 @@ def _detect_anomalies(
     turns: list[dict],
     targets: dict[str, float],
     client_tool_calls: list[dict] | None = None,
+    providers: dict | None = None,
 ) -> list[dict]:
     """Compute the anomaly list the LLM is asked to confirm/explain."""
     anomalies: list[dict] = []
+    td = (providers or {}).get("turn_detection")
+    turn_detection_mode = td.get("mode") if isinstance(td, dict) else None
 
     # Gather totals for outlier check (skip terminated and agent-initiated
     # turns — agent turns are anchored at turn-open, not end-of-user-speech,
@@ -618,7 +613,10 @@ def _detect_anomalies(
                     on_critical_path=True, anchor_source=ttfb_anchor_src)
             elif isinstance(stt.get("endpointing_ms"), (int, float)) and stt["endpointing_ms"] > targets["endpointing_ms"]:
                 owner, why = _endpointing_attribution(
-                    stt["endpointing_ms"], targets["endpointing_ms"], stt.get("silence_timeout_ms")
+                    stt["endpointing_ms"],
+                    targets["endpointing_ms"],
+                    stt.get("silence_timeout_ms"),
+                    turn_detection_mode=turn_detection_mode,
                 )
                 add("stt.endpointing_high", stt["endpointing_ms"], targets["endpointing_ms"],
                     why, component=owner)
@@ -719,6 +717,11 @@ def _detect_anomalies(
         felt = t.get("e2e_perceived_ms")
         timed = (t.get("critical_path") or {}).get("total_ms")
         heard_ms = stt.get("audio_duration_ms")
+        if heard_ms is None:
+            # S2S sessions leave `stt.audio_duration_ms` null; fall back to
+            # the uplink VAD's speech duration so audio heard past an early
+            # `client_speech_end` is still discounted.
+            heard_ms = (t.get("input_audio") or {}).get("speech_ms")
         gap = (felt - timed) if isinstance(felt, (int, float)) and isinstance(timed, (int, float)) else None
         if gap is not None and isinstance(heard_ms, (int, float)):
             # Audio the server heard past the client's end mark cannot have

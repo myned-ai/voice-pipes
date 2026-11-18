@@ -12,31 +12,42 @@
 # with --build-arg CUDA_VERSION=12.x.y if you hit a driver-version error.
 ARG CUDA_VERSION=12.6.2
 
-# ── Builder: full CUDA toolkit (nvcc) + Rust ────────────────────────────
-FROM nvidia/cuda:${CUDA_VERSION}-cudnn-devel-ubuntu24.04 AS builder
+# ── Chef base: full CUDA toolkit (nvcc) + Rust + cargo-chef ─────────────
+FROM nvidia/cuda:${CUDA_VERSION}-cudnn-devel-ubuntu24.04 AS chef
 
-RUN apt-get update \
+RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries \
+    && echo 'Acquire::http::Timeout "60";' >> /etc/apt/apt.conf.d/80-retries \
+    && echo 'Acquire::https::Timeout "60";' >> /etc/apt/apt.conf.d/80-retries \
+    && (for i in 1 2 3 4 5; do apt-get update && break || sleep 3; done) \
     && apt-get install -y --no-install-recommends \
         curl ca-certificates build-essential pkg-config \
         libssl-dev libasound2-dev \
+        cmake clang libclang-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Rust toolchain (match the CPU image's 1.88).
+# Rust toolchain (match the CPU image's 1.91).
 ENV RUSTUP_HOME=/usr/local/rustup \
     CARGO_HOME=/usr/local/cargo \
     PATH=/usr/local/cargo/bin:/usr/local/cuda/bin:${PATH}
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-        | sh -s -- -y --default-toolchain 1.91.0 --profile minimal
+        | sh -s -- -y --default-toolchain 1.91.0 --profile minimal \
+    && cargo install cargo-chef --locked
 
-# Let cudarc / candle find the toolkit, and target the L4 (Ada, sm_89). There is
-# no GPU during the build, so candle's bindgen_cuda can't auto-detect the arch —
-# set it explicitly. Change to your GPU's compute capability if not an L4.
+# Let cudarc / candle find the toolkit, and target common NVIDIA architectures
+# (Turing sm_75 through Hopper sm_90, with PTX forward-compatibility).
+# GGML_NATIVE=OFF ensures portable CPU host code alongside CUDA kernels.
 ENV CUDA_PATH=/usr/local/cuda \
     CUDA_ROOT=/usr/local/cuda \
     CUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda \
-    CUDA_COMPUTE_CAP=89
+    CUDA_COMPUTE_CAP=89 \
+    CMAKE_CUDA_ARCHITECTURES="75;80;86;89;90" \
+    GGML_NATIVE=OFF \
+    CARGO_NET_RETRY=10 \
+    CARGO_HTTP_TIMEOUT=120
 
 WORKDIR /app
+
+FROM chef AS planner
 # Build context is the repo root so the `voice-pipes` crate can see its
 # `../voice-pipes-sdk` path dependency.
 COPY Cargo.toml Cargo.lock ./
@@ -50,28 +61,36 @@ COPY --parents voice-pipes*/Cargo.toml voice-pipes*/build.rs voice-pipes*/src vo
 # wizard's model registry. Copied file by file so editing runtime configs
 # (worker TOMLs) does not invalidate the build layer.
 COPY voice-pipes/config/wizard_models.json ./voice-pipes/config/wizard_models.json
+RUN cargo chef prepare --recipe-path recipe.json
 
-# Ride out slow crates.io moments instead of failing the whole build: more
-# retries, and give a stalled transfer 120s (default 30s) before timing out.
-ENV CARGO_NET_RETRY=10 \
-    CARGO_HTTP_TIMEOUT=120
-
+FROM chef AS builder
 # The workers' list in deploy/docker/docker-compose.yml (a workspace rule
 # holds the two equal), built with the GPU switches on top: `ort-cuda` puts
 # every linked ONNX provider on CUDA, `cuda` the GGUF model.
-ARG FEATURES="realtime,text-grpc,tts-kokoro,tts-pocket,stt-moonshine,tts-openai,tts-elevenlabs,stt-assemblyai,stt-google,tts-gemini,stt-nemotron,stt-nemotron35,turn-smart"
+ARG FEATURES="realtime,text-grpc,tts-kokoro,tts-pocket,stt-moonshine,tts-openai,tts-elevenlabs,stt-assemblyai,stt-google,tts-gemini,stt-nemotron,stt-nemotron35,turn-smart,tts-neutts,llm-gguf"
 ARG GPU_FEATURES="cuda,ort-cuda"
-# Cache mounts survive across builds, so crate downloads and the ort-sys
-# prebuilt-onnxruntime download (cdn.pyke.io, prone to stalling when builds
-# run in parallel) only ever have to succeed once.
-# `sharing=locked`: compose builds several images at once, and two cargo
-# runs unpacking the same crate into a shared registry fail with
-# "failed to unpack package ... File exists". Locked, the second build
-# waits for the first.
+ARG CARGO_FLAGS=""
+
+COPY --from=planner /app/recipe.json recipe.json
+# Dependency compilation (`cargo chef cook`) writes into the image layer so CI
+# (`type=gha`) caches all third-party crates (including CUDA kernels) across releases.
 RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
     --mount=type=cache,target=/root/.cache/ort.pyke.io,sharing=locked \
-    cargo build --release -p voice-pipes-cli --features "${GPU_FEATURES},${FEATURES}"
+    cargo chef cook --release -p voice-pipes-cli ${CARGO_FLAGS} --features "${GPU_FEATURES},${FEATURES}" --recipe-path recipe.json
+
+COPY Cargo.toml Cargo.lock ./
+COPY --parents voice-pipes*/Cargo.toml voice-pipes*/build.rs voice-pipes*/src voice-pipes*/proto plugins/*/*/Cargo.toml plugins/*/*/build.rs plugins/*/*/src plugins/*/*/proto ./
+COPY voice-pipes/config/wizard_models.json ./voice-pipes/config/wizard_models.json
+
+# Cache mounts survive across builds, so crate downloads and the ort-sys
+# prebuilt-onnxruntime download (cdn.pyke.io, ~100MB, prone to stalling when
+# builds run in parallel) only ever have to succeed once.
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
+    --mount=type=cache,target=/root/.cache/ort.pyke.io,sharing=locked \
+    cargo build --release -p voice-pipes-cli ${CARGO_FLAGS} --features "${GPU_FEATURES},${FEATURES}" \
+    && cp /app/target/release/voice-pipes /usr/local/bin/voice-pipes
 
 # ONNX Runtime loads its CUDA execution provider at run time from two shared
 # libraries beside the process's working directory; the static link above
@@ -90,11 +109,11 @@ FROM nvidia/cuda:${CUDA_VERSION}-cudnn-runtime-ubuntu24.04 AS runtime
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        libasound2t64 ca-certificates espeak-ng \
+        libasound2t64 ca-certificates espeak-ng libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY --from=builder /app/target/release/voice-pipes /usr/local/bin/voice-pipes
+COPY --from=builder /usr/local/bin/voice-pipes /usr/local/bin/voice-pipes
 # The CUDA execution provider, looked up relative to the working directory.
 COPY --from=builder /app/ort-libs/ /app/
 
@@ -113,17 +132,11 @@ USER vp
 
 # Each workspace crate logs under its own target (`voice_pipes` does not cover
 # `voice_pipes_stt_google`), so every one that logs is named here -- the binary's
-# own (where a fatal start-up error goes), the pool, the bench extension and
-# every plugin. A test holds this list to the workspace.
-ENV RUST_LOG=voice_pipes=info,voice_pipes_cli=info,voice_pipes_onnx=info,voice_pipes_bench=info,voice_pipes_gym=info,voice_pipes_stt_parakeet=info,voice_pipes_stt_moonshine=info,voice_pipes_tts_piper=info,voice_pipes_vad_silero=info,voice_pipes_stt_nemotron=info,voice_pipes_stt_nemotron35=info,voice_pipes_stt_google=info,voice_pipes_tts_kokoro=info,voice_pipes_tts_pocket=info,voice_pipes_tts_openai=info,voice_pipes_stt_assemblyai=info,voice_pipes_tts_elevenlabs=info,voice_pipes_tts_gemini=info,voice_pipes_llm_openai_compat=info,voice_pipes_llm_gguf=info,voice_pipes_s2s_openai=info,voice_pipes_s2s_gemini=info,voice_pipes_s2s_elevenlabs=info,voice_pipes_turn_smart=info,voice_pipes_turn_vap=info,voice_pipes_filter_deepfilter=info,ort=warn,h2=warn,hyper=warn,rustls=warn
-# Default the ONNX Runtime execution provider to CUDA (override with VP_ORT_EP=cpu).
-ENV VP_ORT_EP=cuda
+# own `EnvFilter` falls back to `info` when `RUST_LOG` is unset, so a bare `ENV`
+# keeps every target loud enough without masking `RUST_LOG` from compose.
+ENV RUST_LOG=info,voice_pipes=info,voice_pipes_sdk=info,voice_pipes_net=info,voice_pipes_onnx=info,voice_pipes_bench=info,voice_pipes_gym=info,voice_pipes_cli=info,voice_pipes_filter_deepfilter=info,voice_pipes_llm_gguf=info,voice_pipes_llm_openai_compat=info,voice_pipes_s2s_elevenlabs=info,voice_pipes_s2s_gemini=info,voice_pipes_stt_assemblyai=info,voice_pipes_stt_google=info,voice_pipes_stt_moonshine=info,voice_pipes_stt_nemotron=info,voice_pipes_stt_nemotron35=info,voice_pipes_stt_parakeet=info,voice_pipes_tts_elevenlabs=info,voice_pipes_tts_gemini=info,voice_pipes_tts_kokoro=info,voice_pipes_tts_neutts=info,voice_pipes_tts_openai=info,voice_pipes_tts_piper=info,voice_pipes_tts_pocket=info,voice_pipes_turn_smart=info,voice_pipes_turn_vap=info,voice_pipes_vad_silero=info
 
-# Liveness from the binary itself (the image has no HTTP client): a
-# worker's transport `/healthz`. The orchestrator, same image on 9090,
-# overrides the URL in its compose `healthcheck`. A worker may load models
-# for a while before it listens, hence the start period.
-HEALTHCHECK --interval=15s --timeout=5s --start-period=120s --retries=3 \
-    CMD ["voice-pipes", "healthz"]
+EXPOSE 8800 8085 9090
 
 ENTRYPOINT ["voice-pipes"]
+CMD ["--help"]

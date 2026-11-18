@@ -1076,3 +1076,79 @@ async fn test_tts_task_dual_track_sanitizer_and_lexicon() {
         "Check sequel at Docs <break time=\"500ms\"/> now!"
     );
 }
+
+struct MockBufferedTts {
+    sample_rate: u32,
+    synthesized_texts: Arc<parking_lot::Mutex<Vec<String>>>,
+}
+
+#[async_trait]
+impl TtsProvider for MockBufferedTts {
+    async fn synthesize(&self, text: &str) -> Result<AudioFrame, TtsError> {
+        self.synthesized_texts.lock().push(text.to_string());
+        Ok(AudioFrame {
+            samples: vec![0i16; text.len() * 100],
+            sample_rate: self.sample_rate,
+            channels: 1,
+        })
+    }
+
+    fn sample_rate(&self) -> u32 {
+        self.sample_rate
+    }
+
+    fn name(&self) -> &'static str {
+        "mock-buffered-tts"
+    }
+
+    fn sentence_chunking(&self) -> bool {
+        false
+    }
+}
+
+#[tokio::test]
+async fn test_tts_task_sentence_chunking_false_buffers_entire_turn() {
+    let (frag_tx, frag_rx) = mpsc::channel::<TextFragment>(8);
+    let (audio_tx, mut audio_rx) = mpsc::channel::<AudioChunk>(8);
+
+    let texts = Arc::new(parking_lot::Mutex::new(Vec::new()));
+    let tts = Arc::new(MockBufferedTts {
+        sample_rate: 22050,
+        synthesized_texts: Arc::clone(&texts),
+    });
+    let (evt_tx, err_flag) = test_event_channel();
+
+    tokio::spawn(tts_task(
+        frag_rx,
+        audio_tx,
+        tts,
+        Arc::new(tokio::sync::Mutex::new(None)),
+        None,
+        None,
+        CancellationToken::new(),
+        0,
+        None,
+        evt_tx,
+        err_flag,
+        None,
+    ));
+
+    frag_tx
+        .send(TextFragment::new("First sentence. ").with_is_end_of_response(false))
+        .await
+        .unwrap();
+
+    frag_tx
+        .send(TextFragment::new("Second sentence.").with_is_end_of_response(true))
+        .await
+        .unwrap();
+
+    let chunk = audio_rx.recv().await.unwrap();
+    assert_eq!(chunk.sample_rate, 22050);
+    assert!(!chunk.is_end_of_utterance);
+
+    // Verify MockBufferedTts received exactly ONE synthesized string containing the full turn
+    let synth = texts.lock().clone();
+    assert_eq!(synth.len(), 1, "Expected 1 synthesis call, got {synth:?}");
+    assert_eq!(synth[0], "First sentence. Second sentence.");
+}

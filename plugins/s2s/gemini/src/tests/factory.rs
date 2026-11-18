@@ -62,8 +62,7 @@ fn a_session_that_speaks_first_sends_an_opener() {
     assert!(calling[1].get("clientContent").is_some(), "{calling:?}");
 }
 
-/// The wizard entry writes a config this factory accepts, with the
-/// thinking budget as a number in the options table.
+/// The wizard entry writes a config this factory accepts.
 #[test]
 fn the_wizard_entry_renders_a_valid_config() {
     let choices = crate::wizard_choices();
@@ -78,20 +77,11 @@ fn the_wizard_entry_renders_a_valid_config() {
         .expect("valid TOML");
     let section = table["realtime_provider"].as_table().expect("a table");
     assert_eq!(section["provider"].as_str(), Some("gemini-live"));
-    assert_eq!(
-        section["model"].as_str(),
-        Some("gemini-2.5-flash-native-audio-latest")
-    );
-    assert_eq!(section["options"]["thinking_budget"].as_integer(), Some(0));
+    assert_eq!(section["model"].as_str(), Some("gemini-3.8-live"));
     // Turn-taking: Gemini's defaults once left a request unanswered for
     // 21 s; the wizard writes the two options that make it close turns.
     assert_eq!(section["options"]["end_sensitivity"].as_str(), Some("high"));
     assert_eq!(section["options"]["vad_silence_ms"].as_integer(), Some(700));
-    assert!(
-        rendered.toml.contains("# Native-audio models"),
-        "{}",
-        rendered.toml
-    );
 }
 
 /// `thinking_level`, which the 3.x Live models take, is an option the

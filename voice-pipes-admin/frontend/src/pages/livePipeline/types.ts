@@ -11,7 +11,7 @@ export interface HealthSnapshot {
   status: string;
   uptime_s?: number;
   version?: string;
-  workers?: { total: number; active: number; draining: number; dead: number };
+  workers?: { total: number; active: number; initializing?: number; draining: number; dead: number };
   sessions?: { total_processed: number; active: number; errors_total: number };
 }
 

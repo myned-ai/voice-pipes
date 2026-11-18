@@ -12,6 +12,7 @@ the routers.  Launch unchanged:  uvicorn app.main:app
 """
 import asyncio
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -34,7 +35,17 @@ configure_logging()
 # Refuse to start when auth is required but no token is configured.
 _auth.validate_startup_config()
 
-app = FastAPI(title="Voice-Pipes Admin BFF")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await asyncio.to_thread(_resolve_captures_dir, force=True, timeout=5.0)
+    # Say so at startup when the fleet will be empty for a reason other than
+    # "no workers": unreachable orchestrator, or a credential it rejects.
+    await probe_orchestrator()
+    yield
+
+
+app = FastAPI(title="Voice-Pipes Admin BFF", lifespan=lifespan)
 
 
 # Innermost: refuse an oversized request body before a route reads it.
@@ -78,12 +89,6 @@ app.add_middleware(
 )
 
 
-@app.on_event("startup")
-async def _on_startup():
-    await asyncio.to_thread(_resolve_captures_dir, force=True, timeout=5.0)
-    # Say so at startup when the fleet will be empty for a reason other than
-    # "no workers": unreachable orchestrator, or a credential it rejects.
-    await probe_orchestrator()
 
 
 # Routers — order is immaterial; every path is distinct after the duplicate

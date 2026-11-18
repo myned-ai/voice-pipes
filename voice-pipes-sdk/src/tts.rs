@@ -496,6 +496,12 @@ pub trait TtsProvider: Send + Sync {
         false
     }
 
+    /// Whether the pipeline should stream text to this provider sentence-by-sentence
+    /// (`true`, default) or accumulate the entire turn before synthesis (`false`).
+    fn sentence_chunking(&self) -> bool {
+        true
+    }
+
     /// Inline control tag prefixes or tokens (e.g. `"<break"`, `"[laughs]"`, `"/ipa/"`)
     /// that this TTS engine natively understands and that must not be stripped
     /// from `spoken_text`. Default: `&[]` (strip all markup).

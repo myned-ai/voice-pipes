@@ -215,7 +215,12 @@ export const PipelineTimeline = ({
       : undefined;
 
   // ── Grid: pick a round step based on the *visible* span ──
-  const gridStep = axisSpan <= 1000 ? 100 : axisSpan <= 3000 ? 250 : axisSpan <= 8000 ? 500 : 1000;
+  const gridStep =
+    axisSpan <= 1000 ? 100 :
+    axisSpan <= 3000 ? 250 :
+    axisSpan <= 8000 ? 500 :
+    axisSpan <= 15000 ? 2000 :
+    axisSpan <= 30000 ? 5000 : 10000;
   const gridLines: number[] = [];
   for (let t = Math.ceil(axisMin / gridStep) * gridStep; t <= axisMax; t += gridStep) {
     gridLines.push(t);

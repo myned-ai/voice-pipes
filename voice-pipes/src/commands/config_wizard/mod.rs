@@ -263,30 +263,23 @@ fn assemble_plan(prompt: &dyn Prompt, registry: &Registry) -> Result<WizardPlan>
     assemble_plan_with(prompt, registry, Menus::registered())
 }
 
-/// [`assemble_plan`] over the given stage menus. A mode whose stages this
-/// build cannot fill is not offered, and with neither mode possible the
-/// wizard stops before asking anything.
-fn assemble_plan_with(
-    prompt: &dyn Prompt,
-    registry: &Registry,
-    menus: Menus,
-) -> Result<WizardPlan> {
+fn select_pipeline_mode(prompt: &dyn Prompt, menus: &Menus) -> Result<bool> {
     const CLASSIC: &str = "Classic Mode (STT -> LLM -> TTS)";
     const REALTIME: &str = "Speech-to-Speech Realtime Mode (one model hears and speaks)";
     let classic_gaps = menus.classic_gaps();
     let realtime_gaps = menus.realtime_gaps();
-    let is_realtime = match (classic_gaps.is_empty(), realtime_gaps.is_empty()) {
-        (true, true) => prompt.select("Select Pipeline Mode", &[CLASSIC, REALTIME], 0)? == 1,
+    match (classic_gaps.is_empty(), realtime_gaps.is_empty()) {
+        (true, true) => Ok(prompt.select("Select Pipeline Mode", &[CLASSIC, REALTIME], 0)? == 1),
         (true, false) => {
             println!("ℹ️  Classic mode only: {}", describe_gaps(&realtime_gaps));
-            false
+            Ok(false)
         }
         (false, true) => {
             println!(
                 "ℹ️  Speech-to-speech mode only: {}",
                 describe_gaps(&classic_gaps)
             );
-            true
+            Ok(true)
         }
         (false, false) => anyhow::bail!(
             "this build cannot configure a pipeline: {}",
@@ -297,7 +290,18 @@ fn assemble_plan_with(
                     .collect::<Vec<_>>()
             )
         ),
-    };
+    }
+}
+
+/// [`assemble_plan`] over the given stage menus. A mode whose stages this
+/// build cannot fill is not offered, and with neither mode possible the
+/// wizard stops before asking anything.
+fn assemble_plan_with(
+    prompt: &dyn Prompt,
+    registry: &Registry,
+    menus: Menus,
+) -> Result<WizardPlan> {
+    let is_realtime = select_pipeline_mode(prompt, &menus)?;
     let Menus {
         stt,
         llm,
@@ -341,7 +345,7 @@ fn assemble_plan_with(
 
         // 1. STT provider
         ctx.toml.push_str("[stt]\n");
-        run_stage(&mut ctx, &stt, &mut manifest, &mut downloads)?;
+        let stt_choice = run_stage(&mut ctx, &stt, &mut manifest, &mut downloads)?;
         ctx.toml.push('\n');
 
         // 2. LLM / text processor
@@ -361,13 +365,20 @@ fn assemble_plan_with(
 
         // 4b. Turn detection — how the pipeline decides the user has
         // *finished* speaking (consumes Silero's silence signal). See
-        // src/stt/turn.rs.
+        // src/stt/turn.rs. When the chosen STT provider includes its own
+        // semantic turn detector, use `provider` mode instead of double-gating
+        // with Smart Turn.
         ctx.toml.push_str("[turn_detection]\n");
-        run_stage(&mut ctx, &turn, &mut manifest, &mut downloads)?;
-        ctx.toml.push('\n');
+        if stt_choice.choice.provider_turn_detection {
+            ctx.toml
+                .push_str("mode = \"provider\"\nsilence_timeout_ms = 1500\n\n");
+        } else {
+            run_stage(&mut ctx, &turn, &mut manifest, &mut downloads)?;
+            ctx.toml.push('\n');
+        }
 
         ctx.toml
-            .push_str("[barge_in]\nenabled = true\nmin_chunks = 3\nspeech_threshold = 200.0\n\n");
+            .push_str("[barge_in]\nenabled = true\nmin_chunks = 3\nspeech_threshold = 1200.0\n\n");
     }
 
     // Output chunking is a pipeline setting: the worker file has no such
@@ -593,13 +604,14 @@ struct MenuChoice {
     choice: voice_pipes_sdk::WizardChoice,
 }
 
-/// Shows a stage menu and writes the chosen provider's TOML lines.
-fn run_stage(
+/// Shows a stage menu and writes the chosen provider's TOML lines, returning
+/// the selected menu choice.
+fn run_stage<'a>(
     ctx: &mut EmitCtx,
-    menu: &StageMenu,
+    menu: &'a StageMenu,
     manifest: &mut StackManifest,
     downloads: &mut Vec<DownloadSpec>,
-) -> Result<()> {
+) -> Result<&'a MenuChoice> {
     let labels: Vec<String> = menu
         .choices
         .iter()
@@ -635,7 +647,8 @@ fn run_stage(
     let Some(chosen) = menu.choices.get(idx) else {
         anyhow::bail!("no menu entry {idx}");
     };
-    emit_choice(ctx, menu.stage.provider_key(), chosen, manifest, downloads)
+    emit_choice(ctx, menu.stage.provider_key(), chosen, manifest, downloads)?;
+    Ok(chosen)
 }
 
 /// Write a choice as the SDK renders it (provider line, then one line per

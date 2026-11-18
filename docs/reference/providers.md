@@ -55,7 +55,7 @@ setup-wizard menu rank order.
 
 | Wizard option | `provider` | Cargo feature | Provisioning | Key / credential env |
 |---|---|---|---|---|
-| Layered (provider end-of-turn signal, else silence timeout) [default] | `layered` | — (always compiled in) | built in | — |
+| Layered (provider end-of-turn signal, else silence timeout) | `layered` | — (always compiled in) | built in | — |
 | Silence (fixed silence timeout only) | `silence` | — (always compiled in) | built in | — |
 | Smart (Pipecat Smart Turn v3.2 — semantic end-of-turn model) | `smart` | `turn-smart` | downloaded model | — |
 

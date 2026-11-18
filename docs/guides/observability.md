@@ -231,7 +231,7 @@ What the verdict will and will not say:
   and raised as `stt.utterance_dropped`, severe, when the recogniser had words
   and returned none. A turn the caller waited far longer for than the server
   timed — the shape of a lost first attempt — raises `turn.unanswered_wait`
-  (over `unanswered_wait_ms`, 3 s by default); when the wait spans dropped
+  (over `unanswered_wait_ms`, 3 s by default, 4.5 s for speech-to-speech); when the wait spans dropped
   utterances the rule says so, severe if the recogniser had words and lost
   them, moderate if it found none. A tool-invocation turn has no spoken
   reply, so its wait is measured from speech end to the tool call's

@@ -30,6 +30,7 @@
 /plugins/stt/assemblyai/        @goran-j
 /plugins/tts/elevenlabs/        @goran-j
 /plugins/tts/gemini/            @goran-j
+/plugins/tts/neutts/            @goran-j
 /plugins/llm/openai-compat/     @goran-j
 /plugins/llm/gguf/              @goran-j
 /plugins/s2s/openai/            @goran-j

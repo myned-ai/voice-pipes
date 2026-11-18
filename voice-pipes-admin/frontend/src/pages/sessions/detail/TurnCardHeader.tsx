@@ -1,7 +1,7 @@
 import { AlertCircle, Clock } from 'lucide-react';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { arrivalRtfOf, type TurnDisplayState, type TurnSummary, type OrchTurn, type Utterance, type ReportAnomaly } from './types';
-import { lastPipelineStage } from './utils';
+import { formatTurnResourceBadges, lastPipelineStage } from './utils';
 import { StatusBadge } from '../../../components/StatusBadge';
 import { audioPostComponents, chainOverheadMs, emitRtf, pacerWaitMs, sourceRtf } from '../../../lib/metrics/lookup';
 import { describeAnchorSource } from '../../../lib/metrics/anchorSource';
@@ -409,31 +409,19 @@ export function TurnCardHeader({ utt, displayState, turnStatus, summary, orchTur
         {/* Per-turn process physical memory and CPU load */}
         {(() => {
           const res = orchTurn?.detail?.resource_usage ?? utt.resource_usage;
-          if (!res) return null;
-          const mb = res.rss_bytes != null ? (res.rss_bytes / (1024 * 1024)).toFixed(1) : null;
-          const deltaMb = res.rss_delta_bytes != null ? (res.rss_delta_bytes / (1024 * 1024)).toFixed(2) : null;
-          const cpuPct = res.cpu_percent != null ? `${res.cpu_percent.toFixed(0)}%` : null;
-          const cpuMs = res.cpu_time_ms != null ? `${res.cpu_time_ms}ms` : null;
-          const cgroupMb = res.container_peak_memory_bytes != null ? `${(res.container_peak_memory_bytes / (1024 * 1024)).toFixed(0)} MB` : null;
+          const badges = formatTurnResourceBadges(res, isDark);
+          if (!badges) return null;
 
-          const tipParts = [
-            mb ? `Process physical resident memory (RSS): ${mb} MB` : null,
-            deltaMb ? `Turn memory delta: ${Number(deltaMb) > 0 ? '+' : ''}${deltaMb} MB` : null,
-            cpuPct ? `Turn CPU utilization: ${cpuPct} (${cpuMs ?? ''} CPU time)` : null,
-            cgroupMb ? `Container peak memory: ${cgroupMb}` : null,
-            'Deterministic Rust runtime with zero GC pauses',
-          ].filter(Boolean).join(' · ');
+          const { ramLabel, ramStyle, cpuPct, tipParts } = badges;
 
           return (
             <>
-              {mb && (
+              {ramLabel && (
                 <span
-                  className={`text-[10px] font-mono font-medium px-1.5 py-0.5 rounded ring-1 ${
-                    isDark ? 'bg-cyan-500/15 text-cyan-300 ring-cyan-500/30' : 'bg-cyan-50 text-cyan-700 ring-cyan-300'
-                  }`}
+                  className={`text-[10px] font-mono font-medium px-1.5 py-0.5 rounded ring-1 ${ramStyle}`}
                   title={tipParts}
                 >
-                  RAM {mb}M{deltaMb && Number(deltaMb) !== 0 ? ` (${Number(deltaMb) > 0 ? '+' : ''}${deltaMb})` : ''}
+                  {ramLabel}
                 </span>
               )}
               {cpuPct && (

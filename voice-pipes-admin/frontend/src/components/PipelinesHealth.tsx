@@ -177,6 +177,7 @@ function PipelineCard({ group, highlight, cardRef }: { group: PipelineGroup; hig
 
   const totalWorkers = group.workers.length;
   const activeWorkers = group.workers.filter((w) => w.worker.status === "active").length;
+  const initializingWorkers = group.workers.filter((w) => w.worker.status === "initializing").length;
   const drainingWorkers = group.workers.filter((w) => w.worker.status === "draining").length;
   const deadWorkers = group.workers.filter((w) => w.worker.status === "dead").length;
 
@@ -208,6 +209,7 @@ function PipelineCard({ group, highlight, cardRef }: { group: PipelineGroup; hig
           <span className="inline-flex items-center gap-1">
             <Server size={12} />
             {activeWorkers}/{totalWorkers} active
+            {initializingWorkers > 0 && <span className="text-amber-400">· {initializingWorkers} initializing</span>}
             {drainingWorkers > 0 && <span className="text-amber-400">· {drainingWorkers} draining</span>}
             {deadWorkers > 0 && <span className="text-rose-400">· {deadWorkers} dead</span>}
           </span>
@@ -230,15 +232,16 @@ function PipelineCard({ group, highlight, cardRef }: { group: PipelineGroup; hig
                   </span>
                   <span className={`text-[10px] uppercase font-semibold ${
                     worker.status === "active" ? "text-emerald-400"
+                    : worker.status === "initializing" ? "text-amber-400 animate-pulse font-medium"
                     : worker.status === "draining" ? "text-amber-400"
                     : "text-rose-400"
                   }`}>
-                    {worker.status}
+                    {worker.status === "initializing" ? "initializing (loading models)" : worker.status}
                   </span>
                 </div>
                 {components.length === 0 && (
                   <span className={`text-[10px] italic ${isDark ? "text-slate-500" : "text-gray-400"}`}>
-                    no component data yet
+                    {worker.status === "initializing" ? "loading neural models on CPU..." : "no component data yet"}
                   </span>
                 )}
               </div>

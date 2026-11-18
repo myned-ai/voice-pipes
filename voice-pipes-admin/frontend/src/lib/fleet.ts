@@ -9,7 +9,7 @@ export type HealthState = 'healthy' | 'degraded' | 'unhealthy' | 'not_configured
 
 export interface FleetWorker {
   id: string;
-  status: 'active' | 'draining' | 'dead';
+  status: 'active' | 'initializing' | 'draining' | 'dead';
   pipeline_name?: string | null;
   aggregate_health?: HealthState;
 }

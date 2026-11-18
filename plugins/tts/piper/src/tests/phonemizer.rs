@@ -58,6 +58,38 @@ fn ipa_to_ids_of_spaces_and_unknown_marks_is_empty() {
     assert!(ipa_to_ids(" ˈ ", &config).unwrap().is_empty());
 }
 
+#[test]
+fn extract_terminators_handles_commas_periods_and_runs() {
+    assert_eq!(extract_clause_terminators("Hello, world!"), vec![',', '!']);
+    assert_eq!(
+        extract_clause_terminators("Wait... really? Yes!"),
+        vec!['.', '?', '!']
+    );
+    assert_eq!(
+        extract_clause_terminators("Decimals: 3.14 is pi, right?"),
+        vec![':', ',', '?']
+    );
+    assert_eq!(
+        extract_clause_terminators("... Hello — world!"),
+        vec![',', '!']
+    );
+    assert_eq!(
+        extract_clause_terminators("Version 1.2.3 is out!"),
+        vec!['!']
+    );
+}
+
+#[test]
+fn reconstruct_clause_punctuation_rebuilds_pauses_and_endings() {
+    let raw = "həlˈoʊ\nwˈɜːld";
+    let res = reconstruct_clause_punctuation("Hello, world!", raw);
+    assert_eq!(res, "həlˈoʊ, wˈɜːld!");
+
+    let raw_single = "kˈɑːntɛkst";
+    let res_single = reconstruct_clause_punctuation("context", raw_single);
+    assert_eq!(res_single, "kˈɑːntɛkst.");
+}
+
 #[tokio::test]
 async fn metric_conformance() {
     let run = |tx: tokio::sync::mpsc::Sender<voice_pipes_sdk::AudioFrame>,

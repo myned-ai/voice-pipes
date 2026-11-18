@@ -417,6 +417,51 @@ struct PrefetchedFragment {
 /// audio is resampled chunk-by-chunk using `StreamingResampler`.
 ///
 /// Checks `cancel` before each fragment; exits early when cancelled.
+/// Helper to buffer and combine streamed fragments into a single turn-level fragment
+/// when `sentence_chunking` is disabled.
+#[derive(Default)]
+struct TurnFragmentAccumulator {
+    text: String,
+    spoken_text: Option<String>,
+    hints: Option<voice_pipes_sdk::SynthesisHints>,
+    token_count: Option<u32>,
+}
+
+impl TurnFragmentAccumulator {
+    fn push(&mut self, frag: &TextFragment) {
+        self.text.push_str(&frag.text);
+        if let Some(ref spoken) = frag.spoken_text {
+            if let Some(ref mut c_spoken) = self.spoken_text {
+                c_spoken.push_str(spoken);
+            } else {
+                self.spoken_text = Some(spoken.clone());
+            }
+        }
+        if self.hints.is_none() && frag.hints.is_some() {
+            self.hints.clone_from(&frag.hints);
+        }
+        if frag.token_count.is_some() {
+            self.token_count = frag.token_count;
+        }
+    }
+
+    fn to_combined_fragment(&self) -> Option<TextFragment> {
+        if self.text.is_empty() {
+            return None;
+        }
+        let mut f = TextFragment::new(self.text.clone())
+            .with_is_end_of_response(true)
+            .with_hints(self.hints.clone());
+        if let Some(ref spoken) = self.spoken_text {
+            f = f.with_spoken_text(Some(spoken.clone()));
+        }
+        if let Some(tokens) = self.token_count {
+            f = f.with_token_count(Some(tokens));
+        }
+        Some(f)
+    }
+}
+
 pub async fn tts_task(
     mut frag_rx: mpsc::Receiver<TextFragment>,
     audio_tx: mpsc::Sender<AudioChunk>,
@@ -558,6 +603,24 @@ pub async fn tts_task(
                     },
                 }
             };
+
+            if !tts.sentence_chunking() && !raw.is_end_of_response {
+                let mut acc = TurnFragmentAccumulator::default();
+                acc.push(&raw);
+                while let Some(next_f) = frag_rx.recv().await {
+                    if cancel.is_cancelled() {
+                        return;
+                    }
+                    let is_end = next_f.is_end_of_response;
+                    acc.push(&next_f);
+                    if is_end {
+                        break;
+                    }
+                }
+                if let Some(combined) = acc.to_combined_fragment() {
+                    raw = combined;
+                }
+            }
 
             let is_end = raw.is_end_of_response;
 
@@ -766,7 +829,7 @@ pub async fn tts_task(
                 //    session lock (no overlap to win) and prefetching there was
                 //    the source of a deadlock. The next fragment is
                 //    picked up normally on the following loop iteration.
-                next = frag_rx.recv(), if !has_stateful_session && prefetched.is_none() && deferred_frag.is_none() && !is_end && !frag_rx_closed => {
+                next = frag_rx.recv(), if tts.sentence_chunking() && !has_stateful_session && prefetched.is_none() && deferred_frag.is_none() && !is_end && !frag_rx_closed => {
                     // `None` means the channel closed -- no more fragments
                     // coming. : remember it, or a closed channel is
                     // `Ready(None)` on every poll and this arm spins a core

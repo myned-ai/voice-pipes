@@ -99,4 +99,33 @@ describe('TurnCard TTS input inspector', () => {
     expect(screen.getByText('Spoken:')).toBeInTheDocument();
     expect(screen.getByText(/google dot com\./)).toBeInTheDocument();
   });
+
+  it('renders delta-centric turn memory badge (RAM flat and RAM delta)', () => {
+    const uttFlat: Utterance = {
+      utterance_id: 5,
+      resource_usage: {
+        rss_bytes: 1980 * 1024 * 1024,
+        rss_delta_bytes: 0,
+        cpu_percent: 8,
+      },
+    };
+
+    const { unmount } = render(<TurnCard utt={uttFlat} sessionId="test-session" />);
+    expect(screen.getByText('RAM flat')).toBeInTheDocument();
+    expect(screen.getByText('CPU 8%')).toBeInTheDocument();
+    unmount();
+
+    const uttDelta: Utterance = {
+      utterance_id: 6,
+      resource_usage: {
+        rss_bytes: 1985 * 1024 * 1024,
+        rss_delta_bytes: 5.25 * 1024 * 1024,
+        cpu_percent: 22,
+      },
+    };
+
+    render(<TurnCard utt={uttDelta} sessionId="test-session" />);
+    expect(screen.getByText('RAM Δ+5.25M')).toBeInTheDocument();
+    expect(screen.getByText('CPU 22%')).toBeInTheDocument();
+  });
 });

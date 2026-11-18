@@ -85,6 +85,11 @@ voice = "af_heart"
 cargo build --release -p voice-pipes-cli --features tts-kokoro
 ```
 
+Alternatively, **NeuTTS** provides zero-shot voice cloning on CPU using reference audio samples (see the [NeuTTS page](../guides/providers/tts/neutts.md)):
+```sh
+cargo build --release -p voice-pipes-cli --features tts-neutts
+```
+
 Every provider page lists its Cargo feature, config block and limitations.
 
 ## 4. Tune turn-taking

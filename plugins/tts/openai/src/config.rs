@@ -27,6 +27,7 @@ pub(crate) struct OpenAiConfig {
     pub(crate) request_timeout: Duration,
     pub(crate) speed: Option<f32>,
     pub(crate) instructions: Option<String>,
+    pub(crate) sentence_chunking: bool,
 }
 
 // never print the key, even through a future
@@ -41,6 +42,7 @@ impl std::fmt::Debug for OpenAiConfig {
             .field("request_timeout", &self.request_timeout)
             .field("speed", &self.speed)
             .field("instructions", &self.instructions)
+            .field("sentence_chunking", &self.sentence_chunking)
             .finish()
     }
 }
@@ -101,6 +103,7 @@ impl OpenAiConfig {
             request_timeout: Duration::from_millis(timeout_ms),
             speed,
             instructions,
+            sentence_chunking: cfg.sentence_chunking,
         })
     }
 

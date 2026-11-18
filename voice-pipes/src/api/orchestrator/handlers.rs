@@ -27,7 +27,7 @@ pub async fn health(
     State(state): State<Arc<OrchestratorState>>,
 ) -> Json<ApiResponse<OrchestratorHealthResponse>> {
     let uptime = state.start_time.elapsed().as_secs();
-    let (total, active, draining, dead) = worker_counts(&state);
+    let (total, active, initializing, draining, dead) = worker_counts(&state);
 
     // COUNT-only query (limit 0): we need the number, not the records.
     let active_sessions = state
@@ -43,7 +43,11 @@ pub async fn health(
         .await
         .1 as u64;
 
-    let status = if dead > 0 || active == 0 {
+    let status = if dead > 0 {
+        "degraded"
+    } else if active == 0 && initializing > 0 {
+        "initializing"
+    } else if active == 0 {
         "degraded"
     } else {
         "healthy"
@@ -56,6 +60,7 @@ pub async fn health(
         workers: WorkerFleetSummary {
             total,
             active,
+            initializing,
             draining,
             dead,
         },
@@ -86,7 +91,7 @@ pub async fn orch_liveness() -> impl IntoResponse {
 /// is registered and the orchestrator can route traffic.  Returns 503 when
 /// no workers are available.
 pub async fn orch_readiness(State(state): State<Arc<OrchestratorState>>) -> impl IntoResponse {
-    let (_total, active, _draining, _dead) = worker_counts(&state);
+    let (_total, active, _initializing, _draining, _dead) = worker_counts(&state);
     if active == 0 {
         return (
             StatusCode::SERVICE_UNAVAILABLE,
@@ -296,7 +301,7 @@ pub async fn metrics(
     let window = q.window.unwrap_or_else(|| "1m".to_string());
     let window_dur = parse_window(&window).unwrap_or(chrono::Duration::minutes(1));
     let cutoff = Utc::now() - window_dur;
-    let (_, active, _, _) = worker_counts(&state);
+    let (_, active, _, _, _) = worker_counts(&state);
 
     // Only the turns inside the rolling window (and optionally one
     // worker) leave the store: the admin UI polls this, and the full table

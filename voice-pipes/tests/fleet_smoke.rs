@@ -116,6 +116,7 @@ fn registration(id: &str, pipeline: &str, bound: &str, public: Option<&str>) -> 
         transport_address: Some(bound.into()),
         public_transport_address: public.map(Into::into),
         available_configs: Vec::new(),
+        status: None,
     }
 }
 

@@ -363,6 +363,7 @@ pub async fn process_utterance(
         let sanitize_cfg_bridge = sanitize_cfg.clone().unwrap_or_else(|| {
             voice_pipes_sdk::SanitizeConfig::from_tts(None, tts.name(), tts.supported_inline_tags())
         });
+        let sentence_chunking = tts.sentence_chunking();
         bridge_handle = tokio::spawn(async move {
             let mut accumulated = String::new();
             let llm_start = std::time::Instant::now();
@@ -374,45 +375,58 @@ pub async fn process_utterance(
                 tokio::select! {
                     biased;
                     () = cancel_bridge.cancelled() => break,
-                    frag = frag_rx.recv() => match frag {
-                        Some(f) => {
-                            if let Some(tx) = ttft_tx.take() {
-                                let perceived = bridge_start.elapsed();
-                                let canonical = f
-                                    .first_token_ms
-                                    .map_or(perceived, |ms| std::time::Duration::from_secs_f64(ms / 1000.0));
-                                let _ = tx.send((canonical, perceived));
-                                if let Some(ref tx) = bridge_pe_tx {
-                                    let _ = tx.send(PipelineEvent::LlmFirstToken {
-                                        utterance_id,
-                                        elapsed_ms: perceived.as_millis() as u64,
-                                    });
-                                }
-                                if let Some(tx) = first_frag_tx.take() {
-                                    let _ = tx.send(std::time::Instant::now());
-                                }
+                    frag = frag_rx.recv() => if let Some(f) = frag {
+                        if let Some(tx) = ttft_tx.take() {
+                            let perceived = bridge_start.elapsed();
+                            let canonical = f
+                                .first_token_ms
+                                .map_or(perceived, |ms| std::time::Duration::from_secs_f64(ms / 1000.0));
+                            let _ = tx.send((canonical, perceived));
+                            if let Some(ref tx) = bridge_pe_tx {
+                                let _ = tx.send(PipelineEvent::LlmFirstToken {
+                                    utterance_id,
+                                    elapsed_ms: perceived.as_millis() as u64,
+                                });
                             }
-                            accumulated.push_str(&f.text);
-                            if f.token_count.is_some() {
-                                real_token_count = f.token_count;
-                            }
-                            // The response text is complete at the final
-                            // fragment; hand it to the audio loop now, before
-                            // the fragment reaches TTS. The LLM stream may
-                            // stay open a while longer (usage parsing, history
-                            // bookkeeping), and the end-of-utterance sentinel
-                            // must not wait for that.
-                            if f.is_end_of_response
-                                && !accumulated.is_empty()
-                                && let Some(tx) = accumulated_text_tx.take()
+                            if sentence_chunking
+                                && let Some(tx) = first_frag_tx.take()
                             {
-                                let _ = tx.send(accumulated.clone());
-                            }
-                            if tts_frag_tx.send(f).await.is_err() {
-                                break;
+                                let _ = tx.send(std::time::Instant::now());
                             }
                         }
-                        None => break,
+                        if f.token_count.is_some() {
+                            real_token_count = f.token_count;
+                        }
+                        accumulated.push_str(&f.text);
+                        // The response text is complete at the final
+                        // fragment; hand it to the audio loop now, before
+                        // the fragment reaches TTS. The LLM stream may
+                        // stay open a while longer (usage parsing, history
+                        // bookkeeping), and the end-of-utterance sentinel
+                        // must not wait for that.
+                        if f.is_end_of_response
+                            && !accumulated.is_empty()
+                            && let Some(tx) = accumulated_text_tx.take()
+                        {
+                            let _ = tx.send(accumulated.clone());
+                        }
+                        if !sentence_chunking
+                            && f.is_end_of_response
+                            && let Some(tx) = first_frag_tx.take()
+                        {
+                            let _ = tx.send(std::time::Instant::now());
+                        }
+                        if tts_frag_tx.send(f).await.is_err() {
+                            break;
+                        }
+                    } else {
+                        if !sentence_chunking
+                            && !accumulated.is_empty()
+                            && let Some(tx) = first_frag_tx.take()
+                        {
+                            let _ = tx.send(std::time::Instant::now());
+                        }
+                        break;
                     },
                 }
             }

@@ -1,19 +1,70 @@
-# launch-stack.ps1
-# Unified Docker-based fleet configurator & launcher for Voice Pipes.
-#
-# -TakePorts: also stop FOREIGN containers (other compose projects) that hold
-#             ports this stack needs; without it they are named and the launch
-#             aborts with instructions.
-# -SkipWizard: start the stack on the configuration already under
-#             voice-pipes/deploy/docker/config/ (from an earlier run, or from
-#             `voice-pipes config-wizard` run natively) instead of asking again.
+<#
+.SYNOPSIS
+Unified Docker-based fleet configurator & launcher for Voice Pipes.
+
+.DESCRIPTION
+Probes GPU availability, optionally builds and runs the interactive configuration
+wizard, builds the orchestrator and worker Docker images, starts any configured
+sidecars, and launches the Admin UI.
+
+.PARAMETER TakePorts
+Also stop FOREIGN containers (other compose projects) that hold ports this stack
+needs. Without it, foreign holders are named and the launch aborts.
+
+.PARAMETER SkipWizard
+Start the stack using the existing configuration under
+voice-pipes/deploy/docker/config/ instead of running the interactive wizard.
+
+.PARAMETER Cpu
+Force CPU-only execution (disables GPU pass-through probing).
+
+.PARAMETER NoGpu
+Alias for -Cpu. Force CPU-only execution.
+
+.PARAMETER Build
+Compile images locally from source instead of pulling prebuilt images from GHCR.
+
+.PARAMETER Rebuild
+Force recompiling the voice-pipes-builder wizard container image (implies -Build).
+
+.PARAMETER Full
+Include all providers when building locally, including llama.cpp-backed ones
+(in-process GGUF LLMs like SmolLM2, and NeuTTS-Air). Prebuilt GHCR images
+already include all providers.
+
+.PARAMETER Help
+Print this help message and exit.
+
+.EXAMPLE
+.\launch-stack.ps1
+Pulls prebuilt images and launches the configuration wizard.
+
+.EXAMPLE
+.\launch-stack.ps1 -Build -Full
+Compiles locally with in-process GGUF LLMs (SmolLM2) and NeuTTS-Air support enabled.
+
+.EXAMPLE
+.\launch-stack.ps1 -SkipWizard -TakePorts
+Skips the wizard and takes over any conflicting ports from foreign containers.
+#>
 
 param(
     [switch]$TakePorts,
     [switch]$SkipWizard,
     [switch]$Cpu,
-    [switch]$NoGpu
+    [switch]$NoGpu,
+    [switch]$Build,
+    [switch]$Rebuild,
+    [switch]$Full,
+    [switch]$Help
 )
+
+if ($Rebuild) { $Build = $true }
+
+if ($Help) {
+    Get-Help $MyInvocation.MyCommand.Path -Detailed
+    Exit 0
+}
 
 # Enable UTF-8 encoding
 $OutputEncoding = [System.Text.Encoding]::UTF8
@@ -68,19 +119,60 @@ if ($Cpu -or $NoGpu -or $env:VP_DEVICE -eq "cpu" -or $env:VP_FORCE_CPU) {
     }
 }
 
+$liteFeatures = "realtime,stt-parakeet,tts-piper,vad-silero,filter-deepfilter,llm-openai-compat,s2s-gemini,s2s-openai,s2s-elevenlabs,telemetry,wizard,audio-device,session-sqlite,text-grpc,tts-kokoro,tts-pocket,stt-moonshine,tts-openai,tts-elevenlabs,stt-assemblyai,stt-google,tts-gemini,stt-nemotron,stt-nemotron35,turn-smart"
+$cfgPath = "voice-pipes/deploy/docker/config/pipeline-custom.toml"
+$useLlamaCpp = [bool]$Full
+if (-not $useLlamaCpp -and $SkipWizard -and (Test-Path $cfgPath) -and (Select-String -Path $cfgPath -Pattern "provider\s*=\s*['""](neutts|gguf)['""]" -Quiet)) {
+    $useLlamaCpp = $true
+    Write-Host "Detected neutts/gguf in $cfgPath; enabling -Full build features." -ForegroundColor Cyan
+}
+
+if ($useLlamaCpp) {
+    Write-Host "Build profile: full (includes in-process GGUF LLMs)." -ForegroundColor Cyan
+    $builderBuildArgs = @()
+    $composeBuildArgs = @()
+} else {
+    Write-Host "Build profile: fast (skipping optional llama.cpp C++/CUDA build)." -ForegroundColor Green
+    Write-Host "   (Pass -Full if you plan to use in-process GGUF LLMs like SmolLM2 or NeuTTS-Air)" -ForegroundColor DarkGray
+    $builderBuildArgs = @("--build-arg", "CARGO_FLAGS=--no-default-features", "--build-arg", "FEATURES=$liteFeatures")
+    $composeBuildArgs = @("--build-arg", "CARGO_FLAGS=--no-default-features", "--build-arg", "FEATURES=$liteFeatures", "--build-arg", "GPU_FEATURES=ort-cuda")
+}
+
 if ($SkipWizard) {
-    if (-not (Test-Path "voice-pipes/deploy/docker/config/pipeline-custom.toml")) {
-        Write-Error "Error: -SkipWizard needs an existing configuration (voice-pipes/deploy/docker/config/pipeline-custom.toml); run without it first."
+    if (-not (Test-Path $cfgPath)) {
+        Write-Error "Error: -SkipWizard needs an existing configuration ($cfgPath); run without it first."
         Exit 1
     }
     Write-Host "Skipping the wizard; using the existing configuration." -ForegroundColor Gray
 } else {
-# 3. Build the builder container for the config wizard
-Write-Host "Preparing configuration wizard container..." -ForegroundColor Gray
-docker build -t voice-pipes-builder -f voice-pipes/Dockerfile .
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "Error: Failed to build builder container."
-    Exit 1
+# 3. Prepare wizard container (pull prebuilt image by default, or build locally with -Build/-Rebuild)
+$wizardImage = ""
+$prebuiltImage = if ($env:VP_IMAGE) { $env:VP_IMAGE } else { "ghcr.io/myned-ai/voice-pipes:latest" }
+if (-not $Build) {
+    Write-Host "Pulling prebuilt wizard image ($prebuiltImage)..." -ForegroundColor Gray
+    docker pull $prebuiltImage
+    if ($LASTEXITCODE -eq 0) {
+        $wizardImage = $prebuiltImage
+    } else {
+        Write-Host "Could not pull $prebuiltImage; falling back to local build (-Build)." -ForegroundColor Yellow
+        $Build = $true
+    }
+}
+
+if (-not $wizardImage) {
+    $builderId = (docker images -q voice-pipes-builder 2>$null)
+    if ($builderId -and -not $Rebuild) {
+        Write-Host "OK: Using existing voice-pipes-builder image ($($builderId | Select-Object -First 1))." -ForegroundColor Green
+        Write-Host "   (Pass -Rebuild to recompile the wizard container)" -ForegroundColor DarkGray
+    } else {
+        Write-Host "Preparing configuration wizard container..." -ForegroundColor Gray
+        docker build @builderBuildArgs -t voice-pipes-builder -f voice-pipes/Dockerfile .
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Error: Failed to build builder container."
+            Exit 1
+        }
+    }
+    $wizardImage = "voice-pipes-builder"
 }
 
 # 3b. Resolve a HuggingFace access token (needed only for gated repos, e.g. Gemma 3).
@@ -120,7 +212,7 @@ if ($env:HF_TOKEN) { $hfEnvArgs = @("-e", "HF_TOKEN") }
 Write-Host "Launching interactive configuration wizard..." -ForegroundColor Gray
 # VP_WIZARD_FROM_LAUNCHER tells the wizard this script starts the stack
 # next, so it prints no next step of its own.
-docker run -it --rm @hfEnvArgs -e VP_WIZARD_FROM_LAUNCHER=1 -v "${PWD}/voice-pipes:/app" voice-pipes-builder config-wizard
+docker run -it --rm @hfEnvArgs -e VP_WIZARD_FROM_LAUNCHER=1 -v "${PWD}/voice-pipes:/app" $wizardImage config-wizard
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Error: Configuration wizard exited with an error."
     Exit 1
@@ -240,7 +332,38 @@ if (-not (Resolve-PortConflicts -ComposeFile "voice-pipes/deploy/docker/docker-c
     Exit 1
 }
 
-docker compose -f voice-pipes/deploy/docker/docker-compose.yml up --build -d --remove-orphans orchestrator $worker @sidecars
+# Re-check pipeline-custom.toml after wizard in case the user picked neutts/gguf
+if (-not $useLlamaCpp -and (Test-Path $cfgPath) -and (Select-String -Path $cfgPath -Pattern "provider\s*=\s*['""](neutts|gguf)['""]" -Quiet)) {
+    $useLlamaCpp = $true
+    $composeBuildArgs = @()
+    Write-Host "Detected neutts/gguf in $cfgPath; enabling llama.cpp build features for worker." -ForegroundColor Cyan
+}
+
+# Pull prebuilt images by default, or build locally when -Build is set
+if (-not $Build) {
+    Write-Host "Pulling prebuilt backend fleet container images..." -ForegroundColor Gray
+    docker compose -f voice-pipes/deploy/docker/docker-compose.yml pull orchestrator $worker
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Pull failed; falling back to local build (-Build)." -ForegroundColor Yellow
+        $Build = $true
+    }
+}
+if ($Build) {
+    # Build images sequentially to prevent apt mirror rate-limiting and port-80 connection collisions
+    Write-Host "Preparing backend fleet container images..." -ForegroundColor Gray
+    docker compose -f voice-pipes/deploy/docker/docker-compose.yml build @composeBuildArgs orchestrator
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Error: Failed to build orchestrator container."
+        Exit 1
+    }
+    docker compose -f voice-pipes/deploy/docker/docker-compose.yml build @composeBuildArgs $worker
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Error: Failed to build worker container."
+        Exit 1
+    }
+}
+
+docker compose -f voice-pipes/deploy/docker/docker-compose.yml up -d --remove-orphans orchestrator $worker @sidecars
 
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Error: Failed to start backend fleet containers."
@@ -267,7 +390,17 @@ if (-not (Resolve-PortConflicts -ComposeFile "voice-pipes-admin/docker-compose.y
     Write-Error "Error: Port conflicts unresolved - see messages above (or re-run with -TakePorts)."
     Exit 1
 }
-docker compose -f voice-pipes-admin/docker-compose.yml up --build -d
+if (-not $Build) {
+    docker compose -f voice-pipes-admin/docker-compose.yml pull
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Admin UI pull failed; falling back to local build." -ForegroundColor Yellow
+        docker compose -f voice-pipes-admin/docker-compose.yml up --build -d
+    } else {
+        docker compose -f voice-pipes-admin/docker-compose.yml up -d
+    }
+} else {
+    docker compose -f voice-pipes-admin/docker-compose.yml up --build -d
+}
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Error: Failed to start Admin UI containers."
     Exit 1
@@ -277,9 +410,21 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "Verifying backend fleet readiness..." -ForegroundColor Gray
 $workerId = (docker compose -f voice-pipes/deploy/docker/docker-compose.yml ps -q $worker 2>$null)
 if ($workerId) {
-    $probeSeconds = 15
-    for ($i = 0; $i -lt $probeSeconds; $i++) {
-        Start-Sleep -Seconds 1
+    # Check if pipeline config contains heavy local models like neutts
+    $cfgPath = "voice-pipes/deploy/docker/config/pipeline-custom.toml"
+    $isHeavyModel = $false
+    if ((Test-Path $cfgPath) -and (Select-String -Path $cfgPath -Pattern "provider\s*=\s*['""]neutts['""]" -Quiet)) {
+        $isHeavyModel = $true
+        Write-Host "   [i] NeuTTS-Air detected: loading neural speech model & vocoder on CPU." -ForegroundColor Cyan
+        Write-Host "   [i] Initial model allocation may take 1-3 minutes. Please wait..." -ForegroundColor Cyan
+    }
+
+    $workerTimeout = if ($isHeavyModel) { 240 } else { 60 }
+    $workerReady = $false
+    Write-Host "Waiting for worker '$worker' readiness..." -ForegroundColor Gray
+
+    for ($i = 0; $i -lt $workerTimeout; $i += 2) {
+        Start-Sleep -Seconds 2
         $status = (docker inspect --format '{{.State.Status}}' $workerId 2>$null)
         if ($status -eq "restarting" -or $status -eq "exited") {
             $errLines = (docker logs --tail 25 $workerId 2>&1) | Where-Object { $_ -match '(ERROR voice_pipes|config validation failed|model load failed|missing model file)' }
@@ -292,9 +437,21 @@ if ($workerId) {
             Write-Host "[i] To view full diagnostic logs: docker compose -f voice-pipes/deploy/docker/docker-compose.yml logs $worker" -ForegroundColor DarkGray
             Exit 1
         }
-        if ($status -eq "running" -and $i -ge 2) {
+
+        $hStatus = (docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}unknown{{end}}' $workerId 2>$null)
+        if ($hStatus -eq "healthy") {
+            $workerReady = $true
+            Write-Host "[+] Worker '$worker' is healthy and registered with orchestrator." -ForegroundColor Green
             break
         }
+
+        if ($i -gt 0 -and ($i % 10 -eq 0)) {
+            Write-Host "   ... still warming up models ($($i)s elapsed)" -ForegroundColor DarkGray
+        }
+    }
+
+    if (-not $workerReady) {
+        Write-Host "[!] Note: Worker '$worker' is still initializing in the background. It will become active as soon as models finish loading." -ForegroundColor Yellow
     }
 }
 

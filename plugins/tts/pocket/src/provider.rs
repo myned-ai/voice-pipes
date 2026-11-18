@@ -28,6 +28,9 @@ pub(crate) struct PocketHttpTts {
     pub(crate) config: PocketHttpConfig,
     pub(crate) audit_tx: Option<mpsc::Sender<TraceEvent>>,
     pub(crate) core: std::sync::Arc<ComponentCore>,
+    /// Serializes `/tts` requests to the single-process CPU-only sidecar so
+    /// sentence-chunking prefetch doesn't cause CPU thread contention.
+    pub(crate) serialize: tokio::sync::Mutex<()>,
 }
 
 impl std::fmt::Debug for PocketHttpTts {
@@ -55,6 +58,11 @@ impl PocketHttpTts {
         audio_tx: mpsc::Sender<AudioFrame>,
         cancel: tokio_util::sync::CancellationToken,
     ) -> Result<(), TtsError> {
+        let _serialize_guard = tokio::select! {
+            biased;
+            () = cancel.cancelled() => return Ok(()),
+            g = self.serialize.lock() => g,
+        };
         let attempts = 1 + self.config.silent_start.map_or(0, |g| g.retries);
         for attempt in 1..=attempts {
             // The last allowed attempt streams to completion whatever it

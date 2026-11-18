@@ -215,6 +215,9 @@ pub struct TtsConfig {
     pub voice: Option<String>,
     /// Whether to strip Markdown formatting from TTS spoken text. Default: true.
     pub sanitize_markdown: bool,
+    /// Whether to stream text to TTS sentence-by-sentence (`true`, default)
+    /// or buffer the full turn before synthesis (`false`). Default: true.
+    pub sentence_chunking: bool,
     /// Tag prefixes or exact names permitted to pass through to `spoken_text`.
     pub passthrough_tags: Vec<String>,
     /// Whole-word pronunciation lexicon replacements applied only to `spoken_text`.
@@ -242,6 +245,8 @@ impl<'de> Deserialize<'de> for TtsConfig {
             voice: Option<String>,
             #[serde(default = "default_true")]
             sanitize_markdown: bool,
+            #[serde(default = "default_true")]
+            sentence_chunking: bool,
             #[serde(default)]
             passthrough_tags: Vec<String>,
             #[serde(default)]
@@ -270,6 +275,7 @@ impl<'de> Deserialize<'de> for TtsConfig {
             model_name: raw.model_name,
             voice: raw.voice,
             sanitize_markdown: raw.sanitize_markdown,
+            sentence_chunking: raw.sentence_chunking,
             passthrough_tags: raw.passthrough_tags,
             lexicon: raw.lexicon,
             options,
@@ -296,6 +302,7 @@ impl Serialize for TtsConfig {
             #[serde(skip_serializing_if = "Option::is_none")]
             voice: &'a Option<String>,
             sanitize_markdown: bool,
+            sentence_chunking: bool,
             #[serde(skip_serializing_if = "Vec::is_empty")]
             passthrough_tags: &'a Vec<String>,
             #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
@@ -313,6 +320,7 @@ impl Serialize for TtsConfig {
             model_name: &self.model_name,
             voice: &self.voice,
             sanitize_markdown: self.sanitize_markdown,
+            sentence_chunking: self.sentence_chunking,
             passthrough_tags: &self.passthrough_tags,
             lexicon: &self.lexicon,
             options: crate::secrets::debug_options(&self.options),
@@ -616,6 +624,7 @@ impl fmt::Debug for TtsConfig {
             .field("model_name", &self.model_name)
             .field("voice", &self.voice)
             .field("sanitize_markdown", &self.sanitize_markdown)
+            .field("sentence_chunking", &self.sentence_chunking)
             .field("passthrough_tags", &self.passthrough_tags)
             .field("lexicon", &self.lexicon)
             .field("options", &debug_options(&self.options))
@@ -687,6 +696,7 @@ impl TtsConfig {
             model_name: None,
             voice: None,
             sanitize_markdown: true,
+            sentence_chunking: true,
             passthrough_tags: Vec::new(),
             lexicon: std::collections::BTreeMap::new(),
             options: HashMap::new(),
@@ -700,6 +710,7 @@ impl TtsConfig {
         with_model_name => model_name: Option<String>,
         with_voice => voice: Option<String>,
         with_sanitize_markdown => sanitize_markdown: bool,
+        with_sentence_chunking => sentence_chunking: bool,
         with_passthrough_tags => passthrough_tags: Vec<String>,
         with_lexicon => lexicon: std::collections::BTreeMap<String, String>,
         with_options => options: HashMap<String, serde_json::Value>,
