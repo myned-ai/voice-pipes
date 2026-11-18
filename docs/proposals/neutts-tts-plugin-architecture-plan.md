@@ -168,37 +168,38 @@ Voice Pipes guarantees immediate audio cutoff when the user starts speaking. In 
 
 ---
 
-## 4. Phased Implementation Roadmap
+## 4. Implementation Roadmap (Pure Rust Direct)
 
 ```
                                 IMPLEMENTATION TIMELINE
 ====================================================================================
-Phase 1 (Week 1)          Phase 2 (Week 2)          Phase 3 (Week 3)
-Sidecar Adapter           Native In-Process         Benchmarking & Demo
+Phase 1 (Core Pipeline)       Phase 2 (Streaming & Seams)   Phase 3 (Evals & CLI)
 ====================================================================================
-[ Python/C++ Sidecar ] -> [ Candle / ONNX Rust ] -> [ voice-pipes-bench Suite ]
-[ Streaming Unix/TCP ]    [ Zero Python Dep    ]    [ Admin Console UI Demo   ]
-[ Benchmark Baseline ]    [ SessionPool Safety ]    [ Outreach & Case Study   ]
+[ Candle Qwen2 GGUF Engine ] -> [ Streaming Token Seam   ] -> [ voice-pipes-bench ]
+[ NeuCodec ONNX SessionPool]    [ Sinc Polyphase Resample]    [ Admin Web Demo    ]
+[ Phonemizer & Vocab Token ]    [ Cooperative Barge-in   ]    [ CLI Wizard Setup  ]
 ```
 
-### Phase 1: High-Performance Streaming Sidecar (Rapid Prototyping & Validation)
-* Build a local micro-service (Python / C++ with `neutts[all]`) that streams raw PCM frames over a Unix domain socket or localhost TCP stream.
-* Implement `voice-pipes-tts-neutts` as a client communicating with this sidecar (similar to `voice-pipes-tts-pocket`).
-* **Goal**: Establish immediate baseline benchmarks for latency, RTF, and voice quality within 48 hours without getting blocked by raw weight conversion or GGUF tensor format nuances.
+### Phase 1: Pure-Rust In-Process Inference Engine
+* **Acoustic Backbone (`candle-transformers`)**:
+  * Load Qwen2 architecture directly from NeuTTS GGUF weights (Q4_K_M / Q8_0) using `candle-transformers` / `candle-core`.
+  * Implement autoregressive generation producing discrete acoustic tokens at 50 Hz.
+* **NeuCodec Audio Vocoder (`voice-pipes-onnx`)**:
+  * Export/load `neucodec_decoder.onnx` into `voice_pipes_onnx::SessionPool`.
+  * Validate 24 kHz batch synthesis from acoustic tokens.
+* **Text Processing**:
+  * Integrate with `voice_pipes_sdk::phonemize` for NeuTTS-Air (enforcing process safety and timeouts).
+  * Direct tokenizer bypass for NeuTTS-2E.
 
-### Phase 2: Fully Native In-Process Rust Plugin (Production Grade)
-* Implement the pure-Rust inference pipeline:
-  1. Qwen2 backbone using `candle-transformers` / GGUF reader with SIMD AVX2/AVX-512/NEON optimizations.
-  2. NeuCodec ONNX model loaded via `voice_pipes_onnx::SessionPool`.
-  3. Polyphase resampler in Rust (`rubato` or custom decimation filter).
-* Ensure strict adherence to Voice Pipes workspace rules: `#![forbid(unsafe_code)]`, zero unwrap/expect in production code, `-D warnings`.
+### Phase 2: Streaming, Cancellation & Audio Resampling
+* **Streaming Audio Pipe**:
+  * Decode audio in 5–10 token increments (~100–200ms audio chunks).
+  * Polyphase decimation from 24,000 Hz to 16,000 Hz mono PCM (`AudioFrame`).
+* **Cooperative Cancellation (Barge-in)**:
+  * Check downstream channel health (`tx.is_closed()`) on every token step.
+  * Instant abort (< 50ms) when user interrupts assistant speech.
 
-### Phase 3: Benchmarking, Documentation & Admin Console Integration
-* Add NeuTTS to `voice-pipes-bench` automated benchmarking suite.
-* Measure:
-  * Time-to-First-Audio (TTFA) across text lengths (10, 50, 150 words).
-  * Real-Time Factor (RTF and RTFx) on 1, 4, 16 concurrent streams.
-  * Barge-in interruption recovery latency.
-* Add wizard configuration to `voice-pipes-cli`:
-  * `voice-pipes init` -> interactive selection of NeuTTS.
-* Build a live playground preset in `voice-pipes-admin`.
+### Phase 3: Benchmarking & Integration
+* Integrate with `voice-pipes-bench` for automated TTFA, RTF, and P99 latency tracking.
+* Register provider in `voice-pipes-cli` configuration wizard.
+* Add preset configuration to `voice-pipes-admin` Playground.
