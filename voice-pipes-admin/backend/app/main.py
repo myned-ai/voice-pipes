@@ -19,6 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
 from .core import auth as _auth
+from .core import cleanup as _cleanup
 from .core import limits as _limits
 from .core.config import _resolve_captures_dir, configure_logging, probe_orchestrator
 from .routers import analytics as _analytics
@@ -42,7 +43,18 @@ async def lifespan(app: FastAPI):
     # Say so at startup when the fleet will be empty for a reason other than
     # "no workers": unreachable orchestrator, or a credential it rejects.
     await probe_orchestrator()
-    yield
+    cleanup_task: asyncio.Task | None = None
+    if _cleanup.capture_ttl_minutes() > 0 or _cleanup.captures_max_mb() > 0:
+        cleanup_task = asyncio.create_task(_cleanup.run_cleanup_loop())
+    try:
+        yield
+    finally:
+        if cleanup_task is not None:
+            cleanup_task.cancel()
+            try:
+                await cleanup_task
+            except asyncio.CancelledError:
+                pass
 
 
 app = FastAPI(title="Voice-Pipes Admin BFF", lifespan=lifespan)

@@ -47,7 +47,16 @@ function applyAxiosHeader(token: string): void {
   else delete axios.defaults.headers.common["Authorization"];
 }
 
-export type AuthCheck = { auth_required: boolean; authenticated: boolean };
+export type AuthMode = "token" | "hf_oauth" | "guest";
+
+export type AuthCheck = {
+  auth_required: boolean;
+  authenticated: boolean;
+  auth_mode?: AuthMode;
+  hf_oauth_url?: string;
+  allow_guest?: boolean;
+  tenant_id?: string | null;
+};
 
 /** Where earlier builds of the console kept the worker credential
  *  (`VP_CLIENT_TOKEN`). The browser no longer receives it: the Playground
@@ -70,10 +79,28 @@ export async function checkAuth(): Promise<AuthCheck | null> {
     const res = await axios.get<{ data: AuthCheck }>(`${API_BASE}/api/v1/auth/check`, {
       withCredentials: true,
     });
-    const { auth_required, authenticated } = res.data.data;
-    return { auth_required, authenticated };
+    const d = res.data.data;
+    const out: AuthCheck = {
+      auth_required: d.auth_required,
+      authenticated: d.authenticated,
+    };
+    if (d.auth_mode !== undefined) out.auth_mode = d.auth_mode;
+    if (d.hf_oauth_url !== undefined) out.hf_oauth_url = d.hf_oauth_url;
+    if (d.allow_guest !== undefined) out.allow_guest = d.allow_guest;
+    if (d.tenant_id !== undefined) out.tenant_id = d.tenant_id;
+    return out;
   } catch {
     return null;
+  }
+}
+
+/** Obtain an isolated ephemeral tenant cookie (used in multi-tenant guest mode). */
+export async function loginGuest(): Promise<boolean> {
+  try {
+    await axios.post(`${API_BASE}/api/v1/auth/guest`, {}, { withCredentials: true });
+    return true;
+  } catch {
+    return false;
   }
 }
 

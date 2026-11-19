@@ -32,6 +32,7 @@ import httpx
 import websockets
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from ..core import auth as _auth
 from ..core import config as _config
 from ..core.config import ORCHESTRATOR_URL, orch_client
 from ..core.upstream import upstream_path
@@ -117,19 +118,22 @@ async def _lookup_worker(worker_id: str) -> dict:
     return worker
 
 
-def _upstream_headers() -> dict[str, str]:
+def _upstream_headers(tenant_id: str | None = None) -> dict[str, str]:
     # The worker's /ws takes the client token as a bearer header as well as a
     # query parameter; the header keeps it out of the worker's access log.
+    headers: dict[str, str] = {}
     if _config.CLIENT_TOKEN:
-        return {"Authorization": f"Bearer {_config.CLIENT_TOKEN}"}
-    return {}
+        headers["Authorization"] = f"Bearer {_config.CLIENT_TOKEN}"
+    if tenant_id:
+        headers["X-Tenant-Id"] = tenant_id
+    return headers
 
 
-async def _connect_upstream(url: str):
+async def _connect_upstream(url: str, tenant_id: str | None = None):
     try:
         return await websockets.connect(
             url,
-            additional_headers=_upstream_headers(),
+            additional_headers=_upstream_headers(tenant_id=tenant_id),
             max_size=MAX_UPSTREAM_FRAME_BYTES,
             max_queue=UPSTREAM_QUEUE_FRAMES,
             open_timeout=CONNECT_TIMEOUT_S,
@@ -187,12 +191,14 @@ async def playground_ws_proxy(client_ws: WebSocket):
         await client_ws.close(code=4400, reason="worker_id is required")
         return
 
+    tenant_id = _auth.resolve_request_tenant(client_ws, client_ws.query_params.get("tenant_id"))
+
     try:
         worker = await _lookup_worker(worker_id)
         url = worker_ws_url(worker)
         if url is None:
             raise _Refused(4502, "worker has no transport address", before_accept=False)
-        upstream = await _connect_upstream(url)
+        upstream = await _connect_upstream(url, tenant_id=tenant_id)
     except _Refused as refused:
         if not refused.before_accept:
             # Accept first so the browser sees the code and reason; a

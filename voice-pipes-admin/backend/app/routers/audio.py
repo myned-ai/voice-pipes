@@ -17,16 +17,13 @@ from fastapi.responses import FileResponse, Response
 
 from ..captures.reader import _resolve_session_dir
 from ..captures.speech_bounds import speech_bounds
+from ..core import auth as _auth
 
 router = APIRouter()
 
 
 def _extract_tenant(request: Request | None, tenant_id: str | None) -> str | None:
-    if isinstance(tenant_id, str):
-        return tenant_id
-    if request is not None and hasattr(request, "headers"):
-        return request.headers.get("x-tenant-id")
-    return None
+    return _auth.resolve_request_tenant(request, tenant_id)
 
 
 def _resolve_session_dir_compat(session_id: str, tenant_id: str | None) -> Path:

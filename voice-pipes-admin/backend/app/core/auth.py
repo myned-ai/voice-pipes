@@ -33,10 +33,13 @@ Comparison is constant time (``hmac.compare_digest``).  Paths under
 """
 from __future__ import annotations
 
+import hashlib
 import hmac
 import logging
 import os
 import re
+import secrets
+import time
 from urllib.parse import parse_qs
 
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -51,7 +54,42 @@ ADMIN_UI_AUTH_REQUIRED: bool = os.getenv("ADMIN_UI_AUTH_REQUIRED", "true").strip
     "off",
 )
 
+# Multi-tenant mode (e.g. shared Hugging Face Space): every user authenticates
+# via Hugging Face OAuth or an isolated guest session and receives an
+# HMAC-signed ``vp_tenant_session`` cookie binding all requests strictly to
+# their own ``tenant_id``.
+ADMIN_MULTI_TENANT: bool = os.getenv("ADMIN_MULTI_TENANT", "false").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
+OAUTH_CLIENT_ID: str = os.getenv("OAUTH_CLIENT_ID", "").strip()
+OAUTH_CLIENT_SECRET: str = os.getenv("OAUTH_CLIENT_SECRET", "").strip()
+OPENID_PROVIDER_URL: str = os.getenv("OPENID_PROVIDER_URL", "https://huggingface.co").strip().rstrip("/")
+OAUTH_SCOPES: str = os.getenv("OAUTH_SCOPES", "openid profile").strip() or "openid profile"
+SPACE_HOST: str = os.getenv("SPACE_HOST", "").strip()
+
+_ALLOW_GUEST_RAW = os.getenv("ADMIN_ALLOW_GUEST", "").strip().lower()
+ADMIN_ALLOW_GUEST: bool = (
+    _ALLOW_GUEST_RAW in ("1", "true", "yes", "on")
+    if _ALLOW_GUEST_RAW
+    else not bool(OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET)
+)
+ADMIN_SESSION_TTL_SECONDS: int = max(300, int(os.getenv("ADMIN_SESSION_TTL_SECONDS", "43200")))
+
+_SESSION_SECRET: str = (
+    os.getenv("ADMIN_SESSION_SECRET", "").strip()
+    or OAUTH_CLIENT_SECRET
+    or ADMIN_UI_TOKEN
+    or secrets.token_hex(32)
+)
+
 COOKIE_NAME = "vp_admin_ui"
+TENANT_COOKIE_NAME = "vp_tenant_session"
+OAUTH_STATE_COOKIE_NAME = "vp_oauth_state"
+
+_VALID_TENANT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 
 # Paths that never require a credential.  Keep this list short: a liveness
 # probe for the container orchestrator and the login/check endpoints the UI
@@ -61,6 +99,9 @@ EXEMPT_PATHS: frozenset[str] = frozenset(
         "/livez",
         "/api/v1/auth/login",
         "/api/v1/auth/check",
+        "/api/v1/auth/guest",
+        "/api/v1/auth/hf/login",
+        "/api/v1/auth/hf/callback",
     }
 )
 
@@ -82,8 +123,71 @@ class AuthConfigError(RuntimeError):
     """Raised at import when auth is required but no token is configured."""
 
 
+def hf_oauth_enabled() -> bool:
+    return bool(OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET)
+
+
+def auth_mode() -> str:
+    if ADMIN_MULTI_TENANT:
+        return "hf_oauth" if hf_oauth_enabled() else "guest"
+    return "token"
+
+
+def sanitize_tenant_id(raw: str) -> str:
+    """Convert any username / subject into a path-safe ``TenantId`` matching
+    ``^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$``."""
+    cleaned = re.sub(r"[^A-Za-z0-9_-]+", "-", raw.strip()).lstrip("_-")[:64]
+    if cleaned and _VALID_TENANT_RE.fullmatch(cleaned):
+        return cleaned
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+    return f"u-{digest}"
+
+
+def _hmac_sig(payload: str) -> str:
+    return hmac.new(
+        _SESSION_SECRET.encode("utf-8"),
+        payload.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def sign_tenant_cookie(tenant_id: str, ttl_s: int | None = None) -> str:
+    safe_tid = sanitize_tenant_id(tenant_id)
+    exp = int(time.time()) + (ttl_s if ttl_s is not None else ADMIN_SESSION_TTL_SECONDS)
+    payload = f"{safe_tid}.{exp}"
+    return f"{payload}.{_hmac_sig(payload)}"
+
+
+def verify_tenant_cookie(value: str | None) -> str | None:
+    if not value:
+        return None
+    parts = value.split(".")
+    if len(parts) != 3:
+        return None
+    tenant_id, exp_str, sig = parts
+    if not _VALID_TENANT_RE.fullmatch(tenant_id):
+        return None
+    try:
+        exp = int(exp_str)
+    except ValueError:
+        return None
+    if exp < int(time.time()):
+        return None
+    expected = _hmac_sig(f"{tenant_id}.{exp_str}")
+    if not hmac.compare_digest(sig, expected):
+        return None
+    return tenant_id
+
+
 def validate_startup_config() -> None:
     """Fail closed: required + unset token is a configuration error."""
+    if ADMIN_MULTI_TENANT:
+        log.info(
+            "admin BFF running in MULTI-TENANT mode (auth_mode=%s, allow_guest=%s)",
+            auth_mode(),
+            ADMIN_ALLOW_GUEST,
+        )
+        return
     if ADMIN_UI_AUTH_REQUIRED and not ADMIN_UI_TOKEN:
         raise AuthConfigError(
             "ADMIN_UI_TOKEN is not set but ADMIN_UI_AUTH_REQUIRED=true. "
@@ -98,7 +202,7 @@ def validate_startup_config() -> None:
 
 
 def auth_enabled() -> bool:
-    return bool(ADMIN_UI_TOKEN)
+    return ADMIN_MULTI_TENANT or bool(ADMIN_UI_TOKEN)
 
 
 def token_matches(candidate: str | None) -> bool:
@@ -129,14 +233,45 @@ def _query_token(scope: Scope) -> str | None:
     return vals[0] if vals else None
 
 
-def _cookie_token(scope: Scope) -> str | None:
+def _cookie_value(scope: Scope, name: str) -> str | None:
     cookie = _header(scope, b"cookie")
     if not cookie:
         return None
     for part in cookie.split(";"):
         k, _, v = part.strip().partition("=")
-        if k == COOKIE_NAME:
+        if k == name:
             return v
+    return None
+
+
+def _cookie_token(scope: Scope) -> str | None:
+    return _cookie_value(scope, COOKIE_NAME)
+
+
+def tenant_from_scope(scope: Scope) -> str | None:
+    """Return the verified tenant_id from the signed session cookie, if any."""
+    return verify_tenant_cookie(_cookie_value(scope, TENANT_COOKIE_NAME))
+
+
+def resolve_request_tenant(request, query_tenant: str | None = None) -> str | None:
+    """Authoritative tenant resolution for HTTP and WebSocket endpoints.
+
+    When ``AdminAuthMiddleware`` verified a signed multi-tenant session cookie
+    and bound ``request.state.tenant_id``, that verified tenant ALWAYS wins —
+    client-supplied headers or query parameters can never spoof another user.
+    """
+    if request is not None and hasattr(request, "state"):
+        bound = getattr(request.state, "tenant_id", None)
+        if isinstance(bound, str) and bound:
+            return bound
+    if ADMIN_MULTI_TENANT:
+        if request is not None and hasattr(request, "scope"):
+            return tenant_from_scope(request.scope)
+        return None
+    if isinstance(query_tenant, str):
+        return query_tenant
+    if request is not None and hasattr(request, "headers"):
+        return request.headers.get("x-tenant-id")
     return None
 
 
@@ -166,6 +301,12 @@ def is_authorized(scope: Scope) -> bool:
         return True
     if scope.get("path", "") in EXEMPT_PATHS:
         return True
+    if ADMIN_MULTI_TENANT:
+        tid = tenant_from_scope(scope)
+        if tid is not None:
+            scope.setdefault("state", {})["tenant_id"] = tid
+            return True
+        return False
     return token_matches(credential_from_scope(scope))
 
 
