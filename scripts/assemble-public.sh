@@ -59,7 +59,7 @@ md=$(find "$OUT" -type f -name '*.md' | wc -l | tr -d ' ')
 echo "   files: $total   markdown: $md"
 echo "   top level:"
 ls -1A "$OUT" | sed 's/^/     /'
-for must_not in docs/internal marketing voice-pipes/models voice-pipes/captures; do
+for must_not in docs/internal marketing deploy voice-pipes/models voice-pipes/captures; do
   if [[ -e "$OUT/$must_not" ]]; then
     echo "ERROR: $must_not present in output" >&2
     exit 1
@@ -69,7 +69,7 @@ done
 # Every tracked top-level path either ships or is named here as internal;
 # a new one has to be sorted into one list or the other on purpose.
 echo "== every tracked top-level path is accounted for"
-INTERNAL_TOP_RE='^marketing$'
+INTERNAL_TOP_RE='^(marketing|deploy)$'
 unsorted=$(git -C "$SRC" ls-files | cut -d/ -f1 | sort -u \
   | grep -Ev "$INTERNAL_TOP_RE" \
   | while read -r top; do
