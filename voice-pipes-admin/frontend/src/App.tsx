@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import type { ComponentType } from "react";
-import { BrowserRouter as Router, Routes, Route, NavLink } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, NavLink, Navigate } from "react-router-dom";
 import { Mic, History, Activity, Menu, Gamepad2, Sun, Moon, BarChart3, FlaskConical, ClipboardList } from "lucide-react";
 import type { LucideProps } from "lucide-react";
 import LivePipeline from "./pages/LivePipeline";
@@ -19,6 +19,7 @@ import { useTheme } from "./contexts/ThemeContext";
 import { ThemeProvider } from "./contexts/ThemeProvider";
 import { usePlaygroundSession } from "./pages/playground/usePlaygroundSession";
 import { AuthGate } from "./components/AuthGate";
+import { DEFAULT_ADMIN_FEATURES, fetchAdminFeatures, type AdminFeatures } from "./lib/features";
 
 /* Navigation is grouped by intent so the sidebar has a clear visual hierarchy
    instead of one long flat list: "Monitor" = observing live/historical traffic,
@@ -30,6 +31,7 @@ type NavItem = {
   label: string;
   icon: ComponentType<LucideProps>;
   end?: boolean;
+  feature?: keyof AdminFeatures;
 };
 type NavGroup = { heading: string; items: NavItem[] };
 
@@ -46,8 +48,8 @@ const NAV_GROUPS: NavGroup[] = [
     heading: "Build & Test",
     items: [
       { to: "/playground", label: "Playground", icon: Gamepad2 },
-      { to: "/benchmarks", label: "Benchmarks", icon: FlaskConical },
-      { to: "/suites", label: "Test Suites", icon: ClipboardList },
+      { to: "/benchmarks", label: "Benchmarks", icon: FlaskConical, feature: "benchmarks" },
+      { to: "/suites", label: "Test Suites", icon: ClipboardList, feature: "test_suites" },
     ],
   },
 ];
@@ -103,9 +105,25 @@ export default function App() {
 
 function AppContent() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [features, setFeatures] = useState<AdminFeatures>(DEFAULT_ADMIN_FEATURES);
   const { isDark, toggleTheme } = useTheme();
   // Session is instantiated here (above the router) so it survives navigation.
   const playgroundSession = usePlaygroundSession();
+
+  useEffect(() => {
+    let active = true;
+    void fetchAdminFeatures().then((f) => {
+      if (active) setFeatures(f);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const visibleNavGroups = NAV_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => !item.feature || features[item.feature]),
+  })).filter((group) => group.items.length > 0);
 
   useEffect(() => {
     document.documentElement.style.backgroundColor = isDark ? '#0f172a' : '#f8fafc';
@@ -140,7 +158,7 @@ function AppContent() {
 
           {/* Navigation Links */}
           <nav aria-label="Primary" className={`flex flex-col gap-4 ${isSidebarOpen ? '' : 'mt-8'}`}>
-            {NAV_GROUPS.map((group, gi) => (
+            {visibleNavGroups.map((group, gi) => (
               <div key={group.heading} className="flex flex-col gap-1">
                 {isSidebarOpen ? (
                   <span className={`px-3 mb-1 text-[10px] uppercase tracking-[0.1em] font-bold ${isDark ? 'text-slate-600' : 'text-gray-400'}`}>
@@ -176,14 +194,26 @@ function AppContent() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/live" element={<LivePipeline />} />
             <Route path="/playground" element={<Playground session={playgroundSession} />} />
-            <Route path="/benchmarks" element={<BenchmarksList />} />
-            <Route path="/benchmarks/new" element={<ExperimentEditor />} />
-            <Route path="/benchmarks/compare" element={<BenchmarkCompare />} />
-            <Route path="/benchmarks/:id" element={<BenchmarkDetail />} />
-            <Route path="/suites" element={<SuitesList />} />
-            <Route path="/suites/new" element={<SuiteEditor editMode={false} />} />
-            <Route path="/suites/:id/edit" element={<SuiteEditor editMode={true} />} />
-            <Route path="/suites/:id" element={<SuiteDetail />} />
+            {features.benchmarks ? (
+              <>
+                <Route path="/benchmarks" element={<BenchmarksList />} />
+                <Route path="/benchmarks/new" element={<ExperimentEditor />} />
+                <Route path="/benchmarks/compare" element={<BenchmarkCompare />} />
+                <Route path="/benchmarks/:id" element={<BenchmarkDetail />} />
+              </>
+            ) : (
+              <Route path="/benchmarks/*" element={<Navigate to="/" replace />} />
+            )}
+            {features.test_suites ? (
+              <>
+                <Route path="/suites" element={<SuitesList />} />
+                <Route path="/suites/new" element={<SuiteEditor editMode={false} />} />
+                <Route path="/suites/:id/edit" element={<SuiteEditor editMode={true} />} />
+                <Route path="/suites/:id" element={<SuiteDetail />} />
+              </>
+            ) : (
+              <Route path="/suites/*" element={<Navigate to="/" replace />} />
+            )}
             <Route path="/sessions" element={<SessionsList />} />
             <Route path="/sessions/:id" element={<SessionDetail />} />
           </Routes>

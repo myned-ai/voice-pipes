@@ -208,5 +208,34 @@ class CaptureJanitorTests(unittest.TestCase):
         self.assertTrue(newest.exists())
 
 
+class FeatureFlagsTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.main = _fresh_app({"ADMIN_MULTI_TENANT": "false", "ADMIN_UI_AUTH_REQUIRED": "false"})
+        cls.client = TestClient(cls.main.app)
+
+    def test_features_enabled_by_default(self):
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("ADMIN_FEATURE_BENCHMARKS", None)
+            os.environ.pop("ADMIN_FEATURE_TEST_SUITES", None)
+            resp = self.client.get("/api/v1/features")
+            self.assertEqual(resp.status_code, 200)
+            self.assertEqual(resp.json()["data"], {"benchmarks": True, "test_suites": True})
+
+    def test_disabling_benchmarks_and_suites_blocks_routes(self):
+        with mock.patch.dict(
+            os.environ,
+            {"ADMIN_FEATURE_BENCHMARKS": "false", "ADMIN_FEATURE_TEST_SUITES": "false"},
+            clear=False,
+        ):
+            resp = self.client.get("/api/v1/features")
+            self.assertEqual(resp.status_code, 200)
+            self.assertEqual(resp.json()["data"], {"benchmarks": False, "test_suites": False})
+
+            self.assertEqual(self.client.get("/api/v1/benchmark/configs").status_code, 404)
+            self.assertEqual(self.client.get("/api/v1/benchmark/experiments").status_code, 404)
+            self.assertEqual(self.client.get("/api/v1/benchmark/suites").status_code, 404)
+
+
 if __name__ == "__main__":
     unittest.main()

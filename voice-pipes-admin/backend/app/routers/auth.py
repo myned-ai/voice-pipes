@@ -18,6 +18,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
 from ..core import auth as _auth
+from ..core import features as _features
 
 router = APIRouter()
 log = logging.getLogger("admin.auth")
@@ -214,6 +215,12 @@ async def auth_hf_callback(
     resp.delete_cookie(key=_auth.OAUTH_STATE_COOKIE_NAME, path="/")
     _set_tenant_cookie(resp, request, tenant_id)
     return resp
+
+
+@router.get("/api/v1/features")
+async def get_features():
+    """Return active UI feature flags (all enabled by default)."""
+    return {"data": _features.get_features(), "error": None}
 
 
 @router.post("/api/v1/auth/logout")
