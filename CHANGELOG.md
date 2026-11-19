@@ -8,6 +8,31 @@ migration note.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-19
+
+### Added
+
+- **NeuTTS-Air TTS plugin (`voice-pipes-tts-neutts`):** native CPU-optimized
+  local GGUF + `NeuCodec` ONNX speech synthesis with zero-shot voice cloning.
+- **Prebuilt multi-arch CPU & CUDA GHCR images:** `.github/workflows/images.yml`
+  now publishes `voice-pipes` (`linux/amd64` + `linux/arm64`), `voice-pipes`
+  CUDA (`:latest-cuda`, `linux/amd64`), and Admin UI images, backed by
+  `cargo-chef` dependency caching and portable `GGML_NATIVE=OFF` builds.
+- **Pull-by-default launchers:** `launch-stack.sh` and `launch-stack.ps1` pull
+  prebuilt GHCR images by default (with `--build` / `-Build` to compile locally
+  and `--full` / `-Full` for local `llama.cpp` builds).
+- **Per-TTS `sentence_chunking` & resource breakdown modal:** configurable
+  sentence chunking across TTS providers and per-turn resource inspection in
+  the Admin Console.
+
+### Changed
+
+- **Smart Turn wizard default:** `plugins/turn/smart` is the default turn
+  detector in the setup wizard with `silence_timeout_ms = 1500` to allow
+  natural mid-sentence thinking pauses without cutting off callers.
+- **Local GGUF LLM (`voice-pipes-llm-gguf`):** migrated inference backend to
+  `llama-cpp-2` (`llama.cpp`).
+
 ## [0.2.0] - 2026-11-12
 
 ### Added
@@ -1838,6 +1863,7 @@ voice pipeline runtime written in safe Rust.
   Playground's system-prompt field should keep working (the wizard does this
   for the dev profile).
 
-[Unreleased]: https://github.com/myned-ai/voice-pipes/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/myned-ai/voice-pipes/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/myned-ai/voice-pipes/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/myned-ai/voice-pipes/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/myned-ai/voice-pipes/releases/tag/v0.1.0
