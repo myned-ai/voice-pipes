@@ -68,7 +68,7 @@ export function KpiCards({ isDark, data, days, selectedPipelines, kpi, avgEndpoi
       <KpiCard
         icon={Activity}
         label="Sessions"
-        value={String(kpi.total_sessions)}
+        value={String(kpi.total_sessions ?? 0)}
         sub={
           (kpi.failed_sessions ?? 0) > 0
             ? `${kpi.failed_sessions} failed · last ${days === 1 ? 'day' : `${days} days`}`
@@ -81,8 +81,8 @@ export function KpiCards({ isDark, data, days, selectedPipelines, kpi, avgEndpoi
       <KpiCard
         icon={MessageSquare}
         label="Turns"
-        value={String(kpi.total_utterances)}
-        sub={`${kpi.total_sessions > 0 ? Math.round(kpi.total_utterances / kpi.total_sessions) : 0} avg per session`}
+        value={String(kpi.total_utterances ?? 0)}
+        sub={`${(kpi.total_sessions ?? 0) > 0 ? Math.round((kpi.total_utterances ?? 0) / (kpi.total_sessions ?? 1)) : 0} avg per session`}
         iconColor="text-emerald-400"
         isDark={isDark}
         delta={productionMode ? { pct: priorDeltas.turns } : undefined}

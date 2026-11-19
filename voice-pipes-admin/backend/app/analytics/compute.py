@@ -683,7 +683,31 @@ def _compute_analytics_window(
     _t0 = time.perf_counter()
     if not config.CAPTURES_DIR.exists():
         return {
-            "response": {"kpi": {}, "utterances": [], "provider_changes": [], "available_pipelines": []},
+            "response": {
+                "kpi": {
+                    "total_sessions": 0,
+                    "total_utterances": 0,
+                    "avg_latency_ms": None,
+                    "p95_latency_ms": None,
+                    "avg_tokens_per_sec": None,
+                    "failed_sessions": 0,
+                    "failed_turns": 0,
+                    "error_rate_pct": None,
+                    "errors_by_component": {},
+                    "spend_total_usd": 0.0,
+                    "spend_by_provider": {},
+                    "anomalies_total": 0,
+                    "anomalies_by_kind": {},
+                    "avg_emit_rtf": None,
+                    "p90_emit_rtf": None,
+                    "max_emit_rtf": None,
+                    "turns_over_realtime": 0,
+                    "avg_provider_endpointing_ms": None,
+                },
+                "utterances": [],
+                "provider_changes": [],
+                "available_pipelines": [],
+            },
             "issue_inputs": {
                 "failed_sessions": [],
                 "provider_changes": [],
