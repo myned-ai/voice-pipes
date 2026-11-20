@@ -57,6 +57,7 @@ pub async fn run_session(session: Box<dyn TransportSession + Send>, state: Arc<T
     // using this transport id -- they would never link up to the
     // captures dir on disk.
     let transport_id = session.metadata().session_id.clone();
+    let tenant_id = session.metadata().tenant_id.clone();
     // RAII guard: increment now, decrement on drop -- including a panic unwind
     // inside the runner. Previously a manual `fetch_sub` after the await was
     // skipped on any panic (an `.expect()` or a poisoned ledger lock), which
@@ -152,6 +153,7 @@ pub async fn run_session(session: Box<dyn TransportSession + Send>, state: Arc<T
         };
         let rec = turn::make_session_record(
             sid,
+            tenant_id,
             final_status,
             Some(chrono::Utc::now()),
             tags,

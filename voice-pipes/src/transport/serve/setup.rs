@@ -130,6 +130,7 @@ pub(super) async fn bootstrap_session(
     if let Some(ref tx) = state.session_event_tx {
         let rec = super::turn::make_session_record(
             &session_id,
+            tenant_id.clone(),
             crate::api::types::SessionStatus::InProgress,
             None,
             Vec::new(),

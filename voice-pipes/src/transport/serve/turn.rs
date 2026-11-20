@@ -719,6 +719,7 @@ pub(super) fn build_realtime_turn_record(
 /// passes `None` and the orchestrator keeps what the start record carried.
 pub(super) fn make_session_record(
     session_id: &str,
+    tenant_id: Option<voice_pipes_sdk::TenantId>,
     status: crate::api::types::SessionStatus,
     ended_at: Option<chrono::DateTime<chrono::Utc>>,
     tags: Vec<String>,
@@ -752,7 +753,7 @@ pub(super) fn make_session_record(
 
     crate::api::types::SessionRecord {
         id: session_id.to_string(),
-        tenant_id: None,
+        tenant_id,
         worker_id: String::new(),
         started_at: chrono::Utc::now(),
         ended_at,
