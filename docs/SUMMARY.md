@@ -47,6 +47,7 @@
 - [High-density CPU deployment (100+ sessions)](guides/high-density-cpu-deployment.md)
 - [Multi-tenancy and data isolation](guides/multi-tenancy.md)
 - [Fleet: orchestrator and workers](guides/fleet.md)
+- [Admission control, waiting queue, and autoscaling](guides/admission-control-and-autoscaling.md)
 - [Deployment](guides/deployment.md)
 - [GPU and CUDA](guides/gpu-and-cuda.md)
 - [Admin console](guides/admin-console.md)
