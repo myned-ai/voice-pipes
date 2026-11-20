@@ -5,6 +5,7 @@ import { DEFAULT_PREBUFFER_MS } from "./session/types";
 import { DEFAULT_MIC_SAMPLE_RATE } from "../../lib/sdk/VoicePipesSessionCore";
 import type { Settings } from "./SettingsPanel";
 import ConnectionBar from "./ConnectionBar";
+import QueueWaitingBanner from "./QueueWaitingBanner";
 import SettingsPanel from "./SettingsPanel";
 import MicCheckDialog from "./micCheck/MicCheckDialog";
 import ComponentCheckDialog from "./componentCheck/ComponentCheckDialog";
@@ -428,6 +429,7 @@ export default function Playground({ session }: { session: PlaygroundSession }) 
         onClearConversation={session.clearConversation}
         hasConversation={session.transcript.length > 0 || session.events.length > 0}
       />
+      <QueueWaitingBanner sessionState={session.sessionState} onLeaveQueue={session.disconnect} />
 
       {/* Main content area */}
       <div className="flex flex-1 overflow-hidden">

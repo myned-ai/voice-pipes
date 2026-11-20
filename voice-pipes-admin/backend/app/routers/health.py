@@ -6,6 +6,7 @@ from urllib.parse import urlencode
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Request, Response
 
+from ..core import auth as _auth
 from ..core import config
 from ..core.config import _CAPTURES_DIR_FALLBACK, ORCHESTRATOR_URL, orch_client
 from ..core.upstream import upstream_error, upstream_path
@@ -24,6 +25,30 @@ async def health():
             response = await client.get(f"{ORCHESTRATOR_URL}/api/v1/health", timeout=5.0)
             response.raise_for_status()
             return response.json()
+        except Exception as e:  # noqa: BLE001 - any upstream failure becomes the error envelope
+            return {"data": None, "error": upstream_error(e)}
+
+
+@router.get("/api/v1/capacity")
+async def get_capacity(request: Request = None):
+    """Proxy fleet capacity, FIFO queue depth, and peak concurrency from the orchestrator.
+
+    In multi-tenant mode, ``per_tenant_active`` is stripped so one user never
+    learns another user's tenant identifier.
+    """
+    is_tenant_scoped = _auth.ADMIN_MULTI_TENANT or (
+        _auth.resolve_request_tenant(request) is not None
+    )
+    async with orch_client() as client:
+        try:
+            response = await client.get(f"{ORCHESTRATOR_URL}/api/v1/capacity", timeout=5.0)
+            response.raise_for_status()
+            payload = response.json()
+            if is_tenant_scoped and isinstance(payload, dict):
+                data = payload.get("data")
+                if isinstance(data, dict):
+                    data.pop("per_tenant_active", None)
+            return payload
         except Exception as e:  # noqa: BLE001 - any upstream failure becomes the error envelope
             return {"data": None, "error": upstream_error(e)}
 

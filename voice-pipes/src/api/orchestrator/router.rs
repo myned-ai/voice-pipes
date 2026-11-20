@@ -6,6 +6,9 @@ use tower_http::cors::{Any, CorsLayer};
 
 use crate::api::types::OrchestratorState;
 
+use super::admission::{
+    acquire_dispatch, cancel_ticket, get_capacity, get_ticket_status, prometheus_metrics,
+};
 use super::handlers::{
     audit_file_download, audit_files, audit_tap_download, audit_taps, dispatch, drain_worker,
     get_session, get_turn, get_worker, get_worker_components, health, list_components,
@@ -62,6 +65,13 @@ pub fn router(
         .route("/api/v1/turns", get(list_turns))
         .route("/api/v1/turns/{id}", get(get_turn))
         .route("/api/v1/dispatch", get(dispatch))
+        .route("/api/v1/dispatch/acquire", post(acquire_dispatch))
+        .route(
+            "/api/v1/dispatch/tickets/{id}",
+            get(get_ticket_status).delete(cancel_ticket),
+        )
+        .route("/api/v1/capacity", get(get_capacity))
+        .route("/metrics", get(prometheus_metrics))
         .route("/api/v1/pipelines", get(list_pipelines))
         .route("/api/v1/pipelines/diff", get(pipeline_diff))
         .route("/api/v1/audit/files", get(audit_files))

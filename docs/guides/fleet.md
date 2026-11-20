@@ -174,6 +174,18 @@ workers, and sidecars (`llama-server`, `pocket-tts`, `vibevoice`) behind
 compose profiles. The launcher's `stack-manifest.env` selects profiles and
 services generically; see [Deployment](deployment.md).
 
+## Admission Control, FIFO Queue & Autoscaling
+
+When `[dispatch.admission] enabled = true` (or `VP_ADMISSION_ENABLED=true`), the orchestrator enforces global and per-tenant concurrency limits (`max_active_sessions`, `max_per_tenant`) and places excess callers into an event-driven FIFO waiting queue (`max_queue_size`):
+
+- `POST /api/v1/dispatch/acquire` — Acquire an immediate slot lease (`200 OK`) or a FIFO waiting ticket (`202 Accepted`), or reject (`429 Too Many Requests`).
+- `GET /api/v1/dispatch/tickets/{id}?wait_ms=10000` — Long-poll a waiting ticket until promoted or expired.
+- `DELETE /api/v1/dispatch/tickets/{id}` — Cancel a waiting ticket or release an unclaimed lease.
+- `GET /api/v1/capacity` — Real-time active sessions, leased slots, queue depth, ETA, and 1h/24h peak concurrency.
+- `GET /metrics` — Prometheus `OpenMetrics` endpoint (`vp_fleet_utilization_ratio`, `vp_dispatch_queue_depth`, `vp_peak_concurrent_sessions`) for Kubernetes KEDA / HPA autoscaling.
+
+See [Admission Control, FIFO Waiting Queue & Production Autoscaling](admission-control-and-autoscaling.md) for full configuration and KEDA examples.
+
 ## Reference
 
 [HTTP API](../reference/http-api.md) lists every orchestrator, worker-debug

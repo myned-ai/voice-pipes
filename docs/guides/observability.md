@@ -277,7 +277,13 @@ To test a stage outside a conversation, see
   `otel_trace_id` in its record; clients can pass a W3C `traceparent` in
   `configure` options to join their own traces.
 - The orchestrator's `GET /api/v1/metrics` returns latency histograms per
-  window; a Prometheus scrape endpoint is on the [roadmap](../roadmap.md).
+  window, `GET /api/v1/capacity` returns live concurrency, queue depth, and
+  1h/24h peak sessions, and `GET /metrics` exposes Prometheus `OpenMetrics`
+  gauges and counters (`vp_fleet_active_sessions`,
+  `vp_fleet_utilization_ratio`, `vp_dispatch_queue_depth`,
+  `vp_peak_concurrent_sessions`, `vp_dispatch_rejections_total`) for
+  Grafana dashboards and Kubernetes KEDA autoscaling; see
+  [Admission Control & Autoscaling](admission-control-and-autoscaling.md).
 
 ## Throughput, not just latency
 
