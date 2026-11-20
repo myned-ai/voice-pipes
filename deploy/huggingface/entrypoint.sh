@@ -40,6 +40,14 @@ export ADMIN_STATE_ROOT="/app/data/state"
 export ORCHESTRATOR_URL="http://127.0.0.1:9090"
 export CAPTURES_DIR="/app/data/captures"
 
+# Admission control, FIFO waiting queue & session duration cap defaults for HF Space demo
+export VP_ADMISSION_ENABLED="${VP_ADMISSION_ENABLED:-true}"
+export VP_ADMISSION_MAX_ACTIVE="${VP_ADMISSION_MAX_ACTIVE:-3}"
+export VP_ADMISSION_MAX_PER_TENANT="${VP_ADMISSION_MAX_PER_TENANT:-1}"
+export VP_ADMISSION_MAX_QUEUE="${VP_ADMISSION_MAX_QUEUE:-15}"
+export VP_ADMISSION_QUEUE_TIMEOUT_S="${VP_ADMISSION_QUEUE_TIMEOUT_S:-180}"
+export VP_MAX_SESSION_DURATION_S="${VP_MAX_SESSION_DURATION_S:-300}"
+
 # CORS: allow the Space's own public host + huggingface.co iframe origin
 if [ -z "${ADMIN_CORS_ORIGINS:-}" ]; then
     if [ -n "${SPACE_HOST:-}" ]; then

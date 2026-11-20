@@ -62,6 +62,7 @@ frame_ms = 50
 enabled = true
 bind = "127.0.0.1"
 port = 8800
+max_session_duration_s = 300
 
 [auth]
 required = true

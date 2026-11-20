@@ -22,7 +22,8 @@ Interactive low-latency voice assistant and observability console powered by **V
 - **LLM**: Qwen 2.5 1.5B Instruct Q4_K_M (`llama-server` CPU, continuous batching)
 - **TTS**: Kyutai Pocket-TTS (`pocket-http`, CPU, voice `alba`)
 
-### Privacy & User Isolation
+### Privacy, Admission Queue & User Isolation
 - Sign in with your **Hugging Face** account (`hf_oauth: true`).
 - Your sessions, latency metrics, pipelines, transcripts, and audio recordings are strictly isolated to your own tenant partition (`captures/hf-<username>/`). Other users cannot see your sessions or metrics.
+- **Fair-Share Waiting Room & Concurrency Guard**: To keep CPU inference responsive for everyone, up to **3 concurrent live voice sessions** (`1` per user, 5-minute session cap) run simultaneously; additional visitors enter a live FIFO waiting queue with real-time position and ETA updates.
 - Saved recordings, capture artifacts, and logs are automatically deleted after **30 minutes** (or when the 500 MB cap is reached) to keep Space storage clean.
