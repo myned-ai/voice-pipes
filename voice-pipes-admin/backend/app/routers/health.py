@@ -257,6 +257,7 @@ async def post_worker_probe(worker_id: str, kind: str, request: Request):
     probes take a WAV and the text probes take JSON, and this layer has no
     reason to understand either.
     """
+    _auth.require_operator(request)
     if kind not in PROBE_KINDS:
         raise HTTPException(
             status_code=404,
@@ -288,7 +289,7 @@ async def post_worker_probe(worker_id: str, kind: str, request: Request):
 
 
 @router.patch("/api/v1/workers/{worker_id}/params")
-async def patch_worker_params(worker_id: str, body: dict):
+async def patch_worker_params(worker_id: str, body: dict, request: Request):
     """Proxy to orchestrator: live-edit a worker parameter (e.g. system_prompt).
 
     Forwards the request body unchanged to the orchestrator's transparent
@@ -296,6 +297,7 @@ async def patch_worker_params(worker_id: str, body: dict):
     endpoint. Validation runs entirely on the worker side via the
     schema-driven `ParamRegistry`.
     """
+    _auth.require_operator(request)
     async with orch_client() as client:
         try:
             response = await client.patch(

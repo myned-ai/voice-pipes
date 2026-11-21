@@ -1,0 +1,37 @@
+# Voice Pipes Orchestrator configuration for Hugging Face Spaces (CPU-only).
+# Bound strictly to loopback inside the Space container; the Admin BFF on
+# 127.0.0.1:8000 is the only caller, fronted by Nginx on port 7860.
+
+bind = "127.0.0.1"
+port = 9090
+cors_origins = ["http://127.0.0.1:7860"]
+captures_dir = "/app/data/captures"
+
+[workers]
+heartbeat_timeout_s = 30
+reap_interval_s = 10
+
+[sessions]
+max_entries = 10000
+
+[sessions.store]
+provider = "sqlite"
+path = "/app/data/sessions/sessions.db"
+
+[dispatch]
+policy = "least-connections"
+
+[dispatch.admission]
+enabled = true
+max_active_sessions = 3
+max_per_tenant = 1
+max_queue_size = 15
+queue_timeout_s = 180
+lease_ttl_s = 15
+avg_session_duration_hint_s = 90
+
+[audit]
+shared_dir = "/app/data/audit"
+
+[auth]
+required = true

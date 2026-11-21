@@ -1,0 +1,68 @@
+# CPU-only Voice Pipes pipeline for Hugging Face Spaces:
+#   mic -> Silero VAD (CPU) -> Moonshine Base STT (CPU) -> Qwen 2.5 1.5B (CPU llama-server) -> Pocket-TTS HTTP (CPU)
+#
+# All stages run locally on CPU with zero external API keys required.
+# Per-user artifacts are partitioned under /app/data/captures/<tenant_id>/<session_id>/
+# and automatically swept by the Admin BFF TTL janitor.
+
+[pipeline]
+name = "hf-cpu-assistant"
+keep_warm_interval_s = 120
+
+[pipeline.audit]
+enabled = true
+captures_dir = "/app/data/captures"
+retention_days = 1
+
+[stt]
+provider = "moonshine"
+model_dir = "/app/models/moonshine"
+pool_size = 4
+threads = 2
+
+[[text_processor]]
+type = "openai-compat"
+base_url = "http://127.0.0.1:8081/v1"
+model = "qwen2.5-1.5b-instruct"
+api_key = ""
+system_prompt = "You are a helpful, friendly voice assistant. Keep every response concise — one or two short sentences spoken naturally."
+max_tokens = 128
+temperature = 0.7
+top_p = 0.9
+
+[tts]
+provider = "pocket-http"
+endpoint = "http://127.0.0.1:8002"
+voice = "alba"
+request_timeout_ms = 30000
+silent_start_ms = 2000
+silent_start_retries = 2
+
+[vad]
+mode = "auto"
+model = "/app/models/silero_vad.onnx"
+
+[turn_detection]
+mode = "silence"
+silence_timeout_ms = 650
+
+[barge_in]
+enabled = true
+min_chunks = 3
+speech_threshold = 200.0
+
+[output]
+sample_rate = 16000
+
+[output.chunking]
+enabled = true
+frame_ms = 50
+
+[transport]
+enabled = true
+bind = "127.0.0.1"
+port = 8800
+max_session_duration_s = 300
+
+[auth]
+required = true

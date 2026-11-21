@@ -4,7 +4,7 @@
 //! attach their routes through [`router`]'s `extensions` seam rather than being
 //! compiled in here.
 
-pub(crate) mod admission;
+pub mod admission;
 mod handlers;
 pub(crate) mod helpers;
 mod pipeline_graph;

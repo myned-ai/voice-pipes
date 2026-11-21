@@ -54,6 +54,13 @@ export function AuthGate({ children }: { children: ReactNode }) {
     };
   }, [probe]);
 
+  useEffect(() => {
+    if (state !== "locked") return;
+    const onFocus = () => void probe();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [probe, state]);
+
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setBusy(true);

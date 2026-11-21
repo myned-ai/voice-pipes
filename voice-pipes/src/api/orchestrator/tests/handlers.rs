@@ -58,6 +58,7 @@ fn state_with(workers: Vec<WorkerRecord>) -> Arc<OrchestratorState> {
         )),
         tap_store: None,
         start_time: std::time::Instant::now(),
+        admission: Arc::default(),
     })
 }
 
@@ -193,6 +194,7 @@ async fn params_proxy_gives_up_on_a_silent_worker() {
         )),
         tap_store: None,
         start_time: std::time::Instant::now(),
+        admission: Arc::default(),
     });
 
     let started = std::time::Instant::now();

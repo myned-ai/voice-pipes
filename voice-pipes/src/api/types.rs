@@ -750,6 +750,7 @@ pub struct OrchestratorState {
     pub audit_store: Arc<dyn AuditStore>,
     pub tap_store: Option<Arc<dyn AuditStore>>,
     pub start_time: Instant,
+    pub admission: Arc<crate::api::orchestrator::admission::AdmissionController>,
 }
 
 // ── Orchestrator config ─────────────────────────────────────

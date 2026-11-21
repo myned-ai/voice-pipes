@@ -275,6 +275,28 @@ def resolve_request_tenant(request, query_tenant: str | None = None) -> str | No
     return None
 
 
+def require_operator(request) -> None:
+    """Reject global operator/mutation endpoints for non-admin users in multi-tenant mode."""
+    import sys
+
+    live_auth = sys.modules.get("app.core.auth")
+    multi_tenant = getattr(live_auth, "ADMIN_MULTI_TENANT", ADMIN_MULTI_TENANT)
+    if not multi_tenant:
+        return
+    if (
+        request is not None
+        and hasattr(request, "scope")
+        and token_matches(credential_from_scope(request.scope))
+    ):
+        return
+    from fastapi import HTTPException
+
+    raise HTTPException(
+        status_code=403,
+        detail="Operator action is disabled in multi-tenant mode",
+    )
+
+
 def query_token_allowed(scope: Scope) -> bool:
     """Whether this request may carry the token in its URL.
 

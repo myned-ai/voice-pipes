@@ -237,5 +237,111 @@ class FeatureFlagsTests(unittest.TestCase):
             self.assertEqual(self.client.get("/api/v1/benchmark/suites").status_code, 404)
 
 
+class AuditRegressionTests(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.captures_dir = Path(self.temp_dir.name) / "captures"
+        self.captures_dir.mkdir(parents=True, exist_ok=True)
+        self.main = _fresh_app({"ADMIN_MULTI_TENANT": "true"})
+        self.patcher = mock.patch.object(config, "CAPTURES_DIR", self.captures_dir)
+        self.patcher.start()
+        _analytics_cache.clear()
+
+    def tearDown(self):
+        _analytics_cache.clear()
+        self.patcher.stop()
+        self.temp_dir.cleanup()
+
+    def _client_for(self, tenant_id: str) -> TestClient:
+        import sys
+
+        live_auth = sys.modules["app.core.auth"]
+        client = TestClient(self.main.app)
+        client.cookies.set(live_auth.TENANT_COOKIE_NAME, live_auth.sign_tenant_cookie(tenant_id))
+        return client
+
+    def test_operator_mutations_blocked_in_multitenant_mode(self):
+        alice = self._client_for("hf-alice")
+        self.assertEqual(
+            alice.patch("/api/v1/workers/w1/params", json={"system_prompt": "pwn"}).status_code,
+            403,
+        )
+        self.assertEqual(
+            alice.post("/api/v1/workers/w1/probe/llm", json={"text": "hi"}).status_code,
+            403,
+        )
+        self.assertEqual(alice.post("/api/v1/pricing/reload").status_code, 403)
+
+    def test_turn_endpoints_enforce_tenant_isolation(self):
+        alice = self._client_for("hf-alice")
+
+        class _FakeResp:
+            def __init__(self, status_code: int, body: dict):
+                self.status_code = status_code
+                self._body = body
+                self.text = ""
+
+            def json(self):
+                return self._body
+
+            def raise_for_status(self):
+                if self.status_code >= 400:
+                    raise RuntimeError(f"HTTP {self.status_code}")
+
+        class _FakeClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return False
+
+            async def get(self, url: str, **kwargs):
+                if url.endswith("/api/v1/sessions/sess-bob"):
+                    return _FakeResp(200, {"data": {"session_id": "sess-bob", "tenant_id": "hf-bob"}})
+                if url.endswith("/api/v1/sessions") and kwargs.get("params", {}).get("tenant_id") == "hf-alice":
+                    return _FakeResp(200, {"data": {"items": [{"session_id": "sess-alice"}]}})
+                if url.endswith("/api/v1/turns"):
+                    return _FakeResp(
+                        200,
+                        {
+                            "data": {
+                                "items": [
+                                    {"turn_id": "t1", "session_id": "sess-alice"},
+                                    {"turn_id": "t2", "session_id": "sess-bob"},
+                                ],
+                                "total": 2,
+                            }
+                        },
+                    )
+                if url.endswith("/api/v1/turns/t2"):
+                    return _FakeResp(200, {"data": {"turn_id": "t2", "session_id": "sess-bob"}})
+                return _FakeResp(404, {})
+
+        with mock.patch("app.routers.sessions.orch_client", return_value=_FakeClient()):
+            self.assertEqual(alice.get("/api/v1/sessions/sess-bob/turns").status_code, 404)
+            self.assertEqual(alice.get("/api/v1/turns/t2").status_code, 404)
+            turns_resp = alice.get("/api/v1/turns")
+            self.assertEqual(turns_resp.status_code, 200)
+            items = turns_resp.json()["data"]["items"]
+            self.assertEqual([t["turn_id"] for t in items], ["t1"])
+
+    def test_cleanup_sweeps_partial_empty_session_dirs(self):
+        partial = self.captures_dir / "hf-ghost" / "sess-crashed"
+        partial.mkdir(parents=True, exist_ok=True)
+        old_ts = time.time() - 3600
+        os.utime(partial, (old_ts, old_ts))
+
+        res = cleanup.sweep_captures_once(ttl_minutes=30, max_mb=0)
+        self.assertEqual(res["ttl_deleted"], 1)
+        self.assertFalse(partial.exists())
+
+    def test_cancel_queue_parser_requires_exact_type(self):
+        from app.routers.playground import _is_cancel_queue_message
+
+        self.assertTrue(_is_cancel_queue_message('{"type": "cancel_queue"}'))
+        self.assertFalse(_is_cancel_queue_message('{"type": "transcript", "text": "\\"cancel_queue\\""}'))
+        self.assertFalse(_is_cancel_queue_message("not-json"))
+
+
 if __name__ == "__main__":
     unittest.main()

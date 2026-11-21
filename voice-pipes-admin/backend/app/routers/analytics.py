@@ -42,8 +42,9 @@ async def get_pricing():
 
 
 @router.post("/api/v1/pricing/reload")
-async def reload_pricing_endpoint():
+async def reload_pricing_endpoint(request: Request):
     """Re-read ``pricing.yaml`` from disk without a process restart."""
+    _auth.require_operator(request)
     book = reload_pricing()
     return {"data": {
         "llm": dict(book["llm"]),
@@ -94,11 +95,12 @@ async def get_issues(
     sessions, quota breaches, provider changes)."""
     kind_list = [k.strip() for k in kinds.split(",")] if kinds else None
     since_ts = datetime.now(UTC).timestamp() - days * 86400
-    rows = recent_issues(limit=limit, kinds=kind_list, since_ts=since_ts)
     eff_tenant = _auth.resolve_request_tenant(request, tenant_id)
+    fetch_limit = 500 if eff_tenant is not None else limit
+    rows = recent_issues(limit=fetch_limit, kinds=kind_list, since_ts=since_ts)
     if eff_tenant is not None:
         allowed_sids = await asyncio.to_thread(_tenant_session_ids, eff_tenant)
-        rows = [r for r in rows if r.get("session_id") in allowed_sids]
+        rows = [r for r in rows if r.get("session_id") in allowed_sids][:limit]
     error = None
     if store_failure() is not None:
         # The store's path and the OS error are in the backend log; an
@@ -231,13 +233,15 @@ async def get_analytics(
         payload = await _build_analytics(
             days, offset_days, pipeline, background_tasks, lite=lite, tenant_id=eff_tenant
         )
-        _analytics_cache[cache_key] = (loop.time(), payload)
-        # Bound the cache: drop entries with stale signatures so it doesn't
-        # grow unbounded as new sessions land.  (sig is the last key element.)
+        now_t = loop.time()
+        _analytics_cache[cache_key] = (now_t, payload)
+        # Bound the cache: first drop expired entries, then evict oldest FIFO
+        # entries so multi-tenant keys don't thrash each other or grow unbounded.
         if len(_analytics_cache) > 32:
-            for k in list(_analytics_cache.keys()):
-                if k[-1] != sig:
-                    _analytics_cache.pop(k, None)
+            for k in [k for k, (ts, _) in _analytics_cache.items() if now_t - ts >= _ANALYTICS_CACHE_TTL_S]:
+                _analytics_cache.pop(k, None)
+            while len(_analytics_cache) > 32:
+                _analytics_cache.pop(next(iter(_analytics_cache)), None)
         fut.set_result(payload)
         return payload
     except Exception as exc:

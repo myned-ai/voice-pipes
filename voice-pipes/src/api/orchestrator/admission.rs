@@ -3,36 +3,25 @@
 
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
-use dashmap::DashMap;
 use tokio::sync::watch;
 
 use crate::api::types::{
     AcquireDispatchRequest, AcquireDispatchResponse, ApiResponse, CapacitySnapshot,
-    OrchestratorState, TicketPollQuery, WorkerStatus,
+    OrchestratorState, TicketPollQuery, WorkerCapacity, WorkerStatus,
 };
 
 use super::handlers::connectable_addr;
 
-static NEXT_TICKET_SEQ: AtomicU64 = AtomicU64::new(1);
-static CONTROLLERS: OnceLock<DashMap<usize, Arc<AdmissionController>>> = OnceLock::new();
-
-/// Look up or initialize the [`AdmissionController`] associated with `state`.
-pub(crate) fn for_state(state: &OrchestratorState) -> Arc<AdmissionController> {
-    let key = Arc::as_ptr(&state.workers) as usize;
-    let map = CONTROLLERS.get_or_init(DashMap::new);
-    if let Some(existing) = map.get(&key) {
-        return Arc::clone(existing.value());
-    }
-    let ctrl = Arc::new(AdmissionController::new());
-    map.entry(key).or_insert_with(|| Arc::clone(&ctrl));
-    ctrl
+/// Look up the [`AdmissionController`] associated with `state`.
+pub(crate) fn for_state(state: &OrchestratorState) -> &AdmissionController {
+    &state.admission
 }
 
 #[derive(Debug, Clone)]
@@ -52,46 +41,59 @@ struct QueuedTicket {
     rx: watch::Receiver<AcquireDispatchResponse>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct PeakTracker {
-    /// `(timestamp, concurrent_sessions)` samples within the last 24h.
-    samples: VecDeque<(Instant, u32)>,
+    epoch: Instant,
+    /// `(minute_bucket, max_concurrent_sessions)` within the last 24h (max 1440 buckets).
+    buckets: VecDeque<(u64, u32)>,
 }
 
-#[allow(
-    clippy::duration_suboptimal_units,
-    reason = "Duration::from_hours requires Rust 1.98; keep from_secs for MSRV 1.91"
-)]
+impl Default for PeakTracker {
+    fn default() -> Self {
+        Self {
+            epoch: Instant::now(),
+            buckets: VecDeque::new(),
+        }
+    }
+}
+
 impl PeakTracker {
-    fn record(&mut self, now: Instant, current: u32) {
-        let cutoff_24h = now.checked_sub(Duration::from_secs(86_400)).unwrap_or(now);
-        while let Some(&(ts, _)) = self.samples.front() {
-            if ts < cutoff_24h {
-                self.samples.pop_front();
+    fn bucket_of(&self, now: Instant) -> u64 {
+        now.saturating_duration_since(self.epoch).as_secs() / 60
+    }
+
+    fn prune(&mut self, current_bucket: u64) {
+        while let Some(&(b, _)) = self.buckets.front() {
+            if current_bucket.saturating_sub(b) >= 1440 {
+                self.buckets.pop_front();
             } else {
                 break;
             }
         }
-        self.samples.push_back((now, current));
+    }
+
+    fn record(&mut self, now: Instant, current: u32) {
+        let bucket = self.bucket_of(now);
+        self.prune(bucket);
+        if let Some((b, val)) = self.buckets.back_mut()
+            && *b == bucket
+        {
+            *val = (*val).max(current);
+            return;
+        }
+        self.buckets.push_back((bucket, current));
     }
 
     fn peaks(&mut self, now: Instant, current: u32) -> (u32, u32) {
-        let cutoff_24h = now.checked_sub(Duration::from_secs(86_400)).unwrap_or(now);
-        let cutoff_1h = now.checked_sub(Duration::from_secs(3_600)).unwrap_or(now);
-        while let Some(&(ts, _)) = self.samples.front() {
-            if ts < cutoff_24h {
-                self.samples.pop_front();
-            } else {
-                break;
-            }
-        }
+        let bucket = self.bucket_of(now);
+        self.prune(bucket);
         let mut p1h = current;
         let mut p24h = current;
-        for &(ts, val) in &self.samples {
+        for &(b, val) in &self.buckets {
             if val > p24h {
                 p24h = val;
             }
-            if ts >= cutoff_1h && val > p1h {
+            if bucket.saturating_sub(b) < 60 && val > p1h {
                 p1h = val;
             }
         }
@@ -158,16 +160,16 @@ impl AdmissionController {
     }
 
     fn next_id(prefix: &str) -> String {
-        let seq = NEXT_TICKET_SEQ.fetch_add(1, Ordering::Relaxed);
-        let nanos = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .subsec_nanos();
-        format!("{prefix}_{seq:06x}_{nanos:08x}")
+        format!("{prefix}_{}", uuid::Uuid::new_v4().simple())
     }
 }
 
-fn clean_expired(inner: &mut InnerState, state: &OrchestratorState, now: Instant) {
+fn clean_expired(
+    inner: &mut InnerState,
+    state: &OrchestratorState,
+    counters: &RejectCounters,
+    now: Instant,
+) {
     let mut expired_workers: Vec<String> = Vec::new();
     inner.leases.retain(|_, lease| {
         if lease.expires_at <= now {
@@ -187,23 +189,18 @@ fn clean_expired(inner: &mut InnerState, state: &OrchestratorState, now: Instant
         .resolved_tickets
         .retain(|_, (ts, _)| *ts > resolved_cutoff);
 
-    let mut idx = 0;
-    while idx < inner.queue.len() {
-        let expired = inner
-            .queue
-            .get(idx)
-            .is_some_and(|t| t.expires_at <= now || t.tx.is_closed());
-        if expired {
-            if let Some(t) = inner.queue.remove(idx) {
-                let msg = AcquireDispatchResponse::Expired {
-                    ticket_id: t.ticket_id.clone(),
-                    reason: "queue_timeout".to_string(),
-                };
-                let _ = t.tx.send(msg.clone());
-                inner.resolved_tickets.insert(t.ticket_id, (now, msg));
-            }
+    let drained: Vec<QueuedTicket> = inner.queue.drain(..).collect();
+    for t in drained {
+        if t.expires_at <= now {
+            counters.timeout.fetch_add(1, Ordering::Relaxed);
+            let msg = AcquireDispatchResponse::Expired {
+                ticket_id: t.ticket_id.clone(),
+                reason: "queue_timeout".to_string(),
+            };
+            let _ = t.tx.send(msg.clone());
+            inner.resolved_tickets.insert(t.ticket_id, (now, msg));
         } else {
-            idx += 1;
+            inner.queue.push_back(t);
         }
     }
 }
@@ -394,7 +391,7 @@ pub(crate) fn promote_queued_tickets(state: &OrchestratorState) {
         return;
     };
     let now = Instant::now();
-    clean_expired(&mut inner, state, now);
+    clean_expired(&mut inner, state, &ctrl.counters, now);
 
     let policy_default = state.config.dispatch.policy.clone();
     let mut promoted_any = false;
@@ -474,6 +471,31 @@ pub(crate) fn on_session_start(
     inner.peaks.record(now, active.saturating_add(leased));
 }
 
+/// Merge a worker's reported heartbeat capacity with any unredeemed admission leases
+/// currently held for that worker so optimistic lease counts are not overwritten.
+pub(crate) fn on_worker_heartbeat(
+    state: &OrchestratorState,
+    worker_id: &str,
+    mut cap: WorkerCapacity,
+) -> WorkerCapacity {
+    let ctrl = for_state(state);
+    let Ok(mut inner) = ctrl.inner.lock() else {
+        return cap;
+    };
+    let now = Instant::now();
+    clean_expired(&mut inner, state, &ctrl.counters, now);
+    let pending_leases = u32::try_from(
+        inner
+            .leases
+            .values()
+            .filter(|l| l.worker_id == worker_id)
+            .count(),
+    )
+    .unwrap_or(u32::MAX);
+    cap.active_sessions = cap.active_sessions.saturating_add(pending_leases);
+    cap
+}
+
 /// Hook invoked when a worker reports a session end event (`ended_at.is_some()`).
 pub(crate) fn on_session_end(state: &OrchestratorState, session_id: &str, worker_id: &str) {
     let ctrl = for_state(state);
@@ -531,7 +553,7 @@ pub async fn acquire_dispatch(
             .into_response();
     };
     let now = Instant::now();
-    clean_expired(&mut inner, &state, now);
+    clean_expired(&mut inner, &state, &ctrl.counters, now);
 
     let adm = &state.config.dispatch.admission;
     if adm.enabled
@@ -637,11 +659,13 @@ fn enqueue_ticket(
 /// `GET /api/v1/dispatch/tickets/{id}` — Poll or long-poll a waiting queue ticket.
 pub async fn get_ticket_status(
     State(state): State<Arc<OrchestratorState>>,
+    headers: HeaderMap,
     Path(ticket_id): Path<String>,
     Query(q): Query<TicketPollQuery>,
 ) -> Response {
     let ctrl = for_state(&state);
     let wait_ms = q.wait_ms.unwrap_or(0).min(25_000);
+    let caller_tenant = extract_tenant_from_req(&headers, None);
 
     let mut rx_opt = None;
     {
@@ -653,11 +677,22 @@ pub async fn get_ticket_status(
                 .into_response();
         };
         let now = Instant::now();
-        clean_expired(&mut inner, &state, now);
+        clean_expired(&mut inner, &state, &ctrl.counters, now);
         if let Some((_, resolved)) = inner.resolved_tickets.get(&ticket_id) {
             return Json(ApiResponse::ok(resolved.clone())).into_response();
         }
         if let Some(t) = inner.queue.iter().find(|t| t.ticket_id == ticket_id) {
+            if let Some(ref tid) = caller_tenant
+                && t.request.tenant_id.as_deref() != Some(tid.as_str())
+            {
+                return (
+                    StatusCode::NOT_FOUND,
+                    Json(ApiResponse::<()>::not_found(format!(
+                        "Ticket {ticket_id} not found"
+                    ))),
+                )
+                    .into_response();
+            }
             if wait_ms == 0 {
                 return Json(ApiResponse::ok(t.rx.borrow().clone())).into_response();
             }
@@ -683,9 +718,11 @@ pub async fn get_ticket_status(
 /// `DELETE /api/v1/dispatch/tickets/{id}` — Cancel a waiting queue ticket or release an unused lease.
 pub async fn cancel_ticket(
     State(state): State<Arc<OrchestratorState>>,
+    headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Response {
     let ctrl = for_state(&state);
+    let caller_tenant = extract_tenant_from_req(&headers, None);
     let mut promote = false;
     {
         let Ok(mut inner) = ctrl.inner.lock() else {
@@ -696,13 +733,22 @@ pub async fn cancel_ticket(
                 .into_response();
         };
         let now = Instant::now();
-        if let Some(lease) = inner.leases.remove(&id) {
+        if let Some(lease) = inner.leases.get(&id)
+            && caller_tenant
+                .as_deref()
+                .is_none_or(|tid| lease.tenant_id.as_deref() == Some(tid))
+            && let Some(lease) = inner.leases.remove(&id)
+        {
             if let Some(mut w) = state.workers.get_mut(&lease.worker_id) {
                 w.capacity.active_sessions = w.capacity.active_sessions.saturating_sub(1);
             }
             promote = true;
-        } else if let Some(idx) = inner.queue.iter().position(|t| t.ticket_id == id)
-            && let Some(t) = inner.queue.remove(idx)
+        } else if let Some(idx) = inner.queue.iter().position(|t| {
+            t.ticket_id == id
+                && caller_tenant
+                    .as_deref()
+                    .is_none_or(|tid| t.request.tenant_id.as_deref() == Some(tid))
+        }) && let Some(t) = inner.queue.remove(idx)
         {
             let msg = AcquireDispatchResponse::Cancelled {
                 ticket_id: id.clone(),
@@ -748,7 +794,7 @@ pub(crate) fn build_capacity_snapshot(state: &OrchestratorState) -> CapacitySnap
         };
     };
     let now = Instant::now();
-    clean_expired(&mut inner, state, now);
+    clean_expired(&mut inner, state, &ctrl.counters, now);
 
     let (active, leased, effective_limit) = fleet_totals(&inner, state);
     let mut worker_cap: u32 = 0;

@@ -71,6 +71,7 @@ fn state_with(workers: Vec<WorkerRecord>, config: OrchestratorConfig) -> Arc<Orc
         )),
         tap_store: None,
         start_time: std::time::Instant::now(),
+        admission: Arc::default(),
     })
 }
 
