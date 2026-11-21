@@ -404,28 +404,31 @@ async fn expired_ticket_increments_timeout_rejection_counter() {
         },
     );
     let ctrl = super::for_state(&state);
-    {
-        let mut inner = ctrl.inner.lock().expect("lock");
-        let past = std::time::Instant::now() - std::time::Duration::from_secs(10);
-        let initial = crate::api::types::AcquireDispatchResponse::Queued {
-            ticket_id: "vp_ticket_expired".into(),
-            position: 1,
-            ahead: 0,
-            queue_depth: 1,
-            active_sessions: 1,
-            capacity_sessions: 1,
-            estimated_wait_s: 5,
-        };
-        let (tx, rx) = tokio::sync::watch::channel(initial);
-        inner.queue.push_back(super::QueuedTicket {
-            ticket_id: "vp_ticket_expired".into(),
-            request: AcquireDispatchRequest::default(),
-            enqueued_at: past - std::time::Duration::from_secs(5),
-            expires_at: past,
-            tx,
-            rx,
-        });
-    }
+    let mut inner = ctrl.inner.lock().expect("lock");
+    let past = std::time::Instant::now()
+        .checked_sub(std::time::Duration::from_secs(10))
+        .expect("past instant");
+    let initial = crate::api::types::AcquireDispatchResponse::Queued {
+        ticket_id: "vp_ticket_expired".into(),
+        position: 1,
+        ahead: 0,
+        queue_depth: 1,
+        active_sessions: 1,
+        capacity_sessions: 1,
+        estimated_wait_s: 5,
+    };
+    let (tx, rx) = tokio::sync::watch::channel(initial);
+    inner.queue.push_back(super::QueuedTicket {
+        ticket_id: "vp_ticket_expired".into(),
+        request: AcquireDispatchRequest::default(),
+        enqueued_at: past
+            .checked_sub(std::time::Duration::from_secs(5))
+            .expect("enqueued instant"),
+        expires_at: past,
+        tx,
+        rx,
+    });
+    drop(inner);
 
     let _ = build_capacity_snapshot(&state);
     assert_eq!(

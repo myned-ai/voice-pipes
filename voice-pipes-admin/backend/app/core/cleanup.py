@@ -23,7 +23,7 @@ import time
 from pathlib import Path
 
 from ..analytics import rollup
-from ..analytics.compute import _analytics_cache, _iter_capture_session_dirs
+from ..analytics.compute import _analytics_cache
 from ..issues import clear_issues
 from . import config
 

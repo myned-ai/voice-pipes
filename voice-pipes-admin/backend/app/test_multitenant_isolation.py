@@ -15,7 +15,6 @@ from unittest import mock
 from fastapi.testclient import TestClient
 
 from app.analytics.compute import _analytics_cache
-from app.core import auth as auth_mod
 from app.core import cleanup, config
 from app.test_auth import _fresh_app
 

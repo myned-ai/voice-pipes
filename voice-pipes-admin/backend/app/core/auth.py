@@ -283,9 +283,12 @@ def require_operator(request) -> None:
     multi_tenant = getattr(live_auth, "ADMIN_MULTI_TENANT", ADMIN_MULTI_TENANT)
     if not multi_tenant:
         return
-    if request is not None and hasattr(request, "scope"):
-        if token_matches(credential_from_scope(request.scope)):
-            return
+    if (
+        request is not None
+        and hasattr(request, "scope")
+        and token_matches(credential_from_scope(request.scope))
+    ):
+        return
     from fastapi import HTTPException
 
     raise HTTPException(
