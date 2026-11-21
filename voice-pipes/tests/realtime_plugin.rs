@@ -643,7 +643,17 @@ async fn a_refused_resumption_starts_a_fresh_session() {
     let (url, recorded) = start_vendor(refusing_the_token).await;
     let (client, session) = open_session(config(&url)).await;
 
-    speak(&client).await;
+    // Wait for connection 0 to finish its session handshake (`ready` + `resumable`)
+    // before sending audio, since audio sent while the provider opens is dropped.
+    let _ = wait_for_frame(&recorded, |f| f["type"] == "session" && f["conn"] == 0).await;
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    for _ in 0..20 {
+        speak(&client).await;
+        if recorded.lock().iter().any(|f| f["type"] == "audio") {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
     let frames = wait_for_frame(&recorded, |f| f["type"] == "session" && f["conn"] == 2).await;
     let sessions: Vec<_> = frames
         .iter()
