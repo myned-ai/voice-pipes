@@ -53,7 +53,10 @@ export default function QueueWaitingBanner({
     return () => window.removeEventListener(PLAYGROUND_QUEUE_EVENT, onQueueEvent);
   }, []);
 
+  const isQueuedOrActive = sessionState !== "idle" && sessionState !== "error";
+
   useEffect(() => {
+    if (isQueuedOrActive) return;
     let alive = true;
     const pollCapacity = async () => {
       try {
@@ -73,7 +76,7 @@ export default function QueueWaitingBanner({
       alive = false;
       window.clearInterval(timer);
     };
-  }, [sessionState]);
+  }, [isQueuedOrActive]);
 
   const activeQueue = sessionState === "idle" || sessionState === "error" ? null : queueInfo;
   const showCapacityStrip =

@@ -65,6 +65,7 @@ async fn start_orchestrator(tag: &str) -> Fleet {
         )),
         tap_store: None,
         start_time: std::time::Instant::now(),
+        admission: Arc::default(),
     });
 
     let admin_auth = SurfaceAuth::resolve(&admin_env, "orchestrator admin API");

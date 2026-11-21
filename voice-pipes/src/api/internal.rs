@@ -218,11 +218,13 @@ async fn heartbeat(
     State(state): State<Arc<OrchestratorState>>,
     Json(hb): Json<WorkerHeartbeat>,
 ) -> Response {
+    let effective_cap =
+        super::orchestrator::admission::on_worker_heartbeat(&state, &hb.worker_id, hb.capacity);
     match state.workers.get_mut(&hb.worker_id) {
         Some(mut entry) => {
             let w = entry.value_mut();
             w.last_heartbeat = Utc::now();
-            w.capacity = hb.capacity;
+            w.capacity = effective_cap;
             if w.status == WorkerStatus::Dead {
                 tracing::info!(worker_id = %w.id, "worker recovered from dead status via heartbeat");
                 w.status = WorkerStatus::Active;

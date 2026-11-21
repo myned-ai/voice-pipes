@@ -77,7 +77,6 @@ _BADCALL_LOW_CSAT = 2            # csat ≤ this ⇒ "low_csat"
 _ANALYTICS_CACHE_TTL_S = 30.0
 _ANALYTICS_OVERLAY_TIMEOUT_S = 0.8
 _analytics_cache: dict[tuple, tuple[float, dict]] = {}
-_analytics_cache_lock = asyncio.Lock()
 
 # 0a — per-key single-flight + bounded scan concurrency.  The response cache
 # collapses *identical* requests; this registry lets *distinct* windows (the

@@ -129,6 +129,7 @@ where
         audit_store,
         tap_store: None,
         start_time: Instant::now(),
+        admission: Arc::default(),
     });
 
     // Background task: mark silent workers dead, then remove them.

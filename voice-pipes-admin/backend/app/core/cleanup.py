@@ -107,6 +107,32 @@ def _remove_session_dir(session_dir: Path, base: Path) -> bool:
     return True
 
 
+def _iter_all_capture_session_dirs() -> list[Path]:
+    """Return all session capture directories (including partial/empty ones) under ``CAPTURES_DIR``."""
+    dirs: list[Path] = []
+    if not config.CAPTURES_DIR.exists():
+        return dirs
+    try:
+        for entry in config.CAPTURES_DIR.iterdir():
+            if not entry.is_dir():
+                continue
+            if (entry / "metadata.json").exists() or (entry / "events.jsonl").exists():
+                dirs.append(entry)
+                continue
+            try:
+                subs = [sub for sub in entry.iterdir() if sub.is_dir()]
+            except OSError:
+                continue
+            if subs:
+                dirs.extend(subs)
+            else:
+                # Empty flat or empty tenant dir
+                dirs.append(entry)
+    except OSError:
+        pass
+    return dirs
+
+
 def sweep_captures_once(
     *,
     ttl_minutes: float | None = None,
@@ -128,7 +154,7 @@ def sweep_captures_once(
     base = config.CAPTURES_DIR.resolve()
 
     sessions: list[tuple[float, int, Path]] = []
-    for sdir in list(_iter_capture_session_dirs(tenant_id=None)):
+    for sdir in _iter_all_capture_session_dirs():
         newest, size = _dir_stats(sdir)
         sessions.append((newest, size, sdir))
 

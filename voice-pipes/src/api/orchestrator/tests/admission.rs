@@ -60,6 +60,7 @@ fn state_with_admission(
         )),
         tap_store: None,
         start_time: std::time::Instant::now(),
+        admission: Arc::default(),
     })
 }
 
@@ -215,6 +216,7 @@ async fn fifo_queue_enqueues_and_promotes_in_order_on_session_end() {
     let (st_poll_b, j_poll_b) = resp_json(
         get_ticket_status(
             State(Arc::clone(&state)),
+            HeaderMap::new(),
             Path(ticket_b),
             Query(TicketPollQuery { wait_ms: Some(0) }),
         )
@@ -228,6 +230,7 @@ async fn fifo_queue_enqueues_and_promotes_in_order_on_session_end() {
     let (_, j_poll_c) = resp_json(
         get_ticket_status(
             State(Arc::clone(&state)),
+            HeaderMap::new(),
             Path(ticket_c.clone()),
             Query(TicketPollQuery { wait_ms: Some(0) }),
         )
@@ -239,7 +242,8 @@ async fn fifo_queue_enqueues_and_promotes_in_order_on_session_end() {
 
     // 6. Cancel Carol's ticket -> queue depth drops to 0
     let (st_cancel, _) =
-        resp_json(cancel_ticket(State(Arc::clone(&state)), Path(ticket_c)).await).await;
+        resp_json(cancel_ticket(State(Arc::clone(&state)), HeaderMap::new(), Path(ticket_c)).await)
+            .await;
     assert_eq!(st_cancel, StatusCode::OK);
 
     let snap = build_capacity_snapshot(&state);
@@ -270,4 +274,165 @@ async fn prometheus_metrics_exposes_keda_scaling_gauges() {
     assert!(text.contains("vp_fleet_effective_limit_sessions 3"));
     assert!(text.contains("vp_dispatch_queue_depth 0"));
     assert!(text.contains("vp_active_tenants_total 1"));
+}
+
+#[tokio::test]
+async fn worker_heartbeat_preserves_unredeemed_lease_count() {
+    let state = state_with_admission(
+        vec![make_worker("w1", 2)],
+        AdmissionConfig {
+            enabled: true,
+            max_active_sessions: 2,
+            max_per_tenant: 1,
+            max_queue_size: 5,
+            lease_ttl_s: 30,
+            ..Default::default()
+        },
+    );
+
+    let (st, j) = resp_json(
+        acquire_dispatch(
+            State(Arc::clone(&state)),
+            HeaderMap::new(),
+            Json(AcquireDispatchRequest {
+                tenant_id: Some("alice".into()),
+                ..Default::default()
+            }),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    assert_eq!(j["data"]["status"], "granted");
+
+    // Worker sends a heartbeat reporting 0 active sessions before WS connects.
+    let merged = super::on_worker_heartbeat(
+        &state,
+        "w1",
+        WorkerCapacity {
+            active_sessions: 0,
+            max_concurrent: 2,
+        },
+    );
+    assert_eq!(merged.active_sessions, 1);
+}
+
+#[tokio::test]
+async fn mismatched_tenant_cannot_poll_or_cancel_ticket() {
+    let state = state_with_admission(
+        vec![make_worker("w1", 1)],
+        AdmissionConfig {
+            enabled: true,
+            max_active_sessions: 1,
+            max_per_tenant: 1,
+            max_queue_size: 5,
+            ..Default::default()
+        },
+    );
+
+    // Fill the single slot
+    let _ = acquire_dispatch(
+        State(Arc::clone(&state)),
+        HeaderMap::new(),
+        Json(AcquireDispatchRequest {
+            tenant_id: Some("alice".into()),
+            ..Default::default()
+        }),
+    )
+    .await;
+
+    // Bob enters the queue
+    let (st_b, jb) = resp_json(
+        acquire_dispatch(
+            State(Arc::clone(&state)),
+            HeaderMap::new(),
+            Json(AcquireDispatchRequest {
+                tenant_id: Some("bob".into()),
+                ..Default::default()
+            }),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(st_b, StatusCode::ACCEPTED);
+    let ticket_b = jb["data"]["ticket_id"]
+        .as_str()
+        .expect("ticket_id")
+        .to_string();
+
+    let mut eve_headers = HeaderMap::new();
+    eve_headers.insert("x-tenant-id", "eve".parse().expect("header"));
+
+    // Eve cannot poll Bob's ticket
+    let (st_poll, _) = resp_json(
+        get_ticket_status(
+            State(Arc::clone(&state)),
+            eve_headers.clone(),
+            Path(ticket_b.clone()),
+            Query(TicketPollQuery { wait_ms: Some(0) }),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(st_poll, StatusCode::NOT_FOUND);
+
+    // Eve cannot cancel Bob's ticket
+    let (_, j_cancel) = resp_json(
+        cancel_ticket(
+            State(Arc::clone(&state)),
+            eve_headers,
+            Path(ticket_b.clone()),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(j_cancel["data"]["cancelled"], false);
+    assert_eq!(build_capacity_snapshot(&state).queue_depth, 1);
+}
+
+#[tokio::test]
+async fn expired_ticket_increments_timeout_rejection_counter() {
+    let state = state_with_admission(
+        vec![make_worker("w1", 1)],
+        AdmissionConfig {
+            enabled: true,
+            max_active_sessions: 1,
+            max_per_tenant: 1,
+            max_queue_size: 5,
+            queue_timeout_s: 5,
+            ..Default::default()
+        },
+    );
+    let ctrl = super::for_state(&state);
+    {
+        let mut inner = ctrl.inner.lock().expect("lock");
+        let past = std::time::Instant::now() - std::time::Duration::from_secs(10);
+        let initial = crate::api::types::AcquireDispatchResponse::Queued {
+            ticket_id: "vp_ticket_expired".into(),
+            position: 1,
+            ahead: 0,
+            queue_depth: 1,
+            active_sessions: 1,
+            capacity_sessions: 1,
+            estimated_wait_s: 5,
+        };
+        let (tx, rx) = tokio::sync::watch::channel(initial);
+        inner.queue.push_back(super::QueuedTicket {
+            ticket_id: "vp_ticket_expired".into(),
+            request: AcquireDispatchRequest::default(),
+            enqueued_at: past - std::time::Duration::from_secs(5),
+            expires_at: past,
+            tx,
+            rx,
+        });
+    }
+
+    let _ = build_capacity_snapshot(&state);
+    assert_eq!(
+        ctrl.counters
+            .timeout
+            .load(std::sync::atomic::Ordering::Relaxed),
+        1
+    );
+    assert_eq!(build_capacity_snapshot(&state).queue_depth, 0);
 }

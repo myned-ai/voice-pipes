@@ -415,10 +415,38 @@ def _report_for_llm_response(
     )
 
 
+async def _assert_session_tenant(client: httpx.AsyncClient, session_id: str, tenant_id: str) -> None:
+    """Ensure ``session_id`` belongs to ``tenant_id`` (via orchestrator or local capture)."""
+    orch_data = None
+    try:
+        resp = await client.get(
+            ORCHESTRATOR_URL + upstream_path("/api/v1/sessions/{session_id}", session_id=session_id),
+            timeout=5.0,
+        )
+        if resp.status_code == 200:
+            orch_data = (resp.json() or {}).get("data")
+    except Exception:  # noqa: BLE001, S110
+        pass
+    if orch_data is not None:
+        if orch_data.get("tenant_id") != tenant_id:
+            raise HTTPException(status_code=404, detail="Session not found")
+        return
+    local_meta = await asyncio.to_thread(_read_session_metadata, session_id, tenant_id=tenant_id)
+    if not local_meta or (local_meta.get("tenant_id") and local_meta.get("tenant_id") != tenant_id):
+        raise HTTPException(status_code=404, detail="Session not found")
+
+
 @router.get("/api/v1/sessions/{session_id}/turns")
-async def session_turns(session_id: str):
+async def session_turns(
+    session_id: str,
+    request: Request = None,
+    tenant_id: str | None = Query(None),
+):
     """Proxy to orchestrator: list turns for a session."""
+    eff_tenant = _extract_tenant_id(request, tenant_id)
     async with orch_client() as client:
+        if eff_tenant is not None:
+            await _assert_session_tenant(client, session_id, eff_tenant)
         try:
             response = await client.get(
                 ORCHESTRATOR_URL + upstream_path("/api/v1/sessions/{session_id}/turns", session_id=session_id), timeout=5.0
@@ -435,14 +463,17 @@ async def session_turns(session_id: str):
 
 @router.get("/api/v1/turns")
 async def list_turns(
+    request: Request = None,
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=500),
     status: str | None = Query(None),
     pipeline_name: str | None = Query(None),
     worker_id: str | None = Query(None),
     search: str | None = Query(None),
+    tenant_id: str | None = Query(None),
 ):
     """Proxy to orchestrator: flat list of all turns."""
+    eff_tenant = _extract_tenant_id(request, tenant_id)
     params: dict = {"page": page, "per_page": per_page}
     if status:
         params["status"] = status
@@ -455,25 +486,60 @@ async def list_turns(
 
     async with orch_client() as client:
         try:
+            allowed_sids: set[str] | None = None
+            if eff_tenant is not None:
+                s_resp = await client.get(
+                    f"{ORCHESTRATOR_URL}/api/v1/sessions",
+                    params={"tenant_id": eff_tenant, "page": 1, "per_page": 500},
+                    timeout=5.0,
+                )
+                s_resp.raise_for_status()
+                s_items = ((s_resp.json() or {}).get("data") or {}).get("items") or []
+                allowed_sids = {
+                    s.get("session_id") or s.get("id")
+                    for s in s_items
+                    if isinstance(s, dict) and (s.get("session_id") or s.get("id"))
+                }
             response = await client.get(
                 f"{ORCHESTRATOR_URL}/api/v1/turns", params=params, timeout=5.0
             )
             response.raise_for_status()
-            return response.json()
+            payload = response.json()
+            if allowed_sids is not None and isinstance(payload, dict):
+                data = payload.get("data")
+                if isinstance(data, dict) and isinstance(data.get("items"), list):
+                    filtered = [t for t in data["items"] if t.get("session_id") in allowed_sids]
+                    data["items"] = filtered
+                    data["total"] = len(filtered)
+            return payload
         except Exception as e:  # noqa: BLE001 - any upstream failure becomes the error envelope
             return {"data": None, "error": upstream_error(e)}
 
 
 @router.get("/api/v1/turns/{turn_id}")
-async def get_turn(turn_id: str):
+async def get_turn(
+    turn_id: str,
+    request: Request = None,
+    tenant_id: str | None = Query(None),
+):
     """Proxy to orchestrator: get a single turn by ID."""
+    eff_tenant = _extract_tenant_id(request, tenant_id)
     async with orch_client() as client:
         try:
             response = await client.get(
                 ORCHESTRATOR_URL + upstream_path("/api/v1/turns/{turn_id}", turn_id=turn_id), timeout=5.0
             )
             response.raise_for_status()
-            return response.json()
+            payload = response.json()
+            if eff_tenant is not None and isinstance(payload, dict):
+                tdata = payload.get("data")
+                sid = tdata.get("session_id") if isinstance(tdata, dict) else None
+                if not sid:
+                    raise HTTPException(status_code=404, detail="Turn not found")
+                await _assert_session_tenant(client, str(sid), eff_tenant)
+            return payload
+        except HTTPException:
+            raise
         except httpx.HTTPStatusError as e:
             raise HTTPException(status_code=e.response.status_code, detail=e.response.text) from e
         except Exception as e:  # noqa: BLE001 - any upstream failure becomes the error envelope

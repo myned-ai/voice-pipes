@@ -154,6 +154,7 @@ async fn admin_token_cannot_call_internal_endpoints() {
         )),
         tap_store: None,
         start_time: std::time::Instant::now(),
+        admission: Arc::default(),
     });
     let admin = protect_router(
         crate::api::orchestrator::router(Arc::clone(&state), Vec::new()),
