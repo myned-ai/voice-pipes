@@ -16,9 +16,10 @@ permissions:
   contents: read
   packages: write
   # Signing and provenance: a short-lived OIDC identity for Sigstore, and
-  # permission to store the attestation.
+  # permission to store the attestation and artifact metadata record.
   id-token: write
   attestations: write
+  artifact-metadata: write
 
 concurrency:
   group: images-${{ github.ref }}
@@ -103,6 +104,10 @@ jobs:
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image_name }}
+          # Disable automatic `latest` so tagged variants (e.g. `-cuda`) only
+          # emit `latest${{ matrix.tag_suffix }}` from the explicit rules below.
+          flavor: |
+            latest=false
           tags: |
             type=semver,pattern={{version}}${{ matrix.tag_suffix }}
             type=semver,pattern={{major}}.{{minor}}${{ matrix.tag_suffix }}
@@ -158,8 +163,20 @@ jobs:
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
       # Keyless Sigstore signature on the digest, for `cosign verify`.
-      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      # v4.1.3 installs cosign v3.1.4, which handles Rekor 409 conflicts on retry.
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
       - name: Sign the image
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.image_name }}@${{ steps.build.outputs.digest }}
-        run: cosign sign --yes "$IMAGE"
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if cosign sign --yes "$IMAGE"; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "::warning::cosign sign failed (attempt $attempt/3); retrying in 10s..."
+              sleep 10
+            fi
+          done
+          exit 1

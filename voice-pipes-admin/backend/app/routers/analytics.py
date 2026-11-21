@@ -1,7 +1,7 @@
 import asyncio
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, BackgroundTasks, Query
+from fastapi import APIRouter, BackgroundTasks, Query, Request
 from pydantic import BaseModel
 
 from ..analytics.compute import (
@@ -12,9 +12,11 @@ from ..analytics.compute import (
     _captures_signature,
     _compute_analytics_window,
     _fetch_orchestrator_overlay,
+    _iter_capture_session_dirs,
     _persist_analytics_issues,
     clear_analytics_data,
 )
+from ..core import auth as _auth
 from ..issues import recent_issues, store_failure
 from ..pricing import get_pricing_book, reload_pricing
 
@@ -53,35 +55,50 @@ async def reload_pricing_endpoint():
 
 
 @router.post("/api/v1/analytics/clear")
-async def clear_analytics_endpoint(body: ClearAnalyticsBody | None = None):
+async def clear_analytics_endpoint(
+    body: ClearAnalyticsBody | None = None,
+    request: Request = None,
+):
     """Clear dashboard metrics globally, for one pipeline, or for one session.
 
     When ``delete_captures`` is True, also removes matching session directories
     from ``CAPTURES_DIR``.
     """
     req = body or ClearAnalyticsBody()
+    eff_tenant = _auth.resolve_request_tenant(request)
     result = await asyncio.to_thread(
         clear_analytics_data,
         pipeline=req.pipeline,
         session_id=req.session_id,
         delete_captures=req.delete_captures,
+        tenant_id=eff_tenant,
     )
     return {"data": result}
 
 
 # ── Issues feed (P3 #18) ──────────────────────────────────────
 
+def _tenant_session_ids(tenant_id: str) -> set[str]:
+    return {entry.name for entry in _iter_capture_session_dirs(tenant_id=tenant_id)}
+
+
 @router.get("/api/v1/issues")
 async def get_issues(
+    request: Request = None,
     limit: int = Query(50, ge=1, le=500),
     kinds: str | None = Query(None, description="Comma-separated kinds filter"),
     days: int = Query(7, ge=1, le=365),
+    tenant_id: str | None = Query(None),
 ):
     """Recent persisted issues (failed sessions, worker deaths, anomaly
     sessions, quota breaches, provider changes)."""
     kind_list = [k.strip() for k in kinds.split(",")] if kinds else None
     since_ts = datetime.now(UTC).timestamp() - days * 86400
     rows = recent_issues(limit=limit, kinds=kind_list, since_ts=since_ts)
+    eff_tenant = _auth.resolve_request_tenant(request, tenant_id)
+    if eff_tenant is not None:
+        allowed_sids = await asyncio.to_thread(_tenant_session_ids, eff_tenant)
+        rows = [r for r in rows if r.get("session_id") in allowed_sids]
     error = None
     if store_failure() is not None:
         # The store's path and the OS error are in the backend log; an
@@ -101,24 +118,26 @@ async def _build_analytics(
     background_tasks: BackgroundTasks,
     *,
     lite: bool = False,
+    tenant_id: str | None = None,
 ) -> dict:
     """Run the scan + orchestrator overlay merge for one window and return the
     response payload.  No caching/locking here — that's the caller's job."""
     # Kick off the orchestrator overlay in parallel with the scan.  Skip for
-    # prior-period windows — the orchestrator only knows "now".
+    # prior-period windows (orchestrator only knows "now") and skip for
+    # tenant-scoped views (orchestrator /metrics is global across all tenants).
     overlay_task: asyncio.Task | None = None
-    if offset_days == 0:
+    if offset_days == 0 and tenant_id is None:
         overlay_task = asyncio.create_task(_fetch_orchestrator_overlay(days))
 
     async with _analytics_scan_sem:  # bound simultaneous disk walks
+        kwargs: dict = {}
         if lite:
-            scan = await asyncio.to_thread(
-                _compute_analytics_window, days, offset_days, pipeline, lite=True,
-            )
-        else:
-            scan = await asyncio.to_thread(
-                _compute_analytics_window, days, offset_days, pipeline,
-            )
+            kwargs["lite"] = True
+        if tenant_id is not None:
+            kwargs["tenant_id"] = tenant_id
+        scan = await asyncio.to_thread(
+            _compute_analytics_window, days, offset_days, pipeline, **kwargs,
+        )
     response = scan["response"]
     issue_inputs = scan["issue_inputs"]
 
@@ -162,16 +181,19 @@ async def _build_analytics(
 @router.get("/api/v1/analytics")
 async def get_analytics(
     background_tasks: BackgroundTasks,
+    request: Request = None,
     days: int = Query(7, ge=1, le=365),
     offset_days: int = Query(0, ge=0, le=365),
     pipeline: str | None = Query(None, description="Restrict to one pipeline_name (1b). Omit for all."),
     lite: bool = Query(False, description="Skip anomaly artifact walks and issue persistence for fast load."),
+    tenant_id: str | None = Query(None, description="Scope analytics to one tenant identifier."),
 ):
     """Aggregate latency, LLM perf, and provider-change data across sessions.
 
     Cached for ``_ANALYTICS_CACHE_TTL_S`` seconds keyed by
-    ``(days, offset_days, captures_signature)`` so the dashboard's repeat
-    requests (current + prior period) only pay the scan cost once.
+    ``(tenant_id, days, offset_days, pipeline, lite, captures_signature)`` so
+    the dashboard's repeat requests (current + prior period) only pay the scan
+    cost once.
 
     0a — single-flight is keyed *per window* (``_analytics_inflight``) rather
     than a single global lock, so the dashboard's current+prior requests run
@@ -182,8 +204,13 @@ async def get_analytics(
     callers can request the immediately-preceding period for delta
     comparisons (`/api/v1/analytics?days=7&offset_days=7`).
     """
-    sig = await asyncio.to_thread(_captures_signature)
-    cache_key = (days, offset_days, pipeline, lite, sig)
+    eff_tenant = _auth.resolve_request_tenant(request, tenant_id)
+    sig = (
+        await asyncio.to_thread(_captures_signature, eff_tenant)
+        if eff_tenant is not None
+        else await asyncio.to_thread(_captures_signature)
+    )
+    cache_key = (eff_tenant, days, offset_days, pipeline, lite, sig)
     loop = asyncio.get_event_loop()
 
     # Fast path — fresh cache hit.
@@ -201,7 +228,9 @@ async def get_analytics(
     fut = loop.create_future()
     _analytics_inflight[cache_key] = fut
     try:
-        payload = await _build_analytics(days, offset_days, pipeline, background_tasks, lite=lite)
+        payload = await _build_analytics(
+            days, offset_days, pipeline, background_tasks, lite=lite, tenant_id=eff_tenant
+        )
         _analytics_cache[cache_key] = (loop.time(), payload)
         # Bound the cache: drop entries with stale signatures so it doesn't
         # grow unbounded as new sessions land.  (sig is the last key element.)

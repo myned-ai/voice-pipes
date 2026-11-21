@@ -1143,6 +1143,9 @@ pub async fn dispatch(
 
     let policy = q.policy.as_deref().unwrap_or(&state.config.dispatch.policy);
 
+    let adm = &state.config.dispatch.admission;
+    let allow_queued_selection = adm.enabled && adm.max_queue_size > 0;
+
     #[expect(
         clippy::type_complexity,
         reason = "candidate tuple is consumed a few lines below; an alias would relocate, not simplify"
@@ -1151,7 +1154,7 @@ pub async fn dispatch(
     for entry in state.workers.iter() {
         let w = entry.value();
         if w.status != WorkerStatus::Active
-            || w.capacity.active_sessions >= w.capacity.max_concurrent
+            || (!allow_queued_selection && w.capacity.active_sessions >= w.capacity.max_concurrent)
         {
             continue;
         }
@@ -1196,7 +1199,12 @@ pub async fn dispatch(
     candidates.sort_by(|a, b| a.0.cmp(&b.0));
     let selected = &candidates[select_dispatch_index(&candidates, policy)];
 
-    if let Some(mut entry) = state.workers.get_mut(&selected.0) {
+    // When admission control is enabled, `/api/v1/dispatch/acquire` owns slot
+    // leasing and the optimistic increment so a two-step dispatch -> acquire
+    // flow does not double-count active_sessions.
+    if !adm.enabled
+        && let Some(mut entry) = state.workers.get_mut(&selected.0)
+    {
         let cap = &mut entry.value_mut().capacity;
         cap.active_sessions = cap.active_sessions.saturating_add(1);
     }
@@ -1365,7 +1373,7 @@ pub async fn audit_tap_download(
 /// elsewhere), so each becomes loopback. Other hosts pass through
 /// unchanged. Only the whole host is compared, so `10.0.0.0:8081` stays
 /// what it is.
-fn connectable_addr(listen_addr: &str) -> String {
+pub(super) fn connectable_addr(listen_addr: &str) -> String {
     match listen_addr.rsplit_once(':') {
         Some(("0.0.0.0", port)) => format!("127.0.0.1:{port}"),
         Some(("[::]", port)) => format!("[::1]:{port}"),

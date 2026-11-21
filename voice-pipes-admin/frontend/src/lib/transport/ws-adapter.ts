@@ -524,6 +524,10 @@ export class WebSocketAdapter implements TransportAdapter {
       this.onMessage?.({ kind: "data", payload });
     } else if (type === "message") {
       this.onMessage?.({ kind: "message", message: payload as unknown as PipelineMessage });
+    } else if (type === "queue_status" || type === "queue_granted") {
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("vp-playground-queue", { detail: envelope }));
+      }
     }
     } catch (err) {
       throw new TransportHandlerError(

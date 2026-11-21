@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
 
 from ..captures.reader import _read_capture_artifacts, _read_session_metadata, is_empty_turn
+from ..core import auth as _auth
 from ..core.config import ORCHESTRATOR_URL, orch_client
 from ..core.upstream import upstream_error, upstream_path
 from ..report.analysis import (
@@ -84,11 +85,7 @@ def _merge_turn_resources(utterances: list[dict], orch_data: dict | None) -> Non
 
 
 def _extract_tenant_id(request: Request | None, query_tenant: str | None) -> str | None:
-    if isinstance(query_tenant, str):
-        return query_tenant
-    if request is not None and hasattr(request, "headers"):
-        return request.headers.get("x-tenant-id")
-    return None
+    return _auth.resolve_request_tenant(request, query_tenant)
 
 
 # ── Sessions Endpoints (proxy to orchestrator + local captures) ──

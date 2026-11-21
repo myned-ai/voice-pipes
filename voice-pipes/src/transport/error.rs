@@ -20,6 +20,8 @@ pub enum ErrorCode {
     /// A client-declared tool was refused because its name belongs to
     /// a server-side tool (warning; the session continues without it).
     ClientToolRefused = 1007,
+    /// Session is approaching its configured `max_session_duration_s` limit.
+    SessionDurationWarning = 1008,
 
     // 2000 - 2999: Acoustic, VAD, and STT errors
     VadInitializationFailed = 2000,
@@ -52,6 +54,7 @@ impl ErrorCode {
             1005 => Some(Self::RealtimeConfigureFailed),
             1006 => Some(Self::RealtimeProviderError),
             1007 => Some(Self::ClientToolRefused),
+            1008 => Some(Self::SessionDurationWarning),
             2000 => Some(Self::VadInitializationFailed),
             2001 => Some(Self::SttWarmupFailed),
             3000 => Some(Self::LlmRetriesExhausted),

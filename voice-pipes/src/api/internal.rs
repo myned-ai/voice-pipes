@@ -195,6 +195,7 @@ async fn register_worker(
     };
 
     state.workers.insert(id.clone(), record);
+    super::orchestrator::admission::promote_queued_tickets(&state);
 
     let status = if is_new {
         StatusCode::CREATED
@@ -234,6 +235,8 @@ async fn heartbeat(
                 w.components = hb.components;
                 w.aggregate_health = hb.aggregate_health;
             }
+            drop(entry);
+            super::orchestrator::admission::promote_queued_tickets(&state);
             Json(ApiResponse::ok(serde_json::json!({
                 "worker_id": hb.worker_id,
                 "acknowledged": true,
@@ -296,9 +299,13 @@ async fn session_lifecycle_event(
     // If this is a session-end event (ended_at is set), merge with the
     // existing session so we preserve started_at and accumulated turn_count.
     if record.ended_at.is_some() {
+        let ended_worker_id = record.worker_id.clone();
         if let Some(mut existing) = state.sessions.find_session(&session_id).await {
             existing.status = record.status;
             existing.ended_at = record.ended_at;
+            if existing.tenant_id.is_none() {
+                existing.tenant_id = record.tenant_id;
+            }
             // Keep existing.started_at (the real session start time).
             // Keep existing.turn_count (accumulated by turn events).
             // Update any other fields that the end event might carry.
@@ -334,8 +341,17 @@ async fn session_lifecycle_event(
             // No existing session found -- just store whatever we got.
             state.sessions.push_session(record).await;
         }
+        super::orchestrator::admission::on_session_end(&state, &session_id, &ended_worker_id);
     } else {
+        let start_wid = record.worker_id.clone();
+        let start_tid = record.tenant_id.as_ref().map(|t| t.as_str().to_string());
         state.sessions.push_session(record).await;
+        super::orchestrator::admission::on_session_start(
+            &state,
+            &session_id,
+            &start_wid,
+            start_tid.as_deref(),
+        );
     }
 
     (

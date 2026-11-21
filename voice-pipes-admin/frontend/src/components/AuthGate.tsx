@@ -1,29 +1,43 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { KeyRound } from "lucide-react";
+import { KeyRound, LogIn, UserCheck } from "lucide-react";
+import { API_BASE } from "../config/api";
 import { useTheme } from "../contexts/ThemeContext";
-import { checkAuth, installAdminAuth, login, UNAUTHORIZED_EVENT } from "../lib/adminAuth";
+import {
+  checkAuth,
+  installAdminAuth,
+  login,
+  loginGuest,
+  UNAUTHORIZED_EVENT,
+  type AuthCheck,
+} from "../lib/adminAuth";
 
 /**
- * Blocks the whole app until the BFF accepts a token.
+ * Blocks the whole app until the BFF accepts a credential (token, HF OAuth
+ * session cookie, or isolated guest session cookie).
  *
  * On mount it asks `/api/v1/auth/check`.  If the BFF runs open
- * (`ADMIN_UI_AUTH_REQUIRED=false`) or the stored token is valid, children
- * render immediately.  Any later 401 (token rotated, cookie expired) flips the
- * gate back to the form via the `vp-admin-unauthorized` event.
+ * (`ADMIN_UI_AUTH_REQUIRED=false`) or the caller is authenticated, children
+ * render immediately.  Any later 401 flips the gate back to the login view via
+ * the `vp-admin-unauthorized` event.
  */
 type GateState = "checking" | "locked" | "open" | "unreachable";
 
 export function AuthGate({ children }: { children: ReactNode }) {
   const { isDark } = useTheme();
   const [state, setState] = useState<GateState>("checking");
+  const [authInfo, setAuthInfo] = useState<AuthCheck | null>(null);
   const [token, setToken] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const probe = useCallback(async () => {
     const res = await checkAuth();
-    if (res === null) setState("unreachable");
-    else setState(res.authenticated ? "open" : "locked");
+    if (res === null) {
+      setState("unreachable");
+    } else {
+      setAuthInfo(res);
+      setState(res.authenticated ? "open" : "locked");
+    }
   }, []);
 
   useEffect(() => {
@@ -54,7 +68,34 @@ export function AuthGate({ children }: { children: ReactNode }) {
     }
   };
 
+  const handleGuestLogin = async () => {
+    setBusy(true);
+    setError(null);
+    const ok = await loginGuest();
+    setBusy(false);
+    if (ok) {
+      setState("open");
+    } else {
+      setError("Could not start an isolated guest session.");
+    }
+  };
+
+  const handleHfLogin = () => {
+    const loginPath = authInfo?.hf_oauth_url ?? "/api/v1/auth/hf/login";
+    const targetUrl = `${API_BASE}${loginPath}`;
+    // When embedded inside the Hugging Face Space iframe, OAuth must navigate
+    // the top-level window so Hugging Face's login page is not blocked by X-Frame-Options.
+    if (window.top && window.top !== window.self) {
+      window.open(targetUrl, "_blank", "noopener");
+    } else {
+      window.location.assign(targetUrl);
+    }
+  };
+
   if (state === "open") return <>{children}</>;
+
+  const mode = authInfo?.auth_mode ?? "token";
+  const allowGuest = Boolean(authInfo?.allow_guest);
 
   const panel = isDark ? "bg-slate-900 border-slate-800 text-white" : "bg-white border-gray-200 text-gray-900";
   const input = isDark
@@ -86,7 +127,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
             </button>
           </div>
         )}
-        {state === "locked" && (
+        {state === "locked" && mode === "token" && (
           <form onSubmit={submit} className="space-y-3">
             <label className="block text-sm opacity-80" htmlFor="admin-ui-token">
               Admin token
@@ -118,6 +159,44 @@ export function AuthGate({ children }: { children: ReactNode }) {
               only.
             </p>
           </form>
+        )}
+        {state === "locked" && mode !== "token" && (
+          <div className="space-y-3">
+            <p className="text-sm opacity-80">
+              Sign in to access your isolated Voice-Pipes workspace. Your sessions, audio recordings, and metrics are
+              strictly private to your account.
+            </p>
+            {error && (
+              <p role="alert" className="text-sm text-red-400">
+                {error}
+              </p>
+            )}
+            {mode === "hf_oauth" && (
+              <button
+                type="button"
+                onClick={handleHfLogin}
+                disabled={busy}
+                className="flex w-full items-center justify-center gap-2 rounded-md bg-indigo-600 px-3 py-2.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+              >
+                <LogIn size={16} />
+                Sign in with Hugging Face
+              </button>
+            )}
+            {allowGuest && (
+              <button
+                type="button"
+                onClick={() => void handleGuestLogin()}
+                disabled={busy}
+                className="flex w-full items-center justify-center gap-2 rounded-md border border-indigo-500/40 bg-indigo-500/10 px-3 py-2.5 text-sm font-medium text-indigo-300 hover:bg-indigo-500/20 disabled:opacity-50"
+              >
+                <UserCheck size={16} />
+                {busy ? "Starting workspace…" : "Continue with Isolated Guest Session"}
+              </button>
+            )}
+            <p className="text-xs opacity-60">
+              Saved recordings and logs are automatically deleted after inactivity to keep storage clean.
+            </p>
+          </div>
         )}
       </div>
     </div>

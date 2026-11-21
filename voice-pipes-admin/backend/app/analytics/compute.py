@@ -87,9 +87,51 @@ _analytics_cache_lock = asyncio.Lock()
 _analytics_inflight: dict[tuple, "asyncio.Future"] = {}
 _analytics_scan_sem = asyncio.Semaphore(int(os.getenv("ANALYTICS_MAX_CONCURRENT_SCANS", "3")))
 
-def _captures_signature() -> tuple[int, float]:
-    """Fingerprint config.CAPTURES_DIR as (session_dir_count, max_mtime).
-    Walks the directory without opening any files."""
+def _iter_capture_session_dirs(tenant_id: str | None = None):
+    """Yield session capture directories from ``config.CAPTURES_DIR``.
+
+    When ``tenant_id`` is provided, walks ONLY ``CAPTURES_DIR/<tenant_id>/``
+    so one tenant can never see or aggregate another tenant's sessions.
+    When ``tenant_id`` is None, walks both legacy flat session dirs and
+    tenant-partitioned ``<tenant>/<session>`` subdirectories.
+    """
+    if not config.CAPTURES_DIR.exists():
+        return
+    base = config.CAPTURES_DIR.resolve()
+    if tenant_id is not None:
+        tenant_dir = (base / tenant_id).resolve()
+        if tenant_dir.parent != base or not tenant_dir.is_dir():
+            return
+        try:
+            for entry in tenant_dir.iterdir():
+                if entry.is_dir():
+                    yield entry
+        except OSError:
+            return
+        return
+
+    try:
+        for entry in config.CAPTURES_DIR.iterdir():
+            if not entry.is_dir():
+                continue
+            if (entry / "metadata.json").exists() or (entry / "events.jsonl").exists():
+                yield entry
+            else:
+                try:
+                    for sub in entry.iterdir():
+                        if sub.is_dir() and (
+                            (sub / "metadata.json").exists() or (sub / "events.jsonl").exists()
+                        ):
+                            yield sub
+                except OSError:
+                    continue
+    except OSError:
+        return
+
+
+def _captures_signature(tenant_id: str | None = None) -> tuple[int, float]:
+    """Fingerprint config.CAPTURES_DIR (or one tenant's partition) as
+    ``(session_dir_count, max_mtime)``. Walks the directory without opening files."""
     if config.CAPTURES_DIR == _CAPTURES_DIR_FALLBACK:
         _resolve_captures_dir()
 
@@ -98,19 +140,14 @@ def _captures_signature() -> tuple[int, float]:
         return (0, cleared_mt)
     count = 0
     max_mt = cleared_mt
-    try:
-        for entry in config.CAPTURES_DIR.iterdir():
-            if not entry.is_dir():
-                continue
-            count += 1
-            try:
-                mt = entry.stat().st_mtime
-                if mt > max_mt:
-                    max_mt = mt
-            except OSError:
-                pass
-    except OSError:
-        return (0, cleared_mt)
+    for entry in _iter_capture_session_dirs(tenant_id=tenant_id):
+        count += 1
+        try:
+            mt = entry.stat().st_mtime
+            if mt > max_mt:
+                max_mt = mt
+        except OSError:
+            pass
     return (count, max_mt)
 
 
@@ -204,14 +241,24 @@ def _persist_analytics_issues(issue_inputs: dict, spend_by_provider: dict) -> No
         _log.warning("analytics issues could not be persisted", exc_info=True)
 
 
-def _session_anomaly_contribution(session_id, meta, pipeline_name, session_ts) -> dict:
+def _session_anomaly_contribution(
+    session_id,
+    meta,
+    pipeline_name,
+    session_ts,
+    *,
+    tenant_id: str | None = None,
+) -> dict:
     """Run the anomaly rubric for one session and return its contribution to the
     window rollup: ``{"total": n, "by_kind": {...}, "session": row|None}``.
 
     Isolated so the (expensive) artifact walk it performs is captured into the
     durable per-session rollup (see rollup.py) and runs once per session change.
     """
-    arts = _read_capture_artifacts(session_id, events_offset=0, events_limit=5000)
+    if tenant_id is not None:
+        arts = _read_capture_artifacts(session_id, events_offset=0, events_limit=5000, tenant_id=tenant_id)
+    else:
+        arts = _read_capture_artifacts(session_id, events_offset=0, events_limit=5000)
     sess_utts = arts.get("utterances") or []
     if not sess_utts:
         return {"total": 0, "by_kind": {}, "session": None}
@@ -238,7 +285,13 @@ def _session_anomaly_contribution(session_id, meta, pipeline_name, session_ts) -
     return {"total": len(anoms), "by_kind": by_kind, "session": session}
 
 
-def _compute_session_rollup(session_dir: Path, meta: dict, *, lite: bool = False) -> dict:
+def _compute_session_rollup(
+    session_dir: Path,
+    meta: dict,
+    *,
+    lite: bool = False,
+    tenant_id: str | None = None,
+) -> dict:
     """Parse ONE session's files into its reduced window contribution.
 
     This is the cacheable unit behind the durable rollup store: it does all the
@@ -565,7 +618,9 @@ def _compute_session_rollup(session_dir: Path, meta: dict, *, lite: bool = False
         anomaly = {"total": 0, "by_kind": {}, "session": None}
     else:
         try:
-            anomaly = _session_anomaly_contribution(session_id, meta, pipeline_name, session_ts)
+            anomaly = _session_anomaly_contribution(
+                session_id, meta, pipeline_name, session_ts, tenant_id=tenant_id
+            )
         except Exception:  # noqa: BLE001 - logged; one session must not fail the window
             _log.warning("anomalies of session %s could not be computed", session_id, exc_info=True)
             anomaly = {"total": 0, "by_kind": {}, "session": None}
@@ -606,6 +661,7 @@ def _compute_analytics_window(
     pipeline: str | None = None,
     *,
     lite: bool = False,
+    tenant_id: str | None = None,
 ) -> dict:
     """Sync helper: walk captures and build the analytics payload for the
     given window.  Runs in a worker thread via asyncio.to_thread so the
@@ -627,7 +683,31 @@ def _compute_analytics_window(
     _t0 = time.perf_counter()
     if not config.CAPTURES_DIR.exists():
         return {
-            "response": {"kpi": {}, "utterances": [], "provider_changes": [], "available_pipelines": []},
+            "response": {
+                "kpi": {
+                    "total_sessions": 0,
+                    "total_utterances": 0,
+                    "avg_latency_ms": None,
+                    "p95_latency_ms": None,
+                    "avg_tokens_per_sec": None,
+                    "failed_sessions": 0,
+                    "failed_turns": 0,
+                    "error_rate_pct": None,
+                    "errors_by_component": {},
+                    "spend_total_usd": 0.0,
+                    "spend_by_provider": {},
+                    "anomalies_total": 0,
+                    "anomalies_by_kind": {},
+                    "avg_emit_rtf": None,
+                    "p90_emit_rtf": None,
+                    "max_emit_rtf": None,
+                    "turns_over_realtime": 0,
+                    "avg_provider_endpointing_ms": None,
+                },
+                "utterances": [],
+                "provider_changes": [],
+                "available_pipelines": [],
+            },
             "issue_inputs": {
                 "failed_sessions": [],
                 "provider_changes": [],
@@ -659,15 +739,15 @@ def _compute_analytics_window(
     # pipeline picker stays fully populated even when a filter is applied.
     all_pipelines: set[str] = set()
     session_metas: list[dict] = []
-    for entry in config.CAPTURES_DIR.iterdir():
-        if not entry.is_dir():
-            continue
+    for entry in _iter_capture_session_dirs(tenant_id=tenant_id):
         meta_path = entry / "metadata.json"
         if not meta_path.exists():
             continue
         try:
             with open(meta_path, encoding="utf-8") as f:
                 meta = json.load(f)
+            if tenant_id is not None and meta.get("tenant_id") and meta.get("tenant_id") != tenant_id:
+                continue
             sid = str(meta.get("id") or meta.get("session_id") or entry.name)
             meta["id"] = sid
             if sid in cleared_sessions or entry.name in cleared_sessions:
@@ -781,19 +861,20 @@ def _compute_analytics_window(
         # Reuse the durable rollup when the session's files are unchanged;
         # otherwise parse once and store.  Either path yields the same
         # reduced per-session facts in ``contrib``.
+        rollup_key = f"{tenant_id}:{session_id}" if tenant_id else session_id
         contrib = rollup.get_fresh(
-            session_id, ev_mtime, dir_mtime, _ROLLUP_SCHEMA, allow_lite=lite,
+            rollup_key, ev_mtime, dir_mtime, _ROLLUP_SCHEMA, allow_lite=lite,
         )
         if contrib is not None:
             _memo_hits += 1
         else:
             contrib = (
-                _compute_session_rollup(session_dir, meta, lite=True)
+                _compute_session_rollup(session_dir, meta, lite=True, tenant_id=tenant_id)
                 if lite
-                else _compute_session_rollup(session_dir, meta)
+                else _compute_session_rollup(session_dir, meta, tenant_id=tenant_id)
             )
             schema_to_store = -_ROLLUP_SCHEMA if lite else _ROLLUP_SCHEMA
-            rollup.put(session_id, meta.get("pipeline_name", ""), meta.get("_ts", 0.0),
+            rollup.put(rollup_key, meta.get("pipeline_name", ""), meta.get("_ts", 0.0),
                        ev_mtime, dir_mtime, schema_to_store, contrib)
             _memo_miss += 1
 
@@ -1041,13 +1122,12 @@ def clear_analytics_data(
     pipeline: str | None = None,
     session_id: str | None = None,
     delete_captures: bool = False,
+    tenant_id: str | None = None,
 ) -> dict:
     """Clear analytics state for all pipelines, a single pipeline, or one session.
 
-    Always records the clear watermark in ``analytics_cleared.json`` and purges
-    matching rows from ``rollups.db``, ``issues.db``, and the in-memory response
-    cache. When ``delete_captures`` is True, also removes matching session
-    directories from ``config.CAPTURES_DIR``.
+    When ``tenant_id`` is set, strictly scopes deletion to that tenant's
+    capture partition and rollups so one user cannot clear another user's data.
     """
     import shutil
 
@@ -1055,6 +1135,47 @@ def clear_analytics_data(
 
     if config.CAPTURES_DIR == _CAPTURES_DIR_FALLBACK:
         _resolve_captures_dir()
+
+    if tenant_id is not None:
+        state: dict = {"tenant_id": tenant_id}
+        rollups_removed = 0
+        issues_removed = 0
+        deleted_captures = 0
+        for entry in list(_iter_capture_session_dirs(tenant_id=tenant_id)):
+            meta_path = entry / "metadata.json"
+            sid = entry.name
+            pname = ""
+            if meta_path.exists():
+                try:
+                    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                    sid = str(meta.get("id") or meta.get("session_id") or entry.name)
+                    pname = str(meta.get("pipeline_name") or "")
+                except (OSError, ValueError, TypeError):
+                    pass
+            elif session_id is None and pipeline is not None:
+                continue
+
+            match = False
+            if session_id is not None:
+                match = sid == session_id or entry.name == session_id
+            elif pipeline is not None:
+                match = pname == pipeline
+            else:
+                match = meta_path.exists() or (entry / "events.jsonl").exists()
+
+            if match:
+                rollups_removed += rollup.clear_rollups(session_id=f"{tenant_id}:{sid}")
+                issues_removed += clear_issues(session_id=sid)
+                if delete_captures:
+                    shutil.rmtree(entry, ignore_errors=True)
+                    deleted_captures += 1
+        _analytics_cache.clear()
+        return {
+            "cleared": state,
+            "rollups_removed": rollups_removed,
+            "issues_removed": issues_removed,
+            "deleted_captures": deleted_captures,
+        }
 
     state = rollup.record_cleared(pipeline=pipeline, session_id=session_id)
     rollups_removed = rollup.clear_rollups(pipeline=pipeline, session_id=session_id)

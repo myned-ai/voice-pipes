@@ -24,6 +24,7 @@ When the worker closes first, its close code and reason are passed on.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 
@@ -32,6 +33,7 @@ import httpx
 import websockets
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from ..core import auth as _auth
 from ..core import config as _config
 from ..core.config import ORCHESTRATOR_URL, orch_client
 from ..core.upstream import upstream_path
@@ -57,6 +59,183 @@ UPSTREAM_QUEUE_FRAMES = 64
 
 LOOKUP_TIMEOUT_S = 5.0
 CONNECT_TIMEOUT_S = 10.0
+QUEUE_POLL_WAIT_MS = 2000
+
+
+def _admission_enabled() -> bool:
+    for var in ("PLAYGROUND_ADMISSION_ENABLED", "VP_ADMISSION_ENABLED"):
+        raw = os.getenv(var, "").strip().lower()
+        if raw in ("1", "true", "yes", "on"):
+            return True
+    return False
+
+
+async def _cancel_orchestrator_ticket(ticket_or_lease_id: str | None) -> None:
+    if not ticket_or_lease_id:
+        return
+    try:
+        async with orch_client() as client:
+            await client.delete(
+                ORCHESTRATOR_URL
+                + upstream_path("/api/v1/dispatch/tickets/{ticket_id}", ticket_id=ticket_or_lease_id),
+                timeout=3.0,
+            )
+    except Exception:
+        log.debug("playground: best-effort ticket/lease release failed", exc_info=True)
+
+
+async def _wait_in_fifo_queue(
+    client_ws: WebSocket,
+    worker_id: str,
+    initial_data: dict,
+) -> tuple[str | None, list[str | bytes]]:
+    """Stream ``queue_status`` frames to ``client_ws`` until the orchestrator
+    promotes ``ticket_id`` to ``granted`` (or the caller disconnects/cancels).
+
+    Buffers any initial handshake frames (such as ``configure``) sent by the
+    browser on socket open so they can be replayed to the worker once promoted.
+    """
+    ticket_id = str(initial_data.get("ticket_id") or "")
+    if not ticket_id:
+        raise _Refused(4503, "orchestrator returned queued status without ticket_id", before_accept=False)
+
+    await client_ws.accept()
+    await client_ws.send_text(
+        json.dumps(
+            {
+                "type": "queue_status",
+                "ticket_id": ticket_id,
+                "position": initial_data.get("position", 1),
+                "ahead": initial_data.get("ahead", 0),
+                "queue_depth": initial_data.get("queue_depth", 1),
+                "active_sessions": initial_data.get("active_sessions", 0),
+                "capacity_sessions": initial_data.get("capacity_sessions", 0),
+                "estimated_wait_s": initial_data.get("estimated_wait_s", 15),
+            }
+        )
+    )
+    last_position = initial_data.get("position")
+    lease_granted = False
+    buffered_frames: list[str | bytes] = []
+    try:
+        while True:
+            recv_task = asyncio.create_task(client_ws.receive())
+            poll_task = asyncio.create_task(_poll_ticket_once(ticket_id))
+            done, pending = await asyncio.wait(
+                {recv_task, poll_task}, return_when=asyncio.FIRST_COMPLETED
+            )
+            for p in pending:
+                p.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+
+            if recv_task in done:
+                msg = recv_task.result()
+                if msg.get("type") == "websocket.disconnect":
+                    raise _Refused(1000, "client disconnected while queued", before_accept=True)
+                text = msg.get("text")
+                data = msg.get("bytes")
+                if isinstance(text, str):
+                    if '"cancel_queue"' in text:
+                        raise _Refused(1000, "queue cancelled by user", before_accept=True)
+                    if len(text.encode("utf-8")) <= MAX_CLIENT_FRAME_BYTES and len(buffered_frames) < 16:
+                        buffered_frames.append(text)
+                elif (
+                    isinstance(data, bytes)
+                    and len(data) <= MAX_CLIENT_FRAME_BYTES
+                    and len(buffered_frames) < 16
+                ):
+                    buffered_frames.append(data)
+
+            if poll_task in done:
+                tdata = poll_task.result()
+                status = tdata.get("status")
+                if status == "granted":
+                    lease_granted = True
+                    await client_ws.send_text(
+                        json.dumps({"type": "queue_granted", "worker_id": worker_id})
+                    )
+                    return tdata.get("lease_id"), buffered_frames
+                if status == "expired":
+                    raise _Refused(4429, "queue wait timeout reached", before_accept=True)
+                if status == "cancelled":
+                    raise _Refused(1000, "queue ticket cancelled", before_accept=True)
+                pos = tdata.get("position")
+                if pos != last_position:
+                    last_position = pos
+                    await client_ws.send_text(
+                        json.dumps(
+                            {
+                                "type": "queue_status",
+                                "ticket_id": ticket_id,
+                                "position": pos,
+                                "ahead": tdata.get("ahead", 0),
+                                "queue_depth": tdata.get("queue_depth", 1),
+                                "active_sessions": tdata.get("active_sessions", 0),
+                                "capacity_sessions": tdata.get("capacity_sessions", 0),
+                                "estimated_wait_s": tdata.get("estimated_wait_s", 15),
+                            }
+                        )
+                    )
+    finally:
+        if not lease_granted:
+            await _cancel_orchestrator_ticket(ticket_id)
+
+
+async def _poll_ticket_once(ticket_id: str) -> dict:
+    try:
+        async with orch_client() as client:
+            resp = await client.get(
+                ORCHESTRATOR_URL
+                + upstream_path("/api/v1/dispatch/tickets/{ticket_id}", ticket_id=ticket_id),
+                params={"wait_ms": QUEUE_POLL_WAIT_MS},
+                timeout=LOOKUP_TIMEOUT_S + (QUEUE_POLL_WAIT_MS / 1000.0),
+            )
+    except httpx.HTTPError as exc:
+        raise _Refused(4503, "orchestrator unreachable during queue wait", before_accept=True) from exc
+    if resp.status_code == 404:
+        return {"status": "expired"}
+    if resp.status_code >= 400:
+        raise _Refused(4503, f"orchestrator answered HTTP {resp.status_code}", before_accept=True)
+    return (resp.json() or {}).get("data") or {}
+
+
+async def _acquire_admission_slot(
+    client_ws: WebSocket,
+    worker_id: str,
+    tenant_id: str | None,
+) -> tuple[bool, str | None, list[str | bytes]]:
+    """Acquire an admission lease or wait in the orchestrator's FIFO queue.
+
+    Returns ``(already_accepted, lease_id, buffered_client_frames)``.
+    """
+    if not _admission_enabled():
+        return False, None, []
+    try:
+        async with orch_client() as client:
+            resp = await client.post(
+                f"{ORCHESTRATOR_URL}/api/v1/dispatch/acquire",
+                json={"worker_id": worker_id, "tenant_id": tenant_id},
+                timeout=LOOKUP_TIMEOUT_S,
+            )
+    except httpx.HTTPError as exc:
+        log.warning("playground: dispatch acquire failed: %s: %s", type(exc).__name__, exc)
+        raise _Refused(4503, "orchestrator unreachable", before_accept=False) from exc
+
+    if resp.status_code == 429:
+        err = (resp.json() or {}).get("error") or {}
+        msg = str(err.get("message") or "Demo is at capacity, please try again shortly")[:120]
+        raise _Refused(4429, msg, before_accept=False)
+    if resp.status_code >= 400:
+        raise _Refused(4503, f"orchestrator answered HTTP {resp.status_code}", before_accept=False)
+
+    data = (resp.json() or {}).get("data") or {}
+    status = data.get("status")
+    if status == "granted":
+        return False, data.get("lease_id"), []
+    if status == "queued":
+        lease_id, buffered = await _wait_in_fifo_queue(client_ws, worker_id, data)
+        return True, lease_id, buffered
+    return False, None, []
 
 _LOOPBACK = {"localhost", "127.0.0.1", "::1", "[::1]"}
 _WILDCARD = {"0.0.0.0", "::", "[::]"}
@@ -117,19 +296,22 @@ async def _lookup_worker(worker_id: str) -> dict:
     return worker
 
 
-def _upstream_headers() -> dict[str, str]:
+def _upstream_headers(tenant_id: str | None = None) -> dict[str, str]:
     # The worker's /ws takes the client token as a bearer header as well as a
     # query parameter; the header keeps it out of the worker's access log.
+    headers: dict[str, str] = {}
     if _config.CLIENT_TOKEN:
-        return {"Authorization": f"Bearer {_config.CLIENT_TOKEN}"}
-    return {}
+        headers["Authorization"] = f"Bearer {_config.CLIENT_TOKEN}"
+    if tenant_id:
+        headers["X-Tenant-Id"] = tenant_id
+    return headers
 
 
-async def _connect_upstream(url: str):
+async def _connect_upstream(url: str, tenant_id: str | None = None):
     try:
         return await websockets.connect(
             url,
-            additional_headers=_upstream_headers(),
+            additional_headers=_upstream_headers(tenant_id=tenant_id),
             max_size=MAX_UPSTREAM_FRAME_BYTES,
             max_queue=UPSTREAM_QUEUE_FRAMES,
             open_timeout=CONNECT_TIMEOUT_S,
@@ -187,21 +369,37 @@ async def playground_ws_proxy(client_ws: WebSocket):
         await client_ws.close(code=4400, reason="worker_id is required")
         return
 
+    tenant_id = _auth.resolve_request_tenant(client_ws, client_ws.query_params.get("tenant_id"))
+    accepted = False
+    lease_id: str | None = None
+    buffered_frames: list[str | bytes] = []
+
     try:
         worker = await _lookup_worker(worker_id)
         url = worker_ws_url(worker)
         if url is None:
             raise _Refused(4502, "worker has no transport address", before_accept=False)
-        upstream = await _connect_upstream(url)
+        accepted, lease_id, buffered_frames = await _acquire_admission_slot(
+            client_ws, worker_id, tenant_id
+        )
+        try:
+            upstream = await _connect_upstream(url, tenant_id=tenant_id)
+            for frame in buffered_frames:
+                await upstream.send(frame)
+        except Exception:
+            if lease_id:
+                await _cancel_orchestrator_ticket(lease_id)
+            raise
     except _Refused as refused:
-        if not refused.before_accept:
+        if not refused.before_accept and not accepted:
             # Accept first so the browser sees the code and reason; a
             # handshake refused outright reaches it only as 1006.
             await client_ws.accept()
         await _close(client_ws, refused.code, refused.reason)
         return
 
-    await client_ws.accept()
+    if not accepted:
+        await client_ws.accept()
     pumps = {
         asyncio.create_task(_client_to_upstream(client_ws, upstream), name="client->worker"),
         asyncio.create_task(_upstream_to_client(client_ws, upstream), name="worker->client"),

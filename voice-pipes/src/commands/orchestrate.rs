@@ -76,6 +76,7 @@ where
     } else {
         OrchestratorConfig::default()
     };
+    config.dispatch.admission.apply_env_overrides();
 
     if let Ok(cwd) = std::env::current_dir() {
         if config.captures_dir.is_relative() {
@@ -142,6 +143,7 @@ where
                 chrono::Duration::seconds(heartbeat_timeout as i64),
                 chrono::Duration::seconds(dead_grace as i64),
             );
+            api::orchestrator::admission::promote_queued_tickets(&reaper_state);
         }
     });
 

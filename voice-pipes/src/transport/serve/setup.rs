@@ -130,6 +130,7 @@ pub(super) async fn bootstrap_session(
     if let Some(ref tx) = state.session_event_tx {
         let rec = super::turn::make_session_record(
             &session_id,
+            tenant_id.clone(),
             crate::api::types::SessionStatus::InProgress,
             None,
             Vec::new(),
@@ -159,6 +160,15 @@ pub(super) async fn bootstrap_session(
     )
     .await;
 
+    spawn_duration_watchdog(
+        state.config.transport.as_ref().map_or(
+            0,
+            crate::config::TransportConfig::effective_max_session_duration_s,
+        ),
+        out_tx.clone(),
+        pump_cancel.clone(),
+    );
+
     Some(BootstrappedSession {
         session_id,
         negotiated,
@@ -172,6 +182,54 @@ pub(super) async fn bootstrap_session(
         observations,
         conditions,
     })
+}
+
+fn spawn_duration_watchdog(
+    max_dur_s: u64,
+    out_tx: mpsc::Sender<ServerMessage>,
+    pump_cancel: CancellationToken,
+) {
+    if max_dur_s == 0 {
+        return;
+    }
+    tokio::spawn(async move {
+        if max_dur_s > 30 {
+            let warn_after = std::time::Duration::from_secs(max_dur_s - 30);
+            tokio::select! {
+                () = pump_cancel.cancelled() => return,
+                () = tokio::time::sleep(warn_after) => {}
+            }
+            let _ = out_tx
+                .send(ServerMessage::Control(
+                    crate::transport::ServerControl::Error {
+                        code: crate::transport::ErrorCode::SessionDurationWarning,
+                        message: "Demo session ends in 30 seconds.".to_string(),
+                        severity: crate::transport::ErrorSeverity::Warning,
+                        turn_id: None,
+                        component: None,
+                    },
+                ))
+                .await;
+            tokio::select! {
+                () = pump_cancel.cancelled() => return,
+                () = tokio::time::sleep(std::time::Duration::from_secs(30)) => {}
+            }
+        } else {
+            tokio::select! {
+                () = pump_cancel.cancelled() => return,
+                () = tokio::time::sleep(std::time::Duration::from_secs(max_dur_s)) => {}
+            }
+        }
+        let _ = out_tx
+            .send(ServerMessage::Control(
+                crate::transport::ServerControl::Closing {
+                    reason: "session_duration_limit".to_string(),
+                },
+            ))
+            .await;
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+        pump_cancel.cancel();
+    });
 }
 
 // ── Handshake ───────────────────────────────────────────────

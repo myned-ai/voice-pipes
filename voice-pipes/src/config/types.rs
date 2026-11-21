@@ -1119,6 +1119,10 @@ pub struct TransportConfig {
     /// channel and pins the session slot until the OS gives up.
     #[serde(default = "default_transport_write_timeout_ms")]
     pub write_timeout_ms: u64,
+    /// Optional maximum session duration in seconds (`0` = unlimited).
+    /// Overridable via `VP_MAX_SESSION_DURATION_S`.
+    #[serde(default)]
+    pub max_session_duration_s: u64,
 }
 
 impl Default for TransportConfig {
@@ -1129,7 +1133,20 @@ impl Default for TransportConfig {
             port: default_transport_port(),
             max_sessions: default_transport_max_sessions(),
             write_timeout_ms: default_transport_write_timeout_ms(),
+            max_session_duration_s: 0,
         }
+    }
+}
+
+impl TransportConfig {
+    /// Effective session duration ceiling (seconds), honoring `VP_MAX_SESSION_DURATION_S`.
+    pub fn effective_max_session_duration_s(&self) -> u64 {
+        if let Ok(v) = std::env::var("VP_MAX_SESSION_DURATION_S")
+            && let Ok(n) = v.trim().parse::<u64>()
+        {
+            return n;
+        }
+        self.max_session_duration_s
     }
 }
 

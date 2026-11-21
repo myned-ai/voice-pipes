@@ -1,13 +1,27 @@
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
+from ..core import features as _features
 from ..core.config import ORCHESTRATOR_URL, orch_client
 from ..core.upstream import upstream_error, upstream_path
 
+
+def _require_benchmarks() -> None:
+    if not _features.benchmarks_enabled():
+        raise HTTPException(status_code=404, detail="Benchmarks feature is disabled")
+
+
+def _require_test_suites() -> None:
+    if not _features.test_suites_enabled():
+        raise HTTPException(status_code=404, detail="Test Suites feature is disabled")
+
+
 router = APIRouter()
+_benchmarks_router = APIRouter(dependencies=[Depends(_require_benchmarks)])
+_suites_router = APIRouter(dependencies=[Depends(_require_test_suites)])
 
 
 # The orchestrator owns these shapes and validates them in full; what is
@@ -44,7 +58,7 @@ def _forward(body: BaseModel) -> dict:
 
 # ── Benchmark Proxy Routes ───────────────────────────────────
 
-@router.get("/api/v1/benchmark/configs")
+@_benchmarks_router.get("/api/v1/benchmark/configs")
 async def list_benchmark_configs():
     """Proxy to orchestrator: list pipeline TOML configs available for variant selection."""
     async with orch_client() as client:
@@ -56,7 +70,7 @@ async def list_benchmark_configs():
             return {"data": None, "error": upstream_error(e)}
 
 
-@router.get("/api/v1/benchmark/experiments")
+@_benchmarks_router.get("/api/v1/benchmark/experiments")
 async def list_experiments():
     """Proxy to orchestrator: list benchmark experiments."""
     async with orch_client() as client:
@@ -68,7 +82,7 @@ async def list_experiments():
             return {"data": None, "error": upstream_error(e)}
 
 
-@router.post("/api/v1/benchmark/experiments")
+@_benchmarks_router.post("/api/v1/benchmark/experiments")
 async def create_experiment(body: ExperimentBody):
     """Proxy to orchestrator: create a benchmark experiment."""
     async with orch_client() as client:
@@ -82,7 +96,7 @@ async def create_experiment(body: ExperimentBody):
             return {"data": None, "error": upstream_error(e)}
 
 
-@router.get("/api/v1/benchmark/experiments/{experiment_id}")
+@_benchmarks_router.get("/api/v1/benchmark/experiments/{experiment_id}")
 async def get_experiment(experiment_id: str):
     """Proxy to orchestrator: get a single experiment."""
     async with orch_client() as client:
@@ -96,7 +110,7 @@ async def get_experiment(experiment_id: str):
             return {"data": None, "error": upstream_error(e)}
 
 
-@router.delete("/api/v1/benchmark/experiments/{experiment_id}")
+@_benchmarks_router.delete("/api/v1/benchmark/experiments/{experiment_id}")
 async def delete_experiment(experiment_id: str):
     """Proxy to orchestrator: delete a benchmark experiment."""
     async with orch_client() as client:
@@ -110,7 +124,7 @@ async def delete_experiment(experiment_id: str):
             return {"data": None, "error": upstream_error(e)}
 
 
-@router.post("/api/v1/benchmark/experiments/{experiment_id}/run")
+@_benchmarks_router.post("/api/v1/benchmark/experiments/{experiment_id}/run")
 async def run_experiment(experiment_id: str, request: Request):
     """Proxy to orchestrator: trigger experiment execution.
 
@@ -134,7 +148,7 @@ async def run_experiment(experiment_id: str, request: Request):
             return {"data": None, "error": upstream_error(e)}
 
 
-@router.get("/api/v1/benchmark/experiments/{experiment_id}/results")
+@_benchmarks_router.get("/api/v1/benchmark/experiments/{experiment_id}/results")
 async def get_experiment_results(experiment_id: str):
     """Proxy to orchestrator: get experiment results."""
     async with orch_client() as client:
@@ -148,7 +162,7 @@ async def get_experiment_results(experiment_id: str):
             return {"data": None, "error": upstream_error(e)}
 
 
-@router.get("/api/v1/benchmark/experiments/{experiment_id}/variants/{variant_id}/config")
+@_benchmarks_router.get("/api/v1/benchmark/experiments/{experiment_id}/variants/{variant_id}/config")
 async def get_variant_config(experiment_id: str, variant_id: str):
     """Proxy to orchestrator: get frozen variant config TOML."""
     async with orch_client() as client:
@@ -166,7 +180,7 @@ async def get_variant_config(experiment_id: str, variant_id: str):
             return {"data": None, "error": upstream_error(e)}
 
 
-@router.get(
+@_benchmarks_router.get(
     "/api/v1/benchmark/experiments/{experiment_id}/variants/{variant_id}/scenarios/{scenario_id}/entries/{entry_id}/audio"
 )
 async def get_tts_entry_audio(experiment_id: str, variant_id: str, scenario_id: str, entry_id: str):
@@ -202,7 +216,7 @@ async def get_tts_entry_audio(experiment_id: str, variant_id: str, scenario_id: 
             raise HTTPException(status_code=502, detail={"data": None, "error": upstream_error(e)}) from e
 
 
-@router.get("/api/v1/benchmark/suites")
+@_suites_router.get("/api/v1/benchmark/suites")
 async def list_suites():
     """Proxy to orchestrator: list test suites."""
     async with orch_client() as client:
@@ -214,7 +228,7 @@ async def list_suites():
             return {"data": None, "error": upstream_error(e)}
 
 
-@router.post("/api/v1/benchmark/suites")
+@_suites_router.post("/api/v1/benchmark/suites")
 async def create_suite(body: SuiteBody):
     """Proxy to orchestrator: create a test suite."""
     async with orch_client() as client:
@@ -228,7 +242,7 @@ async def create_suite(body: SuiteBody):
             return {"data": None, "error": upstream_error(e)}
 
 
-@router.get("/api/v1/benchmark/suites/{suite_id}")
+@_suites_router.get("/api/v1/benchmark/suites/{suite_id}")
 async def get_suite(suite_id: str):
     """Proxy to orchestrator: get a single test suite."""
     async with orch_client() as client:
@@ -242,7 +256,7 @@ async def get_suite(suite_id: str):
             return {"data": None, "error": upstream_error(e)}
 
 
-@router.delete("/api/v1/benchmark/suites/{suite_id}")
+@_suites_router.delete("/api/v1/benchmark/suites/{suite_id}")
 async def delete_suite(suite_id: str):
     """Proxy to orchestrator: delete a test suite."""
     async with orch_client() as client:
@@ -256,7 +270,7 @@ async def delete_suite(suite_id: str):
             return {"data": None, "error": upstream_error(e)}
 
 
-@router.put("/api/v1/benchmark/suites/{suite_id}")
+@_suites_router.put("/api/v1/benchmark/suites/{suite_id}")
 async def update_suite(suite_id: str, body: SuiteBody):
     """Proxy to orchestrator: replace an existing test suite."""
     async with orch_client() as client:
@@ -272,3 +286,7 @@ async def update_suite(suite_id: str, body: SuiteBody):
             raise HTTPException(status_code=e.response.status_code, detail=e.response.text) from e
         except Exception as e:  # noqa: BLE001 - any upstream failure becomes the error envelope
             return {"data": None, "error": upstream_error(e)}
+
+
+router.include_router(_benchmarks_router)
+router.include_router(_suites_router)

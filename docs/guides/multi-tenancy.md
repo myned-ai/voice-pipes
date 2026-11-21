@@ -124,3 +124,13 @@ In fleet deployments with an orchestrator:
 - SQLite session metadata includes an indexed `tenant_id` column (`idx_sessions_tenant`).
 - Queries to `GET /api/v1/sessions?tenant_id=<id>` filter at the database engine level.
 - Orchestrator capture reconciler (`reconcile_sessions_from_captures`) walks both flat and tenant-partitioned capture directories, recovering tenant metadata automatically if the database was recreated.
+
+---
+
+## 6. Per-Tenant Concurrency Quotas & Queueing
+
+To prevent a single tenant from monopolizing worker capacity or flooding the waiting queue, enable `[dispatch.admission]` in `orchestrator.toml` (or set `VP_ADMISSION_ENABLED=true` and `VP_ADMISSION_MAX_PER_TENANT=1`):
+
+- `max_per_tenant` caps the combined total of **active + leased + queued** sessions for any single `tenant_id`.
+- In multi-tenant Admin BFF mode (`ADMIN_MULTI_TENANT=true`), `GET /api/v1/capacity` automatically strips `per_tenant_active` so tenants see only aggregate slot availability and queue depth, never another tenant's identifier.
+- See [Admission Control, FIFO Waiting Queue & Production Autoscaling](admission-control-and-autoscaling.md).

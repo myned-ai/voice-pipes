@@ -1053,7 +1053,7 @@ mod sqlite {
                       pipeline_config_hash, tags, turn_count, data)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
                  ON CONFLICT(id) DO UPDATE SET
-                     tenant_id = excluded.tenant_id,
+                     tenant_id = COALESCE(excluded.tenant_id, sessions.tenant_id),
                      worker_id = excluded.worker_id,
                      started_at = excluded.started_at,
                      ended_at = excluded.ended_at,

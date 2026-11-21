@@ -874,6 +874,8 @@ pub struct DispatchConfig {
     pub policy: String,
     /// When true, reject dispatch requests that don't specify a pipeline filter.
     pub require_pipeline_match: bool,
+    /// Admission control, per-tenant concurrency quota, and FIFO waiting queue.
+    pub admission: AdmissionConfig,
 }
 
 impl Default for DispatchConfig {
@@ -881,6 +883,80 @@ impl Default for DispatchConfig {
         Self {
             policy: "least-connections".to_string(),
             require_pipeline_match: false,
+            admission: AdmissionConfig::default(),
+        }
+    }
+}
+
+/// Admission control, per-tenant quota, and FIFO queue settings (`[dispatch.admission]`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AdmissionConfig {
+    /// Enable admission quotas and queueing. Default `false` (unbounded local dev).
+    pub enabled: bool,
+    /// Global active session ceiling across the fleet (`0` = sum of healthy worker `max_concurrent`).
+    pub max_active_sessions: u32,
+    /// Maximum concurrent (`active + leased + queued`) sessions per `tenant_id` (`0` = unlimited).
+    pub max_per_tenant: u32,
+    /// Maximum waiting callers in the FIFO queue (`0` = fast-reject with 429 when full).
+    pub max_queue_size: usize,
+    /// Maximum seconds a caller may wait in the queue before expiring.
+    pub queue_timeout_s: u64,
+    /// Seconds a granted lease holds a reserved slot before expiring if unclaimed.
+    pub lease_ttl_s: u64,
+    /// Initial session duration estimate (seconds) used for queue ETA calculation.
+    pub avg_session_duration_hint_s: u64,
+}
+
+impl Default for AdmissionConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            max_active_sessions: 0,
+            max_per_tenant: 0,
+            max_queue_size: 0,
+            queue_timeout_s: 120,
+            lease_ttl_s: 15,
+            avg_session_duration_hint_s: 90,
+        }
+    }
+}
+
+impl AdmissionConfig {
+    /// Apply `VP_ADMISSION_*` environment variable overrides so container and
+    /// Hugging Face Space deployments can tune quotas without editing TOML files.
+    pub fn apply_env_overrides(&mut self) {
+        if let Ok(v) = std::env::var("VP_ADMISSION_ENABLED") {
+            let s = v.trim();
+            if !s.is_empty() {
+                self.enabled =
+                    matches!(s.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on");
+            }
+        }
+        if let Ok(v) = std::env::var("VP_ADMISSION_MAX_ACTIVE")
+            && let Ok(n) = v.trim().parse::<u32>()
+        {
+            self.max_active_sessions = n;
+        }
+        if let Ok(v) = std::env::var("VP_ADMISSION_MAX_PER_TENANT")
+            && let Ok(n) = v.trim().parse::<u32>()
+        {
+            self.max_per_tenant = n;
+        }
+        if let Ok(v) = std::env::var("VP_ADMISSION_MAX_QUEUE")
+            && let Ok(n) = v.trim().parse::<usize>()
+        {
+            self.max_queue_size = n;
+        }
+        if let Ok(v) = std::env::var("VP_ADMISSION_QUEUE_TIMEOUT_S")
+            && let Ok(n) = v.trim().parse::<u64>()
+        {
+            self.queue_timeout_s = n.max(5);
+        }
+        if let Ok(v) = std::env::var("VP_ADMISSION_LEASE_TTL_S")
+            && let Ok(n) = v.trim().parse::<u64>()
+        {
+            self.lease_ttl_s = n.max(3);
         }
     }
 }
@@ -1064,7 +1140,7 @@ pub struct TtsProviderInfo {
 // ── Dispatch types ──────────────────────────────────────────
 
 /// Query parameters for `GET /api/v1/dispatch`.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct DispatchQuery {
     /// Filter workers by pipeline name.
     pub pipeline_name: Option<String>,
@@ -1077,12 +1153,80 @@ pub struct DispatchQuery {
 }
 
 /// Dispatch response with the selected worker's connection info.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DispatchResponse {
     pub worker_id: String,
     pub ws_url: String,
     pub pipeline_name: Option<String>,
     pub pipeline_config_hash: String,
+}
+
+/// Request body for `POST /api/v1/dispatch/acquire`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AcquireDispatchRequest {
+    pub worker_id: Option<String>,
+    pub pipeline_name: Option<String>,
+    pub pipeline_hash: Option<String>,
+    pub tags: Option<String>,
+    pub policy: Option<String>,
+    pub tenant_id: Option<String>,
+}
+
+/// Response payload for `POST /api/v1/dispatch/acquire` and `GET /api/v1/dispatch/tickets/{id}`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum AcquireDispatchResponse {
+    Granted {
+        worker_id: String,
+        ws_url: String,
+        pipeline_name: Option<String>,
+        pipeline_config_hash: String,
+        lease_id: String,
+        expires_in_s: u64,
+    },
+    Queued {
+        ticket_id: String,
+        position: usize,
+        ahead: usize,
+        queue_depth: usize,
+        active_sessions: u32,
+        capacity_sessions: u32,
+        estimated_wait_s: u64,
+    },
+    Expired {
+        ticket_id: String,
+        reason: String,
+    },
+    Cancelled {
+        ticket_id: String,
+    },
+}
+
+/// Query parameters for `GET /api/v1/dispatch/tickets/{id}`.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct TicketPollQuery {
+    /// Optional long-poll timeout in milliseconds (clamped to `0..=25_000`).
+    pub wait_ms: Option<u64>,
+}
+
+/// Fleet capacity, queue depth, and concurrency telemetry (`GET /api/v1/capacity`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CapacitySnapshot {
+    pub admission_enabled: bool,
+    pub active_sessions: u32,
+    pub leased_sessions: u32,
+    pub capacity_sessions: u32,
+    pub effective_limit: u32,
+    pub utilization_ratio: f64,
+    pub queue_depth: usize,
+    pub max_queue_size: usize,
+    pub max_per_tenant: u32,
+    pub estimated_wait_s: u64,
+    pub peak_concurrent_1h: u32,
+    pub peak_concurrent_24h: u32,
+    pub active_tenants: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub per_tenant_active: Option<std::collections::BTreeMap<String, u32>>,
 }
 
 // ── Pipeline group types ────────────────────────────────────
