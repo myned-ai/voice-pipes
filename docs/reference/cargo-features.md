@@ -32,7 +32,7 @@ From `voice-pipes/Cargo.toml`. No default features: the engine adds only the pro
 |---|---|---|
 | `batteries` | `telemetry`, `realtime`, `wizard`, `audio-device`, `session-sqlite` | Everything the CLI builds of the engine by default, in one name: the out-of-the-box providers and the local tools. For the engine's own tests and for embedders who want the same set. The CLI adds the plugin crates named in its `default-plugins` list. |
 | `wizard` | `dep:dialoguer` | The interactive setup wizard (`config-wizard`): terminal prompts. |
-| `audio-device` | `dep:cpal` | Local microphone and speaker (`live`, `listen`, `interactive`); needs the platform audio headers at build time (ALSA on Linux). |
+| `audio-device` | `dep:cpal`, `dep:rtrb` | Local microphone and speaker (`live`, `listen`, `interactive`); needs the platform audio headers at build time (ALSA on Linux). |
 | `session-sqlite` | `dep:rusqlite` | The orchestrator's SQLite session store (`provider = "sqlite"`); the in-memory and file stores need nothing extra. |
 
 ### STT providers

@@ -62,13 +62,12 @@ allow = [
     "Zlib",
     "BSL-1.0",
     "Unicode-3.0",
-    "Unicode-DFS-2016",
     "CC0-1.0",
     "CDLA-Permissive-2.0",
-    "OpenSSL",
     "MPL-2.0",
 ]
 confidence-threshold = 0.8
+unused-allowed-license = "allow"
 
 [[licenses.clarify]]
 name = "ring"

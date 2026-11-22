@@ -6,7 +6,7 @@ description = "Neuphonic NeuTTS-Air text-to-speech (local GGUF Qwen2 + ONNX NeuC
 license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
-readme.workspace = true
+readme = "README.md"
 keywords.workspace = true
 categories.workspace = true
 

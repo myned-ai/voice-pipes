@@ -16,7 +16,6 @@ workspace = true
 [dependencies]
 voice-pipes-sdk.workspace = true
 rustfft.workspace = true
-tracing.workspace = true
 
 [dev-dependencies]
 voice-pipes-sdk = { workspace = true, features = ["testing"] }

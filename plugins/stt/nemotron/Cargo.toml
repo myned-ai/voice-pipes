@@ -6,7 +6,7 @@ description = "NVIDIA Nemotron-Speech-Streaming (English, cache-aware, local ONN
 license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
-readme.workspace = true
+readme = "README.md"
 keywords.workspace = true
 categories.workspace = true
 

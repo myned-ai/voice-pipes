@@ -32,7 +32,7 @@ batteries = ["telemetry", "realtime", "wizard", "audio-device", "session-sqlite"
 wizard = ["dep:dialoguer"]
 # Local microphone and speaker (`live`, `listen`, `interactive`); needs the
 # platform audio headers at build time (ALSA on Linux).
-audio-device = ["dep:cpal"]
+audio-device = ["dep:cpal", "dep:rtrb"]
 # The orchestrator's SQLite session store (`provider = "sqlite"`); the
 # in-memory and file stores need nothing extra.
 session-sqlite = ["dep:rusqlite"]
@@ -83,7 +83,7 @@ voice-pipes-onnx.workspace = true
 voice-pipes-net.workspace = true
 
 # ── Always required ──────────────────────────────────────────
-rtrb.workspace = true
+rtrb = { workspace = true, optional = true }
 anyhow.workspace = true
 sha2.workspace = true
 tokio = { workspace = true, features = ["full"] }

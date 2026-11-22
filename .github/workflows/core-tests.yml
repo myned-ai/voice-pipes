@@ -393,7 +393,9 @@ jobs:
       - name: install the audio headers the CLI's default build needs
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
       - name: cargo publish --dry-run, every crate
-        run: cargo publish --workspace --dry-run
+        run: |
+          cargo publish --workspace --dry-run
+          rm -rf target/package
 
   client-fsm-tests:
     name: vitest client SDK FSM
