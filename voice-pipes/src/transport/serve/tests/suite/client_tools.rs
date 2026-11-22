@@ -312,6 +312,7 @@ async fn cascade_client_tool_round_trip_over_the_wire() {
         audio_post_processors: Arc::clone(&base.audio_post_processors),
         annotators: Arc::clone(&base.annotators),
         active_sessions: Arc::new(AtomicUsize::new(0)),
+        active_sessions_notify: None,
         max_sessions: base.max_sessions,
         ready: AtomicBool::new(true),
         shutdown: tokio_util::sync::CancellationToken::new(),

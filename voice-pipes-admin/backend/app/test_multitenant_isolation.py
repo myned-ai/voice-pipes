@@ -342,6 +342,126 @@ class AuditRegressionTests(unittest.TestCase):
         self.assertFalse(_is_cancel_queue_message('{"type": "transcript", "text": "\\"cancel_queue\\""}'))
         self.assertFalse(_is_cancel_queue_message("not-json"))
 
+    def test_hf_oauth_popup_flow_uses_minimal_openid_scope_and_auto_closes(self):
+        from urllib.parse import parse_qs, urlparse
+
+        from app.core import auth as auth_mod
+
+        self.assertEqual(auth_mod.OAUTH_SCOPES, "openid")
+        client = TestClient(self.main.app)
+
+        class _FakeResp:
+            def __init__(self, payload: dict):
+                self._payload = payload
+
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return self._payload
+
+        class _FakeOAuthClient:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return False
+
+            async def post(self, url: str, **kwargs):
+                return _FakeResp({"access_token": "tok-123"})
+
+            async def get(self, url: str, **kwargs):
+                # Minimal openid response: only opaque `sub`, no username/email/profile
+                return _FakeResp({"sub": "987654321"})
+
+        with (
+            mock.patch.object(auth_mod, "OAUTH_CLIENT_ID", "cid-test"),
+            mock.patch.object(auth_mod, "OAUTH_CLIENT_SECRET", "csec-test"),
+            mock.patch("app.routers.auth.httpx.AsyncClient", _FakeOAuthClient),
+        ):
+            login_resp = client.get("/api/v1/auth/hf/login?popup=1", follow_redirects=False)
+            self.assertEqual(login_resp.status_code, 302)
+            parsed = urlparse(login_resp.headers["location"])
+            qs = parse_qs(parsed.query)
+            self.assertEqual(qs["scope"], ["openid"])
+            state = qs["state"][0]
+
+            cb_resp = client.get(
+                f"/api/v1/auth/hf/callback?code=abc&state={state}",
+                follow_redirects=False,
+            )
+            self.assertEqual(cb_resp.status_code, 200)
+            self.assertIn("window.close()", cb_resp.text)
+
+            check = client.get("/api/v1/auth/check").json()["data"]
+            self.assertTrue(check["authenticated"])
+            self.assertEqual(check["tenant_id"], "hf-987654321")
+
+    def test_usage_endpoint_requires_operator_and_aggregates_sessions(self):
+        import sys
+
+        live_auth = sys.modules["app.core.auth"]
+
+        alice = self._client_for("hf-alice")
+        self.assertEqual(alice.get("/api/v1/usage").status_code, 403)
+
+        class _FakeResp:
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {
+                    "data": {
+                        "items": [
+                            {
+                                "id": "s1",
+                                "tenant_id": "hf-alice",
+                                "started_at": "2026-11-22T17:00:00Z",
+                                "ended_at": "2026-11-22T17:01:30Z",
+                                "turn_count": 4,
+                                "status": "completed",
+                            },
+                            {
+                                "id": "s2",
+                                "tenant_id": "hf-bob",
+                                "started_at": "2026-11-22T18:00:00Z",
+                                "ended_at": "2026-11-22T18:00:30Z",
+                                "turn_count": 2,
+                                "status": "completed",
+                            },
+                        ]
+                    }
+                }
+
+        class _FakeOrch:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return False
+
+            async def get(self, url: str, **kwargs):
+                return _FakeResp()
+
+        with (
+            mock.patch.object(live_auth, "ADMIN_UI_TOKEN", "op-secret-token"),
+            mock.patch("app.routers.sessions.orch_client", return_value=_FakeOrch()),
+        ):
+            op = TestClient(self.main.app)
+            resp = op.get("/api/v1/usage", headers={"Authorization": "Bearer op-secret-token"})
+            self.assertEqual(resp.status_code, 200)
+            data = resp.json()["data"]
+            self.assertEqual(data["unique_users"], 2)
+            self.assertEqual(data["total_sessions"], 2)
+            self.assertEqual(data["total_duration_s"], 120.0)
+            self.assertEqual(data["total_duration_minutes"], 2.0)
+            self.assertEqual(data["total_turns"], 6)
+            self.assertEqual(len(data["per_day"]), 1)
+            self.assertEqual(data["per_day"][0]["unique_users"], 2)
+
 
 if __name__ == "__main__":
     unittest.main()

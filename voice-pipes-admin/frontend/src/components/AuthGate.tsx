@@ -29,6 +29,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const [token, setToken] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [awaitingOAuth, setAwaitingOAuth] = useState(false);
 
   const probe = useCallback(async () => {
     const res = await checkAuth();
@@ -58,8 +59,30 @@ export function AuthGate({ children }: { children: ReactNode }) {
     if (state !== "locked") return;
     const onFocus = () => void probe();
     window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
+    let ch: BroadcastChannel | null = null;
+    if (typeof BroadcastChannel !== "undefined") {
+      ch = new BroadcastChannel("vp-admin-auth");
+      ch.onmessage = () => void probe();
+    }
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      ch?.close();
+    };
   }, [probe, state]);
+
+  useEffect(() => {
+    if (state !== "locked" || !awaitingOAuth) return;
+    // Storage Partitioning in modern browsers isolates BroadcastChannel between
+    // top-level *.hf.space popups and huggingface.co iframes, and closing the
+    // popup may return focus to the parent page without firing iframe focus.
+    // Poll briefly while OAuth is in flight so the iframe unlocks immediately.
+    const interval = setInterval(() => void probe(), 1000);
+    const timeout = setTimeout(() => setAwaitingOAuth(false), 120_000);
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
+  }, [awaitingOAuth, probe, state]);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -90,10 +113,13 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const handleHfLogin = () => {
     const loginPath = authInfo?.hf_oauth_url ?? "/api/v1/auth/hf/login";
     const targetUrl = `${API_BASE}${loginPath}`;
-    // When embedded inside the Hugging Face Space iframe, OAuth must navigate
-    // the top-level window so Hugging Face's login page is not blocked by X-Frame-Options.
+    // When embedded inside the Hugging Face Space iframe, OAuth must open in a
+    // top-level window so Hugging Face's login page is not blocked by X-Frame-Options.
     if (window.top && window.top !== window.self) {
-      window.open(targetUrl, "_blank", "noopener");
+      const sep = targetUrl.includes("?") ? "&" : "?";
+      const popupUrl = `${targetUrl}${sep}popup=1`;
+      setAwaitingOAuth(true);
+      window.open(popupUrl, "vp_hf_oauth", "width=520,height=680,popup=yes,noopener");
     } else {
       window.location.assign(targetUrl);
     }
@@ -173,6 +199,12 @@ export function AuthGate({ children }: { children: ReactNode }) {
               Sign in to access your isolated Voice-Pipes workspace. Your sessions, audio recordings, and metrics are
               strictly private to your account.
             </p>
+            {mode === "hf_oauth" && (
+              <p className="text-xs opacity-70">
+                Only an anonymous Hugging Face account ID is shared—used solely to separate your recordings and
+                per-user session slot from other visitors (no email, repos, or API tokens).
+              </p>
+            )}
             {error && (
               <p role="alert" className="text-sm text-red-400">
                 {error}

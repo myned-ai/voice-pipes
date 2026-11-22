@@ -181,6 +181,86 @@ class PlaygroundQueueTests(unittest.TestCase):
         self.assertEqual(data["queue_depth"], 1)
         self.assertNotIn("per_tenant_active", data)
 
+    def test_failed_upstream_connect_releases_lease_with_tenant_id(self):
+        deleted_leases: list[tuple[str, str | None]] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            path = request.url.path
+            if path == "/api/v1/workers/w1":
+                # Unreachable port 1 so _connect_upstream fails after lease grant
+                return httpx.Response(
+                    200, json={"data": {"id": "w1", "transport_address": "127.0.0.1:1"}}
+                )
+            if path == "/api/v1/dispatch/acquire":
+                return httpx.Response(
+                    200,
+                    json={
+                        "data": {
+                            "status": "granted",
+                            "worker_id": "w1",
+                            "ws_url": "ws://127.0.0.1:1/ws",
+                            "lease_id": "vp_lease_fail",
+                            "expires_in_s": 15,
+                        }
+                    },
+                )
+            if path == "/api/v1/dispatch/tickets/vp_lease_fail" and request.method == "DELETE":
+                deleted_leases.append((path, request.headers.get("x-tenant-id")))
+                return httpx.Response(200, json={"data": {"id": "vp_lease_fail", "cancelled": True}})
+            return httpx.Response(404)
+
+        client = self._setup_client(handler, multi_tenant=True)
+        with client.websocket_connect("/api/v1/playground/ws?worker_id=w1") as ws:
+            msg = ws.receive()
+            self.assertEqual(msg["type"], "websocket.close")
+            self.assertEqual(msg["code"], 4502)
+
+        self.assertEqual(
+            deleted_leases,
+            [("/api/v1/dispatch/tickets/vp_lease_fail", "hf-alice")],
+        )
+
+    def test_session_close_releases_unredeemed_lease_with_tenant_id(self):
+        deleted_leases: list[tuple[str, str | None]] = []
+        with _EchoWorker() as worker:
+
+            def handler(request: httpx.Request) -> httpx.Response:
+                path = request.url.path
+                if path == "/api/v1/workers/w1":
+                    return httpx.Response(
+                        200,
+                        json={"data": {"id": "w1", "transport_address": f"127.0.0.1:{worker.port}"}},
+                    )
+                if path == "/api/v1/dispatch/acquire":
+                    return httpx.Response(
+                        200,
+                        json={
+                            "data": {
+                                "status": "granted",
+                                "worker_id": "w1",
+                                "ws_url": f"ws://127.0.0.1:{worker.port}/ws",
+                                "lease_id": "vp_lease_close",
+                                "expires_in_s": 15,
+                            }
+                        },
+                    )
+                if path == "/api/v1/dispatch/tickets/vp_lease_close" and request.method == "DELETE":
+                    deleted_leases.append((path, request.headers.get("x-tenant-id")))
+                    return httpx.Response(
+                        200, json={"data": {"id": "vp_lease_close", "cancelled": True}}
+                    )
+                return httpx.Response(404)
+
+            client = self._setup_client(handler, multi_tenant=True)
+            with client.websocket_connect("/api/v1/playground/ws?worker_id=w1") as ws:
+                ws.send_text("ping")
+                self.assertEqual(ws.receive_text(), "ping")
+
+        self.assertEqual(
+            deleted_leases,
+            [("/api/v1/dispatch/tickets/vp_lease_close", "hf-alice")],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

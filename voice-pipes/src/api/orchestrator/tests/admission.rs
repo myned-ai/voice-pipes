@@ -439,3 +439,122 @@ async fn expired_ticket_increments_timeout_rejection_counter() {
     );
     assert_eq!(build_capacity_snapshot(&state).queue_depth, 0);
 }
+
+#[tokio::test]
+async fn heartbeat_after_ws_connect_before_session_start_does_not_double_count() {
+    let state = state_with_admission(
+        vec![make_worker("w1", 2)],
+        AdmissionConfig {
+            enabled: true,
+            max_active_sessions: 2,
+            max_per_tenant: 1,
+            max_queue_size: 5,
+            ..Default::default()
+        },
+    );
+
+    let (st, j) = resp_json(
+        acquire_dispatch(
+            State(Arc::clone(&state)),
+            HeaderMap::new(),
+            Json(AcquireDispatchRequest {
+                tenant_id: Some("alice".into()),
+                ..Default::default()
+            }),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(st, StatusCode::OK);
+    assert_eq!(j["data"]["status"], "granted");
+
+    // Client WebSocket connects to worker (`active_sessions` becomes 1 on the worker)
+    // and triggers an immediate heartbeat BEFORE `Configure` / `on_session_start`
+    // has redeemed the lease on the orchestrator.
+    let merged = super::on_worker_heartbeat(
+        &state,
+        "w1",
+        WorkerCapacity {
+            active_sessions: 1,
+            max_concurrent: 2,
+        },
+    );
+    assert_eq!(
+        merged.active_sessions, 1,
+        "a single connected session whose lease is not yet redeemed must not be double-counted as 2"
+    );
+}
+
+#[tokio::test]
+async fn heartbeat_before_session_end_does_not_double_decrement() {
+    let state = state_with_admission(
+        vec![make_worker("w1", 2)],
+        AdmissionConfig {
+            enabled: true,
+            max_active_sessions: 2,
+            max_per_tenant: 1,
+            max_queue_size: 5,
+            ..Default::default()
+        },
+    );
+
+    for (tenant, sid) in [("alice", "s1"), ("bob", "s2")] {
+        let (st, _) = resp_json(
+            acquire_dispatch(
+                State(Arc::clone(&state)),
+                HeaderMap::new(),
+                Json(AcquireDispatchRequest {
+                    tenant_id: Some(tenant.into()),
+                    ..Default::default()
+                }),
+            )
+            .await,
+        )
+        .await;
+        assert_eq!(st, StatusCode::OK);
+        on_session_start(&state, sid, "w1", Some(tenant));
+    }
+    assert_eq!(
+        state
+            .workers
+            .get("w1")
+            .expect("w1")
+            .capacity
+            .active_sessions,
+        2
+    );
+
+    // Session s1 disconnects: worker's event-driven heartbeat (reporting 1 remaining
+    // active session) arrives at the orchestrator right BEFORE `on_session_end("s1")`.
+    let merged = super::on_worker_heartbeat(
+        &state,
+        "w1",
+        WorkerCapacity {
+            active_sessions: 1,
+            max_concurrent: 2,
+        },
+    );
+    state.workers.get_mut("w1").expect("w1").capacity = merged;
+    assert_eq!(
+        state
+            .workers
+            .get("w1")
+            .expect("w1")
+            .capacity
+            .active_sessions,
+        1
+    );
+
+    // Now `on_session_end` for s1 arrives; s2 is still active so active_sessions must remain 1.
+    on_session_end(&state, "s1", "w1");
+    assert_eq!(
+        state
+            .workers
+            .get("w1")
+            .expect("w1")
+            .capacity
+            .active_sessions,
+        1,
+        "on_session_end must not decrement below the remaining active session count when heartbeat arrived first"
+    );
+}

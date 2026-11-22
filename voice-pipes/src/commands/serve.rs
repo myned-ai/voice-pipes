@@ -361,6 +361,7 @@ async fn register_param_stores(state: &Arc<WorkerState>) {
 async fn bootstrap_transport(
     state: &Arc<WorkerState>,
     shutdown: &tokio_util::sync::CancellationToken,
+    heartbeat_notify: Arc<tokio::sync::Notify>,
 ) -> Result<Option<TransportSetup>, anyhow::Error> {
     let transport_cfg = state.config.transport.clone().unwrap_or_default();
     if !transport_cfg.enabled {
@@ -558,6 +559,7 @@ async fn bootstrap_transport(
         audio_post_processors,
         annotators,
         active_sessions: Arc::clone(&state.live_sessions),
+        active_sessions_notify: Some(heartbeat_notify),
         max_sessions: transport_cfg.max_sessions,
         ready: std::sync::atomic::AtomicBool::new(true),
         shutdown: shutdown.clone(),
@@ -723,6 +725,7 @@ fn spawn_orchestrator_client(
     actual_transport_address: Option<String>,
     public_transport_address: Option<String>,
     internal_auth: &api::auth::SurfaceAuth,
+    heartbeat_notify: Arc<tokio::sync::Notify>,
 ) -> Result<(), anyhow::Error> {
     let Some(endpoint) = state.worker_config.orchestrator.endpoint.clone() else {
         info!("worker node ready (standalone, no orchestrator endpoint)");
@@ -789,7 +792,13 @@ fn spawn_orchestrator_client(
         let mut ticker = tokio::time::interval(tokio::time::Duration::from_secs(interval));
         let mut registered = true;
         loop {
-            ticker.tick().await;
+            tokio::select! {
+                _ = ticker.tick() => {}
+                () = heartbeat_notify.notified() => {
+                    // Coalesce bursty connect/disconnect notifications.
+                    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+                }
+            }
 
             if !registered {
                 match client.post(&reg_url).json(&reg_payload).send().await {
@@ -1189,7 +1198,9 @@ pub async fn run_serve(
 
     // 2) Transport bootstrap (optional).
     let shutdown = tokio_util::sync::CancellationToken::new();
-    let transport_setup = bootstrap_transport(&state, &shutdown).await?;
+    let heartbeat_notify = Arc::new(tokio::sync::Notify::new());
+    let transport_setup =
+        bootstrap_transport(&state, &shutdown, Arc::clone(&heartbeat_notify)).await?;
     // Internal address (bind:port) for the orchestrator itself — the
     // benchmark runner connects through it, swapping a wildcard host for
     // the worker's service name. The browser-facing address is separate.
@@ -1213,6 +1224,7 @@ pub async fn run_serve(
         actual_transport_address,
         public_transport_address,
         &internal_auth,
+        heartbeat_notify,
     )?;
 
     // 4) Event forwarders + transport server (when transport is enabled).

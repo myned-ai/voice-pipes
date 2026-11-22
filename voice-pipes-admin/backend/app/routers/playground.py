@@ -27,6 +27,8 @@ import asyncio
 import json
 import logging
 import os
+import time
+from datetime import UTC, datetime
 
 import anyio
 import httpx
@@ -37,6 +39,7 @@ from ..core import auth as _auth
 from ..core import config as _config
 from ..core.config import ORCHESTRATOR_URL, orch_client
 from ..core.upstream import upstream_path
+from .stream import notify_fleet_change
 
 log = logging.getLogger("admin.playground")
 
@@ -419,7 +422,7 @@ async def playground_ws_proxy(client_ws: WebSocket):
                 await upstream.send(frame)
         except Exception:
             if lease_id:
-                await _cancel_orchestrator_ticket(lease_id)
+                await _cancel_orchestrator_ticket(lease_id, tenant_id=tenant_id)
             raise
     except _Refused as refused:
         if not refused.before_accept and not accepted:
@@ -431,6 +434,9 @@ async def playground_ws_proxy(client_ws: WebSocket):
 
     if not accepted:
         await client_ws.accept()
+    started_iso = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    t0 = time.monotonic()
+    notify_fleet_change(delay_s=0.05)
     pumps = {
         asyncio.create_task(_client_to_upstream(client_ws, upstream), name="client->worker"),
         asyncio.create_task(_upstream_to_client(client_ws, upstream), name="worker->client"),
@@ -470,4 +476,15 @@ async def playground_ws_proxy(client_ws: WebSocket):
                 await asyncio.wait_for(upstream.close(), timeout=2.0)
             except (Exception, asyncio.CancelledError):  # noqa: BLE001, S110 - worker might already be closed or unreachable
                 pass
+            if lease_id:
+                await _cancel_orchestrator_ticket(lease_id, tenant_id=tenant_id)
             await _close(client_ws, close_code, close_reason)
+            log.info(
+                "[usage] tenant=%s worker=%s started_at=%s duration_s=%.1f close_code=%d",
+                tenant_id or "anonymous",
+                worker_id,
+                started_iso,
+                max(0.0, time.monotonic() - t0),
+                close_code,
+            )
+            notify_fleet_change(delay_s=0.05)

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from datetime import datetime
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -544,3 +545,103 @@ async def get_turn(
             raise HTTPException(status_code=e.response.status_code, detail=e.response.text) from e
         except Exception as e:  # noqa: BLE001 - any upstream failure becomes the error envelope
             return {"data": None, "error": upstream_error(e)}
+
+
+def _parse_iso_duration_s(started_at: str | None, ended_at: str | None) -> float | None:
+    if not started_at or not ended_at:
+        return None
+    try:
+        s = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+        e = datetime.fromisoformat(ended_at.replace("Z", "+00:00"))
+        return round(max(0.0, (e - s).total_seconds()), 2)
+    except ValueError:
+        return None
+
+
+@router.get("/api/v1/usage")
+async def get_usage_summary(
+    request: Request,
+    limit: int = Query(500, ge=1, le=500),
+):
+    """Operator-only usage summary across all visitors (who, when, and for how long)."""
+    _auth.require_operator(request)
+    async with orch_client() as client:
+        try:
+            response = await client.get(
+                f"{ORCHESTRATOR_URL}/api/v1/sessions",
+                params={"page": 1, "per_page": limit},
+                timeout=5.0,
+            )
+            response.raise_for_status()
+            raw_items = ((response.json() or {}).get("data") or {}).get("items") or []
+        except Exception as e:  # noqa: BLE001
+            return {"data": None, "error": upstream_error(e)}
+
+    users: set[str] = set()
+    total_duration_s = 0.0
+    total_turns = 0
+    per_day_map: dict[str, dict] = {}
+    sessions_out: list[dict] = []
+
+    for item in raw_items:
+        if not isinstance(item, dict):
+            continue
+        sid = item.get("session_id") or item.get("id")
+        tid = item.get("tenant_id") or "anonymous"
+        started_at = item.get("started_at")
+        ended_at = item.get("ended_at")
+        turns = int(item.get("turn_count") or 0)
+        dur = item.get("duration_s")
+        if not isinstance(dur, (int, float)):
+            dur = _parse_iso_duration_s(started_at, ended_at)
+        dur_val = round(float(dur), 2) if isinstance(dur, (int, float)) else 0.0
+
+        users.add(str(tid))
+        total_duration_s += dur_val
+        total_turns += turns
+
+        day = str(started_at)[:10] if isinstance(started_at, str) and len(started_at) >= 10 else "unknown"
+        bucket = per_day_map.setdefault(
+            day, {"date": day, "sessions": 0, "users": set(), "duration_s": 0.0, "turns": 0}
+        )
+        bucket["sessions"] += 1
+        bucket["users"].add(str(tid))
+        bucket["duration_s"] = round(bucket["duration_s"] + dur_val, 2)
+        bucket["turns"] += turns
+
+        sessions_out.append(
+            {
+                "session_id": sid,
+                "tenant_id": tid,
+                "started_at": started_at,
+                "ended_at": ended_at,
+                "duration_s": dur_val if dur is not None else None,
+                "turn_count": turns,
+                "status": item.get("status"),
+            }
+        )
+
+    per_day = [
+        {
+            "date": d["date"],
+            "sessions": d["sessions"],
+            "unique_users": len(d["users"]),
+            "duration_s": d["duration_s"],
+            "turns": d["turns"],
+        }
+        for d in sorted(per_day_map.values(), key=lambda x: x["date"], reverse=True)
+    ]
+    count = len(sessions_out)
+    return {
+        "data": {
+            "unique_users": len(users),
+            "total_sessions": count,
+            "total_duration_s": round(total_duration_s, 2),
+            "total_duration_minutes": round(total_duration_s / 60.0, 2),
+            "avg_duration_s": round(total_duration_s / count, 2) if count else 0.0,
+            "total_turns": total_turns,
+            "per_day": per_day,
+            "sessions": sessions_out,
+        },
+        "error": None,
+    }

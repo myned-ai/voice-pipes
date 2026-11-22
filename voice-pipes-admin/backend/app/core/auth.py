@@ -67,7 +67,7 @@ ADMIN_MULTI_TENANT: bool = os.getenv("ADMIN_MULTI_TENANT", "false").strip().lowe
 OAUTH_CLIENT_ID: str = os.getenv("OAUTH_CLIENT_ID", "").strip()
 OAUTH_CLIENT_SECRET: str = os.getenv("OAUTH_CLIENT_SECRET", "").strip()
 OPENID_PROVIDER_URL: str = os.getenv("OPENID_PROVIDER_URL", "https://huggingface.co").strip().rstrip("/")
-OAUTH_SCOPES: str = os.getenv("OAUTH_SCOPES", "openid profile").strip() or "openid profile"
+OAUTH_SCOPES: str = os.getenv("OAUTH_SCOPES", "openid").strip() or "openid"
 SPACE_HOST: str = os.getenv("SPACE_HOST", "").strip()
 
 _ALLOW_GUEST_RAW = os.getenv("ADMIN_ALLOW_GUEST", "").strip().lower()
@@ -283,10 +283,11 @@ def require_operator(request) -> None:
     multi_tenant = getattr(live_auth, "ADMIN_MULTI_TENANT", ADMIN_MULTI_TENANT)
     if not multi_tenant:
         return
+    check_token = getattr(live_auth, "token_matches", token_matches)
     if (
         request is not None
         and hasattr(request, "scope")
-        and token_matches(credential_from_scope(request.scope))
+        and check_token(credential_from_scope(request.scope))
     ):
         return
     from fastapi import HTTPException
@@ -328,7 +329,6 @@ def is_authorized(scope: Scope) -> bool:
         if tid is not None:
             scope.setdefault("state", {})["tenant_id"] = tid
             return True
-        return False
     return token_matches(credential_from_scope(scope))
 
 

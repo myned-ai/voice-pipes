@@ -14,7 +14,7 @@ from urllib.parse import urlencode
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Request, Response
-from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 
 from ..core import auth as _auth
@@ -127,8 +127,50 @@ async def auth_guest(request: Request, response: Response):
     return {"data": {"ok": True, "tenant_id": tenant_id}, "error": None}
 
 
+_POPUP_SUCCESS_HTML = """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Signed in — Voice-Pipes</title>
+  <style>
+    body {
+      margin: 0; font-family: system-ui, -apple-system, sans-serif;
+      background: #020617; color: #f8fafc;
+      display: grid; place-items: center; min-height: 100vh; padding: 1.5rem;
+    }
+    .card {
+      max-width: 24rem; background: #0f172a; border: 1px solid #1e293b;
+      border-radius: 0.75rem; padding: 1.5rem; text-align: center;
+    }
+    h1 { font-size: 1.125rem; margin: 0 0 0.5rem; }
+    p { font-size: 0.875rem; color: #cbd5e1; margin: 0 0 1rem; line-height: 1.5; }
+    a {
+      display: inline-block; padding: 0.5rem 0.9rem; border-radius: 0.375rem;
+      background: #4f46e5; color: #fff; text-decoration: none; font-size: 0.875rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Signed in to Voice-Pipes</h1>
+    <p>You can close this window and return to the Space.</p>
+    <a href="/">Continue in this tab</a>
+  </div>
+  <script>
+    try {
+      const ch = new BroadcastChannel("vp-admin-auth");
+      ch.postMessage("signed-in");
+      ch.close();
+    } catch (_) {}
+    window.close();
+  </script>
+</body>
+</html>"""
+
+
 @router.get("/api/v1/auth/hf/login")
-async def auth_hf_login(request: Request):
+async def auth_hf_login(request: Request, popup: bool = Query(False)):
     """Start Hugging Face OpenID Connect / OAuth2 sign-in flow."""
     if not _auth.ADMIN_MULTI_TENANT or not _auth.hf_oauth_enabled():
         raise HTTPException(status_code=404, detail="Hugging Face OAuth is not configured")
@@ -144,9 +186,10 @@ async def auth_hf_login(request: Request):
     )
     authorize_url = f"{_auth.OPENID_PROVIDER_URL}/oauth/authorize?{params}"
     resp = RedirectResponse(url=authorize_url, status_code=302)
+    state_cookie = f"1:{state}" if popup else state
     resp.set_cookie(
         key=_auth.OAUTH_STATE_COOKIE_NAME,
-        value=state,
+        value=state_cookie,
         httponly=True,
         samesite=_cookie_samesite(request),
         secure=_cookie_secure(request),
@@ -163,13 +206,22 @@ async def auth_hf_callback(
     state: str | None = Query(None),
     error: str | None = Query(None),
 ):
-    """Complete Hugging Face OAuth2 sign-in and bind the user's HF username as tenant_id."""
+    """Complete Hugging Face OAuth2 sign-in and bind the user's HF subject ID as tenant_id."""
     if not _auth.ADMIN_MULTI_TENANT or not _auth.hf_oauth_enabled():
         raise HTTPException(status_code=404, detail="Hugging Face OAuth is not configured")
+    raw_state_cookie = request.cookies.get(_auth.OAUTH_STATE_COOKIE_NAME) or ""
+    is_popup = raw_state_cookie.startswith("1:")
+    expected_state = raw_state_cookie[2:] if is_popup else raw_state_cookie
     if error:
         log.warning("HF OAuth returned error: %s", error)
+        if is_popup:
+            return HTMLResponse(
+                "<!doctype html><title>Sign-in cancelled</title>"
+                "<p>Sign-in was cancelled. You can close this window.</p>"
+                "<script>window.close();</script>",
+                status_code=200,
+            )
         return RedirectResponse(url="/?auth_error=oauth_denied", status_code=302)
-    expected_state = request.cookies.get(_auth.OAUTH_STATE_COOKIE_NAME)
     if not code or not state or not expected_state or not secrets.compare_digest(state, expected_state):
         raise HTTPException(status_code=400, detail="Invalid OAuth state")
 
@@ -211,7 +263,9 @@ async def auth_hf_callback(
         raise HTTPException(status_code=502, detail="OAuth profile missing username")
 
     tenant_id = _auth.sanitize_tenant_id(f"hf-{raw_user}")
-    resp = RedirectResponse(url="/", status_code=302)
+    resp: HTMLResponse | RedirectResponse = (
+        HTMLResponse(_POPUP_SUCCESS_HTML) if is_popup else RedirectResponse(url="/", status_code=302)
+    )
     resp.delete_cookie(key=_auth.OAUTH_STATE_COOKIE_NAME, path="/")
     _set_tenant_cookie(resp, request, tenant_id)
     return resp

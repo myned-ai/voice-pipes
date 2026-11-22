@@ -39,6 +39,9 @@ struct ActiveSessionGuard {
 impl Drop for ActiveSessionGuard {
     fn drop(&mut self) {
         self.state.active_sessions.fetch_sub(1, Ordering::Relaxed);
+        if let Some(notify) = &self.state.active_sessions_notify {
+            notify.notify_one();
+        }
     }
 }
 
@@ -63,6 +66,9 @@ pub async fn run_session(session: Box<dyn TransportSession + Send>, state: Arc<T
     // skipped on any panic (an `.expect()` or a poisoned ledger lock), which
     // permanently burned a capacity slot until `/readyz` rejected everything.
     state.active_sessions.fetch_add(1, Ordering::Relaxed);
+    if let Some(notify) = &state.active_sessions_notify {
+        notify.notify_one();
+    }
     let _active_guard = ActiveSessionGuard {
         state: Arc::clone(&state),
     };

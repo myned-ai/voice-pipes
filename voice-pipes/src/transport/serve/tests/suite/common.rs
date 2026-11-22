@@ -177,6 +177,7 @@ pub(super) fn test_state_customised(
         audio_post_processors: Arc::new(vec![]),
         annotators: Arc::new(vec![]),
         active_sessions: Arc::new(AtomicUsize::new(0)),
+        active_sessions_notify: None,
         max_sessions: 16,
         ready: AtomicBool::new(true),
         shutdown: tokio_util::sync::CancellationToken::new(),

@@ -33,6 +33,11 @@ class _FleetStream:
         self._latest: dict | None = None
         self._task: asyncio.Task | None = None
         self._lock = asyncio.Lock()
+        self._wake = asyncio.Event()
+
+    def notify(self) -> None:
+        """Wake the poller immediately so live session changes propagate without waiting for the poll interval."""
+        self._wake.set()
 
     async def _fetch(self) -> dict:
         snap: dict = {"workers": [], "components": [], "error": None}
@@ -61,6 +66,7 @@ class _FleetStream:
     async def _loop(self) -> None:
         try:
             while True:
+                self._wake.clear()
                 snap = await self._fetch()
                 self._latest = snap
                 for q in list(self._subs):
@@ -68,7 +74,12 @@ class _FleetStream:
                         q.put_nowait(snap)
                     except asyncio.QueueFull:
                         pass  # slow client — it'll get the next snapshot
-                await asyncio.sleep(_FLEET_POLL_S)
+                try:
+                    await asyncio.wait_for(self._wake.wait(), timeout=_FLEET_POLL_S)
+                    # Coalesce rapid back-to-back session events before polling orchestrator.
+                    await asyncio.sleep(0.1)
+                except TimeoutError:
+                    pass
         except asyncio.CancelledError:
             pass
 
@@ -92,6 +103,17 @@ class _FleetStream:
 
 
 _fleet_stream = _FleetStream()
+
+
+def notify_fleet_change(delay_s: float = 0.0) -> None:
+    """Trigger an immediate (or shortly-delayed) fleet snapshot refresh."""
+    if delay_s > 0:
+        try:
+            asyncio.get_running_loop().call_later(delay_s, _fleet_stream.notify)
+            return
+        except RuntimeError:
+            pass
+    _fleet_stream.notify()
 
 
 @router.get("/api/v1/stream/fleet")

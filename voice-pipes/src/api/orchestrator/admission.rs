@@ -484,6 +484,14 @@ pub(crate) fn on_worker_heartbeat(
     };
     let now = Instant::now();
     clean_expired(&mut inner, state, &ctrl.counters, now);
+    let tracked_on_worker = u32::try_from(
+        inner
+            .active_sessions
+            .values()
+            .filter(|(wid, _)| wid == worker_id)
+            .count(),
+    )
+    .unwrap_or(u32::MAX);
     let pending_leases = u32::try_from(
         inner
             .leases
@@ -492,7 +500,9 @@ pub(crate) fn on_worker_heartbeat(
             .count(),
     )
     .unwrap_or(u32::MAX);
-    cap.active_sessions = cap.active_sessions.saturating_add(pending_leases);
+    let untracked_live = cap.active_sessions.saturating_sub(tracked_on_worker);
+    let unconnected_leases = pending_leases.saturating_sub(untracked_live);
+    cap.active_sessions = cap.active_sessions.saturating_add(unconnected_leases);
     cap
 }
 
@@ -504,10 +514,26 @@ pub(crate) fn on_session_end(state: &OrchestratorState, session_id: &str, worker
         let wid = removed
             .as_ref()
             .map_or(worker_id, |(recorded_wid, _)| recorded_wid.as_str());
-        if !wid.is_empty()
-            && let Some(mut w) = state.workers.get_mut(wid)
-        {
-            w.capacity.active_sessions = w.capacity.active_sessions.saturating_sub(1);
+        if !wid.is_empty() {
+            let remaining_tracked = u32::try_from(
+                inner
+                    .active_sessions
+                    .values()
+                    .filter(|(w, _)| w == wid)
+                    .count(),
+            )
+            .unwrap_or(u32::MAX);
+            let pending_leases =
+                u32::try_from(inner.leases.values().filter(|l| l.worker_id == wid).count())
+                    .unwrap_or(u32::MAX);
+            let min_expected = remaining_tracked.saturating_add(pending_leases);
+            if let Some(mut w) = state.workers.get_mut(wid) {
+                w.capacity.active_sessions = w
+                    .capacity
+                    .active_sessions
+                    .saturating_sub(1)
+                    .max(min_expected);
+            }
         }
     }
     promote_queued_tickets(state);

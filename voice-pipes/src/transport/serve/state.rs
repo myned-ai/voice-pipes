@@ -40,6 +40,9 @@ pub struct TransportState {
     /// The count cannot be derived from the worker's turn-history store,
     /// which only ever holds completed turns and so would always yield 0.
     pub active_sessions: Arc<AtomicUsize>,
+    /// Optional notifier woken whenever `active_sessions` changes so the
+    /// worker's orchestrator heartbeat reports session start/end immediately.
+    pub active_sessions_notify: Option<Arc<tokio::sync::Notify>>,
     /// Maximum concurrent sessions.
     pub max_sessions: usize,
     /// Set to `true` once all models are loaded and the server is ready to
