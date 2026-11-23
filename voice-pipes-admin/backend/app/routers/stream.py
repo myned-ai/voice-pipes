@@ -14,10 +14,12 @@ keeps flowing when clients use the stream instead of polling.
 import asyncio
 import json
 import os
+import sys
 
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
+from ..core import auth as _auth
 from ..core.config import ORCHESTRATOR_URL, orch_client
 from ..core.upstream import upstream_error
 from .health import _ingest_worker_snapshot
@@ -40,7 +42,7 @@ class _FleetStream:
         self._wake.set()
 
     async def _fetch(self) -> dict:
-        snap: dict = {"workers": [], "components": [], "error": None}
+        snap: dict = {"workers": [], "components": [], "capacity": None, "error": None}
         async with orch_client() as client:
             try:
                 wr = await client.get(f"{ORCHESTRATOR_URL}/api/v1/workers", timeout=5.0)
@@ -60,6 +62,18 @@ class _FleetStream:
                 elif isinstance(cdata, dict):
                     snap["components"] = cdata.get("items") or cdata.get("components") or []
             except Exception:  # noqa: BLE001, S110 - components are optional; the workers error above covers a down orchestrator
+                pass
+            try:
+                cap_r = await client.get(f"{ORCHESTRATOR_URL}/api/v1/capacity", timeout=5.0)
+                cap_r.raise_for_status()
+                cap_data = (cap_r.json() or {}).get("data")
+                if isinstance(cap_data, dict):
+                    live_auth = sys.modules.get("app.core.auth", _auth)
+                    if getattr(live_auth, "ADMIN_MULTI_TENANT", _auth.ADMIN_MULTI_TENANT):
+                        cap_data = dict(cap_data)
+                        cap_data.pop("per_tenant_active", None)
+                    snap["capacity"] = cap_data
+            except Exception:  # noqa: BLE001, S110 - capacity is optional
                 pass
         return snap
 

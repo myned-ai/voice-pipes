@@ -230,6 +230,8 @@ fn control_session_ready_uses_control_envelope() {
             tts_model: None,
             first_utterance_id: 1,
             text_utterance_id_base: 10_000,
+            barge_in_enabled: None,
+            turn_detection_mode: None,
             ignored_options: Vec::new(),
         },
     };
@@ -429,4 +431,350 @@ fn control_tts_only_error_round_trip() {
     assert_eq!(v["payload"]["action"], "tts_only_error");
     assert_eq!(v["payload"]["id"], "long-mixed-04");
     assert_eq!(v["payload"]["error"], "tts produced no audio");
+}
+
+#[test]
+fn pipeline_message_binary_base64_roundtrip() {
+    let json = serde_json::json!({
+        "type": "message",
+        "payload": {
+            "kind": "image",
+            "binary": "AQID"
+        }
+    });
+    let decoded = decode_client_message(Message::Text(json.to_string().into()))
+        .expect("base64 binary field should decode")
+        .expect("message should be Some");
+    let ClientMessage::Message(pm) = decoded else {
+        panic!("expected ClientMessage::Message");
+    };
+    assert_eq!(pm.kind, "image");
+    assert_eq!(pm.binary.as_deref(), Some(&[1u8, 2, 3][..]));
+
+    let encoded = encode_server_message(&ServerMessage::Message(pm), 0).unwrap();
+    let Message::Text(out_text) = encoded else {
+        panic!("expected text frame");
+    };
+    let out_json: serde_json::Value = serde_json::from_str(&out_text).unwrap();
+    assert_eq!(out_json["payload"]["binary"], "AQID");
+}
+
+#[test]
+fn pipeline_message_binary_rejects_invalid_base64() {
+    let json = serde_json::json!({
+        "type": "message",
+        "payload": {
+            "kind": "image",
+            "binary": "not-valid-base64!!!"
+        }
+    });
+    let err = decode_client_message(Message::Text(json.to_string().into())).unwrap_err();
+    assert!(
+        matches!(err, TransportError::Codec(_)),
+        "expected Codec error, got {err:?}"
+    );
+}
+
+#[test]
+fn control_say_commit_clear_decode() {
+    let say_json = serde_json::json!({
+        "type": "control",
+        "payload": { "action": "say", "text": "Welcome!", "interrupt": true }
+    });
+    match decode_client_message(Message::Text(say_json.to_string().into())).unwrap() {
+        Some(ClientMessage::Control(ClientControl::Say { text, interrupt })) => {
+            assert_eq!(text, "Welcome!");
+            assert!(interrupt);
+        }
+        other => panic!("expected ClientControl::Say, got {other:?}"),
+    }
+
+    let commit_json = serde_json::json!({
+        "type": "control",
+        "payload": { "action": "commit_input" }
+    });
+    assert!(matches!(
+        decode_client_message(Message::Text(commit_json.to_string().into())).unwrap(),
+        Some(ClientMessage::Control(ClientControl::CommitInput))
+    ));
+
+    let clear_json = serde_json::json!({
+        "type": "control",
+        "payload": { "action": "clear_input" }
+    });
+    assert!(matches!(
+        decode_client_message(Message::Text(clear_json.to_string().into())).unwrap(),
+        Some(ClientMessage::Control(ClientControl::ClearInput))
+    ));
+}
+
+/// Contract test: every `ClientControl` and `ServerControl` wire `action` in
+/// Rust must be declared in `voice-pipes-admin/frontend/src/lib/transport/types.ts`
+/// and vice versa, preventing silent protocol drift.
+#[test]
+fn rust_and_typescript_control_actions_match() {
+    use crate::transport::{ErrorCode, ErrorSeverity, SessionConfig, SessionMode};
+    use std::collections::BTreeSet;
+
+    fn extract_ts_actions(ts: &str, type_name: &str) -> BTreeSet<String> {
+        let header = format!("export type {type_name} =");
+        let start = ts
+            .find(&header)
+            .unwrap_or_else(|| panic!("missing `{header}` in types.ts"));
+        let rest = &ts[start + header.len()..];
+        let end = rest
+            .find(";\n")
+            .or_else(|| rest.find(";\r\n"))
+            .unwrap_or(rest.len());
+        let block = &rest[..end];
+        let mut actions = BTreeSet::new();
+        for part in block.split("action: \"").skip(1) {
+            if let Some(q) = part.find('"') {
+                actions.insert(part[..q].to_string());
+            }
+        }
+        actions
+    }
+
+    fn client_action(ctrl: &ClientControl) -> String {
+        // Exhaustive match so adding a new ClientControl variant forces
+        // updating this contract test.
+        match ctrl {
+            ClientControl::Cancel
+            | ClientControl::Ping { .. }
+            | ClientControl::Configure(_)
+            | ClientControl::Resume { .. }
+            | ClientControl::PlaybackReport { .. }
+            | ClientControl::PlaybackComplete { .. }
+            | ClientControl::PlaybackQuality { .. }
+            | ClientControl::NetReport { .. }
+            | ClientControl::TimingReport { .. }
+            | ClientControl::InjectAudio { .. }
+            | ClientControl::ClientToolResult { .. }
+            | ClientControl::TtsOnlySynthesize { .. }
+            | ClientControl::Say { .. }
+            | ClientControl::CommitInput
+            | ClientControl::ClearInput => {}
+        }
+        serde_json::to_value(ctrl).unwrap()["action"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    }
+
+    fn server_action(ctrl: &ServerControl) -> String {
+        // Exhaustive match so adding a new ServerControl variant forces
+        // updating this contract test.
+        match ctrl {
+            ServerControl::SessionReady(_)
+            | ServerControl::Pong { .. }
+            | ServerControl::StateChanged { .. }
+            | ServerControl::QualityUpdate { .. }
+            | ServerControl::Error { .. }
+            | ServerControl::Closing { .. }
+            | ServerControl::SessionSummary { .. }
+            | ServerControl::TurnMetrics { .. }
+            | ServerControl::ClearAudio { .. }
+            | ServerControl::TextTruncated { .. }
+            | ServerControl::UtteranceDropped { .. }
+            | ServerControl::TtsOnlyResult { .. }
+            | ServerControl::TtsOnlyError { .. } => {}
+        }
+        serde_json::to_value(ctrl).unwrap()["action"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    }
+
+    let rust_client: BTreeSet<String> = [
+        ClientControl::Cancel,
+        ClientControl::Ping { timestamp_ms: 0 },
+        ClientControl::Configure(SessionConfig::default()),
+        ClientControl::Resume {
+            session_token: String::new(),
+        },
+        ClientControl::PlaybackReport {
+            utterance_id: 1,
+            last_played_offset_ms: 0,
+            last_played_text: None,
+        },
+        ClientControl::PlaybackComplete { utterance_id: 1 },
+        ClientControl::PlaybackQuality {
+            utterance_id: 1,
+            underrun_count: 0,
+            total_silence_ms: 0,
+            audio_ms: 0,
+            heard_ms: 0,
+            wall_ms: 0,
+            arrival_wall_ms: 0,
+            interrupted: false,
+            annotation_late_count: 0,
+            annotation_late_ms_max: 0,
+            gaps: Vec::new(),
+        },
+        ClientControl::NetReport {
+            playback_buffer_ms: 0,
+            underruns: 0,
+            audio_received_ms: 0,
+            wall_ms: 0,
+            uplink_backlog_bytes: 0,
+        },
+        ClientControl::TimingReport {
+            utterance_id: 1,
+            event: crate::transport::TimingEventKind::SpeechStart,
+            client_timestamp_ms: 0,
+            detail: None,
+        },
+        ClientControl::InjectAudio {
+            source: String::new(),
+            scenario_id: None,
+            experiment_id: None,
+            speed: 1.0,
+        },
+        ClientControl::ClientToolResult {
+            call_id: String::new(),
+            phase: crate::transport::ClientToolPhase::Completed,
+            result: None,
+            speak: false,
+        },
+        ClientControl::TtsOnlySynthesize {
+            id: String::new(),
+            text: String::new(),
+            language: None,
+            voice: None,
+        },
+        ClientControl::Say {
+            text: String::new(),
+            interrupt: false,
+        },
+        ClientControl::CommitInput,
+        ClientControl::ClearInput,
+    ]
+    .iter()
+    .map(client_action)
+    .collect();
+
+    let rust_server: BTreeSet<String> = [
+        ServerControl::SessionReady(SessionInfo {
+            session_id: String::new(),
+            session_token: String::new(),
+            resumed: false,
+            client_config: None,
+            negotiated: NegotiatedConfig {
+                audio_format: AudioFormat::PcmI16Le,
+                input_sample_rate: 16_000,
+                output_sample_rate: 16_000,
+                channels: 1,
+                language: None,
+                voice: None,
+                stt_provider: None,
+                tts_provider: None,
+                app_data: None,
+                options: std::collections::HashMap::default(),
+                mode: SessionMode::Voice,
+                protocol_version: 1,
+                metric_descriptors: Vec::new(),
+                stt_model: None,
+                llm_model: None,
+                tts_model: None,
+                first_utterance_id: 1,
+                text_utterance_id_base: 10_000,
+                barge_in_enabled: None,
+                turn_detection_mode: None,
+                ignored_options: Vec::new(),
+            },
+        }),
+        ServerControl::Pong {
+            client_timestamp_ms: 0,
+            server_timestamp_ms: 0,
+        },
+        ServerControl::StateChanged {
+            state: PipelineState::Listening,
+        },
+        ServerControl::QualityUpdate {
+            quality: crate::transport::ConnectionQuality::Good,
+            tier: crate::transport::QualityTier::Full,
+        },
+        ServerControl::Error {
+            code: ErrorCode::InvalidHandshake,
+            message: String::new(),
+            severity: ErrorSeverity::Error,
+            turn_id: None,
+            component: None,
+        },
+        ServerControl::Closing {
+            reason: String::new(),
+        },
+        ServerControl::SessionSummary {
+            turns: 0,
+            interrupted_turns: 0,
+            avg_ttft_ms: None,
+            avg_ttfb_ms: None,
+            avg_total_ms: None,
+            total_audio_duration_ms: 0,
+        },
+        ServerControl::TurnMetrics {
+            snapshot: crate::pipeline::metrics::TurnMetricsSnapshot::default(),
+        },
+        ServerControl::ClearAudio {
+            utterance_id: 1,
+            reason: String::new(),
+        },
+        ServerControl::TextTruncated {
+            utterance_id: 1,
+            final_text: String::new(),
+        },
+        ServerControl::UtteranceDropped {
+            utterance_id: 1,
+            reason: String::new(),
+            audio_ms: 0,
+        },
+        ServerControl::TtsOnlyResult {
+            id: String::new(),
+            metrics: crate::transport::TtsOnlyMetrics {
+                ttfb_ms: Some(0),
+                synthesis_ms: Some(0),
+                audio_duration_ms: Some(0),
+                sample_rate: Some(16_000),
+                chars: Some(0),
+                rtf: Some(0.0),
+                provider: Some(String::new()),
+                cold_start: false,
+                voice: None,
+                error: None,
+                peak_amplitude: None,
+                speech_ratio: None,
+            },
+            audio_ref: crate::transport::AudioRef {
+                path: String::new(),
+                format: "wav".into(),
+                sample_rate: 16_000,
+                channels: 1,
+                duration_ms: 0,
+            },
+        },
+        ServerControl::TtsOnlyError {
+            id: String::new(),
+            error: String::new(),
+        },
+    ]
+    .iter()
+    .map(server_action)
+    .collect();
+
+    let ts_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../voice-pipes-admin/frontend/src/lib/transport/types.ts");
+    let ts_src = std::fs::read_to_string(&ts_path)
+        .unwrap_or_else(|e| panic!("failed to read {}: {e}", ts_path.display()));
+    let ts_client = extract_ts_actions(&ts_src, "ClientControl");
+    let ts_server = extract_ts_actions(&ts_src, "ServerControl");
+
+    assert_eq!(
+        rust_client, ts_client,
+        "ClientControl wire actions drifted between Rust and TypeScript types.ts"
+    );
+    assert_eq!(
+        rust_server, ts_server,
+        "ServerControl wire actions drifted between Rust and TypeScript types.ts"
+    );
 }

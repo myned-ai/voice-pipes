@@ -224,6 +224,19 @@ pub(super) async fn handshake_with_rate(
         ServerMessage::Control(ServerControl::SessionReady(_)) => {}
         other => panic!("expected SessionReady, got {other:?}"),
     }
+
+    // Consume initial StateChanged(Listening).
+    let listening = client
+        .recv_server()
+        .await
+        .unwrap()
+        .expect("expected initial StateChanged(Listening)");
+    match listening {
+        ServerMessage::Control(ServerControl::StateChanged {
+            state: crate::transport::PipelineState::Listening,
+        }) => {}
+        other => panic!("expected StateChanged(Listening), got {other:?}"),
+    }
 }
 
 /// Drive a handshake with `cfg` and return the negotiated input rate.
@@ -347,6 +360,7 @@ macro_rules! classic_ctx {
             tts_session: Arc::clone(&$bed.tts_session),
             spec_manager: None,
             sanitize_cfg: None,
+            default_tts_hints: None,
             client_tools: &$bed.client_tools,
             client_calls: &mut $bed.client_calls,
         }

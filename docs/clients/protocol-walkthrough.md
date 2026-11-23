@@ -54,13 +54,13 @@ Used for state management, pipeline orchestration, and metadata handshakes.
 | **`resume`** | `{"action":"resume", "session_token":"<opaque-token>"}` | *(Client-to-Server, first message only)* Reconnects within grace period and requests replay of buffered server messages. |
 | **`session_ready`** | `{"action":"session_ready", "client_config": {...}, "negotiated": {...}, "session_id": "...", "session_token": "...", "resumed": false}` | Fired when handshake succeeds. <br><br>• `resumed=false`: new session from `configure`.<br>• `resumed=true`: resumed session from `resume` (replay may follow).<br>• `session_token`: authoritative token for the next reconnect; token is rotated on successful resume. |
 | **`state_changed`** | `{"action":"state_changed", "state":"processing"}` | Broadcasts the current active component of the pipeline.<br><br>• `state`: Can be `listening` (waiting for user voice), `processing` (LLM thinking/STT finalized), `speaking` (TTS sending voice packets), or `draining` (waiting for client playback to complete). |
-| **`text_truncated`** | `{"action":"text_truncated", "utterance_id":1, "final_text":"Sure!", "reason":"barge_in"}` | Sent by the backend when an utterance is interrupted (barge-in or cancellation). Trims the chat transcript to exact spoken text instead of relying on client estimates.<br><br>• `utterance_id`: The ID of the interrupted utterance.<br>• `final_text`: The exact final string to replace the chat bubble with. |
+| **`text_truncated`** | `{"action":"text_truncated", "utterance_id":1, "final_text":"Sure!"}` | Sent by the backend when an utterance is interrupted (barge-in or cancellation). Trims the chat transcript to exact spoken text instead of relying on client estimates.<br><br>• `utterance_id`: The ID of the interrupted utterance.<br>• `final_text`: The exact final string to replace the chat bubble with. |
 | **`utterance_dropped`** | `{"action":"utterance_dropped", "utterance_id":12, "reason":"empty_transcript", "audio_ms":1254}` | Sent when the user spoke and no turn came of it; the pipeline stays in `listening`. Show it, or speech that interrupted the agent and was not recognised looks like an agent that refused to answer.<br><br>• `reason`: `empty_transcript` (no words), `too_short` (under the minimum) or `stt_timeout` (the recogniser never answered and was restarted).<br>• `audio_ms`: How much speech the recogniser was given. |
 | **`playback_complete`** | `{"action":"playback_complete", "utterance_id":1}` | *(Client-to-Server)* Sent by the client to tell the backend that the UI has finished playing out the audio buffer. Moves the server from `draining` to `listening`. |
 | **`timing_report`** | `{"action":"timing_report", "utterance_id":2, "event":"speech_end", "client_timestamp_ms":1724700000123}` | *(Client-to-Server, optional)* Client-side instrumentation stamps, persisted generically as `client_timing` trace events (the Session History reader pairs them by `utterance_id`).<br><br>• `event`: `speech_start` — the client VAD's start of speech (**changed**: it used to mean "first mic frame after the mic opened"); `speech_end` — the client VAD's end of speech (energy endpointer: enter 0.02 / exit 0.012 RMS, 300 ms hangover, 150 ms min speech), sent **at most once per user turn** and only while the user's turn is open (`listening` / `processing`, or a segment that began there) — never during agent playback unless the barge-in path has already taken the turn; the worker also uses a `speech_end` that arrives before the response as a fallback TTFB anchor (`ttfb_anchor_source: "client_speech_end"`), so it is sent promptly; `audio_receive` — first audio byte of the turn received; `playback_start` / `playback_end` — first sample audible / natural end of playback.<br>• `client_timestamp_ms`: `Date.now()` wall clock at the event. The reader tolerates clock offset via the ping/pong clock sync; the `speech_end` → `audio_receive` pairing is client-to-client, so skew cancels.<br>• `utterance_id`: for `speech_*` the client does not yet know the id of the turn it is about to trigger, so it sends **the highest id seen so far + 1** (`speech_start` during agent playback carries the interrupted utterance's id instead). |
 | **`turn_metrics`** | `{"action":"turn_metrics", "snapshot": {"utterance_id":2, "total_ms":2830, "interrupted":false, "components":[{"component_id":"realtime","kind":"realtime","extras":{"ttfb_ms":1623,"first_text_ms":1081,"ttfb_anchor_source":"input_transcript_proxy","user_speech_end_epoch_ms":1724700000000,"vp_speech_end_epoch_ms":1724699999334,"provider_endpointing_ms":666,"audio_output_ms":1500}}]}}` | Per-turn metrics snapshot, one per utterance after the turn ends. `components[]` is registry-driven (`kind: "stt" \| "llm" \| "tts" \| "realtime" \| "output" \| "audio_post" \| …`); the field vocabulary is advertised on `session_ready.metric_descriptors`. Speech-to-speech sessions collapse stt/llm/tts into one `kind: "realtime"` component whose extras carry:<br><br>• `ttfb_ms`: end-of-speech anchor → first **audio** delta with samples (server side, pre-chain). Never the first transcript.<br>• `first_text_ms`: anchor → first output-transcript delta (diagnostic: "the model started"; absent on audio-only turns).<br>• `ttfb_anchor_source`: string — `provider_speech_stopped` (OpenAI `input_audio_buffer.speech_stopped`), `input_transcript_proxy` (Gemini: last input-transcript delta, lands 0.45–1.0 s late), `vp_vad` (the worker's uplink end-of-speech observer), `client_speech_end` (a client `timing_report speech_end` that arrived before the response), `text_submit`, or `turn_start` (no anchor — `ttfb_ms` ≈ 0 and must not be read as latency). Advertised with `unit: "raw"`.<br>• `user_speech_end_epoch_ms`: wall clock of the anchor above (only for anchored sources).<br>• `vp_speech_end_epoch_ms`: wall clock at which the worker's own VAD observer saw the uplink go silent (`[realtime_provider.endpoint_observer]`, default on).<br>• `provider_endpointing_ms`: provider anchor − `vp_speech_end_epoch_ms` — how long the provider took to notice the user stopped. The S2S `endpointing_ms`; latency on the critical path, budget 500 ms.<br>• `audio_output_ms`, `input_audio_ms`, `sample_rate`: as before.<br>• Input audio quality of the user speech the turn answers, metered by the same observer and absent when it is off: `input_speech_dbfs` (pooled RMS of the speech frames, dBFS), `input_peak_dbfs`, `input_noise_dbfs` (last ~1 s of non-speech audio; absent before any), `input_snr_db`, `input_clipped_ratio` (samples at or above −0.09 dBFS ÷ speech samples), `input_speech_ratio`, `input_speech_ms`, `input_level_source` (`vp_energy` \| `vp_silero`). Levels are as the server received them, after any browser AGC. Advertised with `unit: "db"` for the level keys.<br><br>All new keys are optional on the wire (absent on older workers / captures). |
 | **`playback_quality`** | `{"action":"playback_quality", "utterance_id":1, "underrun_count":2, "total_silence_ms":550, "audio_ms":16120, "heard_ms":16120, "wall_ms":16670, "arrival_wall_ms":15980, "interrupted":false, "annotation_late_count":0, "annotation_late_ms_max":0, "gaps":[{"at_audio_ms":480,"silence_ms":300}]}` | *(Client-to-Server, optional)* Per-turn playback health, sent **once per utterance** — at playback-complete, or from the flush path (barge-in / cancel) with `interrupted: true`, so a starving turn that gets interrupted still reports. `gaps[]` positions each jitter-buffer underrun in the **ideal (gapless) audio timeline**, which lets the server splice the silences back into its stored TTS audio ("as-heard" reconstruction) and surface truthful underrun metrics in Session Detail. Skipped for empty turns.<br><br>• `arrival_wall_ms`: wall ms from the first to the last audio frame *received* by the client (`performance.now()` deltas, independent of playback). `arrival_wall_ms / audio_ms` is the client-side **arrival realtime factor**: > 1 means the server delivered audio slower than it plays, so any underruns are *starvation* (server output) rather than *jitter* (network / prebuffer).<br>• `interrupted`: `true` when the frame was emitted from the flush path instead of the natural end of playback.<br>• `annotation_late_count` / `annotation_late_ms_max`: `audio_annotation` frames (§D) that arrived after the audio they describe had already started playing (`late = playbackClock.nowMs − start_ms > 0`) — count and max lateness in ms; `0` without an annotator.<br><br>All four are optional on the wire (the server defaults them; absent on older clients and captures). |
-| **`audio_meta`** | `{"action":"audio_meta", "fragment_idx":0, "is_final":false, "server_timestamp_ms":177..., "text":"Sure!", "utterance_id":1}` | A sideband message that precedes a block of TTS audio to declare exactly what text is about to be spoken.<br><br>• `fragment_idx`: Sequence number of the sentence block. <br>• `is_final`: Flag indicating if this is the last fragment of the utterance.<br>• `server_timestamp_ms`: Network synchronization timestamp.<br>• `total_fragment_duration_ms`: Optional field revealing exact duration of the audio in milliseconds before streaming.<br>• `text`: The string of text that will be spoken next.<br>• `utterance_id`: Unique tracking integer for the current back-and-forth conversational turn. Critical for dropping stale audio if a user barges in and interrupts the agent. |
+| **`audio_meta`** *(top-level data-plane envelope, not `control`)* | `{"type":"audio_meta", "payload":{"fragment_idx":0, "is_final":false, "server_timestamp_ms":177..., "text":"Sure!", "utterance_id":1}}` | A sideband message that precedes a block of TTS audio to declare exactly what text is about to be spoken.<br><br>• `fragment_idx`: Sequence number of the sentence block. <br>• `is_final`: Flag indicating if this is the last fragment of the utterance.<br>• `server_timestamp_ms`: Network synchronization timestamp.<br>• `total_fragment_duration_ms`: Optional field revealing exact duration of the audio in milliseconds before streaming.<br>• `text`: The string of text that will be spoken next.<br>• `utterance_id`: Unique tracking integer for the current back-and-forth conversational turn. Critical for dropping stale audio if a user barges in and interrupts the agent. |
 
 ### B. Audio Messages (`kind: "audio"`)
 Streams the actual raw PCM audio frames generated by the TTS engine, sometimes bundled with UI hints.
@@ -76,7 +76,7 @@ Canonical text records guaranteed to represent the entire user input or the comp
 | Payload Example | Purpose of Parameters |
 | :--- | :--- |
 | `{"messageId":"stt-1", "role":"user"}`<br>*Raw Value*: `"Can you tell me a story?"` | Represents the Speech-to-Text inference of what the user just said. <br><br>• `messageId`: Prefixed with `stt-` to indicate human origin.<br>• `role`: Always assigned `"user"`. |
-| `{"messageId":"llm-1", "role":"agent"}`<br>*Raw Value*: `"Sure! Here’s a short story..."` | The unified, post-stitched payload of everything the LLM generated during the turn.<br><br>• `messageId`: Prefixed with `llm-` and suffixed with the integer `utterance_id` (e.g. `llm-1`).<br>• `role`: Always assigned `"agent"`.<br><br>*Note*: While `caption` metadata updates the UI visually mid-sentence, this complete string replaces the chunks via `processFinalText` to correct any STT misalignments or spacing issues once the turn securely streamed sequence concludes. |
+| `{"messageId":"llm-1", "role":"assistant"}`<br>*Raw Value*: `"Sure! Here’s a short story..."` | The unified, post-stitched payload of everything the LLM generated during the turn.<br><br>• `messageId`: Prefixed with `llm-` and suffixed with the integer `utterance_id` (e.g. `llm-1`).<br>• `role`: Always assigned `"assistant"` on the wire.<br><br>*Note*: While `caption` metadata updates the UI visually mid-sentence, this complete string replaces the chunks via `processFinalText` to correct any STT misalignments or spacing issues once the turn securely streamed sequence concludes. |
 
 ### D. Audio Annotation Messages (`type: "audio_annotation"`)
 Server-to-client, data plane (top-level type, like `audio_meta`). Emitted only when the worker runs an **Audio Annotator** — an `[[audio_post_processor]]` with `mode = "annotate"` (see the [Audio Annotators guide](../guides/audio-annotators.md)). Carries metadata *derived from* a span of one utterance's audio — blendshapes, visemes, phonemes, emotion, levels — produced off the audio path. Without an annotator configured, no `audio_annotation` frame is ever sent.
@@ -107,33 +107,19 @@ Ordering guarantees:
 
 The SDK maps this frame to the `audioAnnotation` event (`AudioAnnotation { utteranceId, startMs, durationMs, kind, extras, serverTimestampMs? }`, snake→camel like `audio_meta`) and drops annotations for utterances it has already flushed. `audio_meta.extras` is unchanged and remains the channel for **inline** post-processors.
 
-## 3. Server-Side Audio Pacing & Head-of-Line (HOL) Blocking
-
-The backend implements explicit pacing (AudioPacer via PacerConfig in src/transport/pacer.rs) to mitigate **Head-of-Line (HOL) blocking** over the single, synchronized WebSocket TCP connection.
-
-### The Problem
-If the backend generated 10 seconds of audio and pushed it all into the WebSocket simultaneously, it would fill the OS network buffers. If a user interjected (barge-in) 1 second later, the server's clear_audio control message would be stuck in the queue behind the remaining 9 seconds of audio data, causing severe UI lag where the agent continues speaking despite being interrupted.
-
-### The Pacing Strategy
-Instead of sending data as fast as the LLM/TTS pipeline produces it, the server artificially throttles the outbound socket:
-1. **Burst Window:** The first **500ms** of audio in a turn is flashed to the socket immediately. This minimizes Time-To-First-Byte (TTFB) and guarantees zero perceivable start latency.
-2. **Paced Window:** All subsequent audio is dripped into the socket at exactly **1.5x real-time speed**. 
-
-By holding future audio in server memory instead of the TCP buffer, the socket remains mostly clear. When an interruption occurs, the server instantly drops its internal buffer and sends the clear_audio packet, which arrives at the frontend within milliseconds.
-
 ## 3. Server-Side Audio Pacing & Chunking
 
-The backend implements explicit pacing (AudioPacer via PacerConfig in src/transport/pacer.rs) to mitigate **Head-of-Line (HOL) blocking** over the single, synchronized WebSocket TCP connection.
+The backend implements explicit pacing (`AudioPacer` via `PacerConfig` in `src/transport/pacer.rs`) to mitigate **Head-of-Line (HOL) blocking** over the single, synchronized WebSocket TCP connection.
 
 ### The Problem
-If the backend generated 10 seconds of audio and pushed it all into the WebSocket simultaneously, it would fill the OS network buffers. If a user interjected (barge-in) 1 second later, the server's clear_audio control message would be stuck in the queue behind the remaining 9 seconds of audio data, causing severe UI lag where the agent continues speaking despite being interrupted.
+If the backend generated 10 seconds of audio and pushed it all into the WebSocket simultaneously, it would fill the OS network buffers. If a user interjected (barge-in) 1 second later, the server's `clear_audio` control message would be stuck in the queue behind the remaining 9 seconds of audio data, causing severe UI lag where the agent continues speaking despite being interrupted.
 
 ### The Pacing Strategy
 Instead of sending data as fast as the LLM/TTS pipeline produces it, the server artificially throttles the outbound socket:
-1. **Burst Window:** The first **500ms** of audio in a turn is flashed to the socket immediately. This minimizes Time-To-First-Byte (TTFB) and guarantees zero perceivable start latency.
-2. **Paced Window:** All subsequent audio is dripped into the socket at exactly **1.5x real-time speed**. 
+1. **Burst Window:** The first **500ms** of audio in a turn is flushed to the socket immediately. This minimizes Time-To-First-Byte (TTFB) and guarantees zero perceivable start latency.
+2. **Paced Window:** All subsequent audio is dripped into the socket at **1.5x real-time speed**.
 
-By holding future audio in server memory instead of the TCP buffer, the socket remains mostly clear. When an interruption occurs, the server instantly drops its internal buffer and sends the clear_audio packet, which arrives at the frontend within milliseconds.
+By holding future audio in server memory instead of the TCP buffer, the socket remains mostly clear. When an interruption occurs, the server instantly drops its internal buffer and sends the `clear_audio` packet, which arrives at the frontend within milliseconds.
 
 ### Fixed Output Chunking (Avatars & Animation)
 By default, the pipeline streams TTS audio fragments exactly as the engine produces them (often one massive audio frame per sentence). While highly efficient, this can make external synchronization difficult.
@@ -155,11 +141,12 @@ With `output_chunking_enabled: true` and `output_chunk_frame_ms: 50`, the orches
 
 To provide a clean, predictable protocol for custom UI integrations, the WebSocket communication strictly separates low-frequency lifecycle events from high-frequency streaming primitives.
 
-### A. The Control Plane (	ype: "control")
+### A. The Control Plane (`type: "control"`)
 Used **only** for slow-moving, session-level lifecycle states. These events do not carry real-time streaming data.
-*   **Examples:** session_ready, state_changed, error, closing, 	urn_metrics.
-*   **Structure:** Has a nested payload identifying the specific event:
-`json
+* **Examples:** `session_ready`, `state_changed`, `error`, `closing`, `turn_metrics`.
+* **Structure:** Has a nested `payload` identifying the specific event:
+
+```json
 {
   "type": "control",
   "payload": {
@@ -167,22 +154,26 @@ Used **only** for slow-moving, session-level lifecycle states. These events do n
     "state": "speaking"
   }
 }
-`
+```
 
 ### B. The Data Plane (Top-Level Types)
 High-frequency streaming primitives are emitted as **top-level types** so the frontend router can dispatch them instantly without deep inspection.
-*   **Examples:** udio (binary), 	ext, udio_meta.
-*   **Structure:** No nested ction routing. The 	ype defines the envelope.
-`json
+* **Examples:** binary PCM audio frames (`0x01`), `message`, `audio_meta`, `audio_annotation`.
+* **Structure:** No nested `action` routing. The `type` defines the envelope, with fields inside `payload`:
+
+```json
 {
   "type": "audio_meta",
-  "utterance_id": 1,
-  "text": "Hello!",
-  "duration_ms": 300,
-  "word_timings": []
+  "payload": {
+    "utterance_id": 1,
+    "text": "Hello!",
+    "total_fragment_duration_ms": 300,
+    "word_timings": []
+  }
 }
-`
-**Important:** udio_meta must never be tunneled inside a control message. It acts as the immediate data-plane header for the raw binary PCM frames that follow it.
+```
+
+**Important:** `audio_meta` must never be tunneled inside a `control` message. It acts as the immediate data-plane header for the raw binary PCM frames that follow it.
 
 ---
 

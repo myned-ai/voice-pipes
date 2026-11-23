@@ -66,4 +66,46 @@ describe("QueueWaitingBanner", () => {
     fireEvent.click(screen.getByRole("button", { name: /Leave Queue/i }));
     expect(onLeave).toHaveBeenCalledTimes(1);
   });
+
+  it("updates live capacity via fleet SSE even while session is active", async () => {
+    const closeSpy = vi.fn();
+    let triggerMessage: ((ev: { data: string }) => void) | null = null;
+    class MockEventSource {
+      set onmessage(fn: ((ev: { data: string }) => void) | null) {
+        triggerMessage = fn;
+      }
+      close = closeSpy;
+    }
+    vi.stubGlobal("EventSource", MockEventSource);
+    try {
+      render(
+        <ThemeProvider>
+          <QueueWaitingBanner sessionState="active" onLeaveQueue={() => {}} />
+        </ThemeProvider>,
+      );
+
+      expect(await screen.findByText(/2\/3/)).toBeInTheDocument();
+
+      act(() => {
+        triggerMessage?.({
+          data: JSON.stringify({
+            capacity: {
+              admission_enabled: true,
+              active_sessions: 3,
+              leased_sessions: 0,
+              capacity_sessions: 3,
+              effective_limit: 3,
+              queue_depth: 1,
+              estimated_wait_s: 15,
+            },
+          }),
+        });
+      });
+
+      expect(await screen.findByText(/3\/3/)).toBeInTheDocument();
+      expect(screen.getByText(/1 in queue/)).toBeInTheDocument();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });

@@ -154,6 +154,9 @@ struct PacerState {
     /// one": the schedule restarts whenever the queue refills from empty,
     /// and at every utterance boundary.
     next_release: Option<Instant>,
+    /// `StateChanged(Draining)` held until `audio_queue` empties so the client
+    /// never sees `draining` before the turn's last audio frame arrives.
+    pending_draining: Option<ServerMessage>,
 }
 
 impl PacerState {
@@ -163,6 +166,7 @@ impl PacerState {
             total_queued: Duration::ZERO,
             burst_remaining: burst,
             next_release: None,
+            pending_draining: None,
         }
     }
 
@@ -260,6 +264,12 @@ async fn pacer_loop(
                     } else if paced_tx.send(chunk.message).await.is_err() {
                         break; // downstream closed
                     }
+                    if state.audio_queue.is_empty()
+                        && let Some(draining) = state.pending_draining.take()
+                        && paced_tx.send(draining).await.is_err()
+                    {
+                        break;
+                    }
                 }
             }
         }
@@ -268,8 +278,11 @@ async fn pacer_loop(
     // Drain remaining buffered audio on shutdown.
     while let Some(chunk) = state.audio_queue.pop_front() {
         if paced_tx.send(chunk.message).await.is_err() {
-            break;
+            return;
         }
+    }
+    if let Some(draining) = state.pending_draining.take() {
+        let _ = paced_tx.send(draining).await;
     }
 }
 
@@ -288,6 +301,16 @@ async fn handle_incoming(
         msg,
         ServerMessage::Control(super::ServerControl::ClearAudio { .. })
     );
+    let is_draining = matches!(
+        msg,
+        ServerMessage::Control(super::ServerControl::StateChanged {
+            state: super::PipelineState::Draining,
+        })
+    );
+    let is_state_changed = matches!(
+        msg,
+        ServerMessage::Control(super::ServerControl::StateChanged { .. })
+    );
 
     if is_audio {
         let ServerMessage::Audio(ref chunk) = msg else {
@@ -302,6 +325,9 @@ async fn handle_incoming(
                     "pacer: flushing buffered audio on suppress"
                 );
                 state.clear_audio();
+            }
+            if let Some(draining) = state.pending_draining.take() {
+                let _ = paced_tx.send(draining).await;
             }
             return;
         }
@@ -347,12 +373,25 @@ async fn handle_incoming(
         // The next utterance starts fresh.
         state.start_utterance(Duration::from_millis(config.burst_ms));
 
+        // Flush any held Draining transition before ClearAudio so state
+        // ordering is preserved on barge-in.
+        if let Some(draining) = state.pending_draining.take() {
+            let _ = paced_tx.send(draining).await;
+        }
+
         // Forward ClearAudio immediately.
         let _ = paced_tx.send(msg).await;
+    } else if is_draining && !state.audio_queue.is_empty() {
+        // Hold `Draining` until the queued audio for this turn has been
+        // sent, matching the protocol guarantee ("server finished streaming").
+        state.pending_draining = Some(msg);
     } else {
-        // All non-audio, non-ClearAudio messages (control, text, data) pass
-        // through immediately.  StateChanged{Listening} in particular MUST NOT
-        // be held behind buffered audio: for long responses the audio queue may
+        if is_state_changed && let Some(draining) = state.pending_draining.take() {
+            let _ = paced_tx.send(draining).await;
+        }
+        // All other non-audio messages (control, text, data) pass through
+        // immediately.  StateChanged{Listening} in particular MUST NOT be
+        // held behind buffered audio: for long responses the audio queue may
         // hold tens of seconds of data, and delaying Listening would freeze the
         // client's utteranceId counter, breaking word-reveal and interruptions.
         // The client guards against the spurious-onPlaybackStart side-effect by

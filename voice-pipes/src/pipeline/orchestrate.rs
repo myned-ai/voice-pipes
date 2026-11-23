@@ -78,6 +78,10 @@ impl FragmentTally {
     clippy::type_complexity,
     reason = "session-handle type is spelled out where it is threaded; an alias would relocate, not simplify"
 )]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "process_utterance wires LLM, TTS, post-processing, and metrics for one turn"
+)]
 pub async fn process_utterance(
     utterance: &Utterance,
     audio_tx: mpsc::Sender<AudioChunk>,
@@ -100,6 +104,7 @@ pub async fn process_utterance(
     tts_cold_start: Arc<AtomicBool>,
     spec_manager: Option<Arc<SpeculativeSessionManager>>,
     sanitize_cfg: Option<voice_pipes_sdk::SanitizeConfig>,
+    default_tts_hints: Option<voice_pipes_sdk::SynthesisHints>,
 ) -> TurnMetricsSnapshot {
     let process_start = std::time::Instant::now();
     let (frag_tx, mut frag_rx) = mpsc::channel::<TextFragment>(16);
@@ -285,6 +290,7 @@ pub async fn process_utterance(
             let cancel_tts = cancel.clone();
             let error_reported = Arc::new(AtomicBool::new(false));
             let sanitize_arg = sanitize_cfg.clone();
+            let hints_arg = default_tts_hints.clone();
             tts_handle = tokio::spawn(tts_task(
                 tts_frag_rx,
                 tts_audio_tx,
@@ -298,6 +304,7 @@ pub async fn process_utterance(
                 tts_event_tx,
                 error_reported,
                 sanitize_arg,
+                hints_arg,
             ));
         } else {
             bridge_handle = tokio::spawn(async {});
@@ -491,6 +498,7 @@ pub async fn process_utterance(
             tts_event_tx,
             error_reported,
             sanitize_cfg,
+            default_tts_hints,
         ));
     }
 

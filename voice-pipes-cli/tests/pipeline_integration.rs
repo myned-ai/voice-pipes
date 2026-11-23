@@ -215,6 +215,7 @@ async fn pipeline_streaming_stt_echo_tts() {
         evt_tx,
         err_flag,
         None,
+        None,
     ));
 
     // Synthesize known text to feed as "microphone" input
@@ -327,6 +328,7 @@ async fn process_utterance_echo_produces_tts_audio() {
                     voice_pipes::pipeline::AudioLedger::default(),
                 )),
                 std::sync::Arc::new(AtomicBool::new(false)),
+                None,
                 None,
                 None,
             )
@@ -447,6 +449,7 @@ async fn interrupt_does_not_swallow_next_utterance() {
                 std::sync::Arc::new(AtomicBool::new(false)),
                 None,
                 None,
+                None,
             )
             .await;
         }
@@ -512,6 +515,7 @@ async fn interrupt_does_not_swallow_next_utterance() {
                     voice_pipes::pipeline::AudioLedger::default(),
                 )),
                 std::sync::Arc::new(AtomicBool::new(false)),
+                None,
                 None,
                 None,
             )
@@ -615,6 +619,7 @@ async fn pipeline_metrics_conformance_stages_sum_and_no_anomalies() {
             voice_pipes::pipeline::AudioLedger::default(),
         )),
         Arc::new(AtomicBool::new(false)),
+        None,
         None,
         None,
     )

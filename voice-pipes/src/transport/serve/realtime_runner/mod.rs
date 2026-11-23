@@ -222,7 +222,16 @@ pub async fn run_realtime_session_inner(
             .and_then(|v| v.as_str())
             .map(str::to_string)
     };
-    let turn_detection = match rt_cfg.vad.as_deref() {
+    let effective_vad = if client_config
+        .as_ref()
+        .and_then(|c| c.turn_detection_mode.as_deref())
+        == Some("push_to_talk")
+    {
+        Some("none")
+    } else {
+        rt_cfg.vad.as_deref()
+    };
+    let turn_detection = match effective_vad {
         Some("none" | "off") => TurnDetection::None,
         Some("semantic_vad") => TurnDetection::SemanticVad {
             eagerness: opt_str("vad_eagerness"),
@@ -615,8 +624,13 @@ pub async fn run_realtime_session_inner(
     let session_id_for_turns = session_id.clone();
     let provider_label_for_turns = provider_label.clone();
     let playback_health_for_turns = std::sync::Arc::clone(&pending_playback_health);
+    let session_aggregator = std::sync::Arc::new(parking_lot::Mutex::new(
+        super::turn::SessionAggregator::default(),
+    ));
+    let aggregator_for_turns = std::sync::Arc::clone(&session_aggregator);
     let persist_turn = |snapshot: crate::pipeline::metrics::TurnMetricsSnapshot,
                         user_text: Option<String>| {
+        aggregator_for_turns.lock().record(&snapshot);
         let Some(tx) = turn_record_tx.as_ref() else {
             return;
         };
@@ -859,6 +873,42 @@ pub async fn run_realtime_session_inner(
                             session_id = %session_id,
                             "duplicate Configure/Resume on an established realtime session -- ignoring"
                         );
+                    }
+                    Some(ClientMessage::Control(ClientControl::Say { text, interrupt })) => {
+                        if text.trim().is_empty() {
+                            debug!(session_id = %session_id, "ignoring empty client say control");
+                        } else {
+                            let scheduling = if interrupt {
+                                crate::agent::Scheduling::Interrupt
+                            } else {
+                                crate::agent::Scheduling::WhenIdle
+                            };
+                            let mut ctx = make_ctx!();
+                            let _ = ctx
+                                .handle_agent_event(
+                                    crate::agent::AgentEvent::Say { text, scheduling },
+                                    &mut responses,
+                                    &mut kick_pending,
+                                    &mut pending_agent,
+                                )
+                                .await;
+                        }
+                    }
+                    Some(ClientMessage::Control(ClientControl::CommitInput)) => {
+                        debug!(session_id = %session_id, "realtime client commit_input received");
+                        if let Err(e) = client.create_response().await {
+                            warn!(
+                                session_id = %session_id,
+                                provider = %provider_label,
+                                error = %e,
+                                "realtime commit_input (create_response) failed"
+                            );
+                        }
+                    }
+                    Some(ClientMessage::Control(ClientControl::ClearInput)) => {
+                        debug!(session_id = %session_id, "realtime client clear_input received");
+                        pending_input_audio.clear();
+                        input_audio_ms_acc = 0;
                     }
                     Some(ClientMessage::Message(pm)) => {
                         let mut ctx = make_ctx!();
@@ -1234,6 +1284,8 @@ pub async fn run_realtime_session_inner(
     // pump a bounded window to write it (it exits by itself after
     // `Closing`) before cancelling. Cancelling first raced the flush and a
     // server-initiated ending usually reached the client as a bare close.
+    let summary = session_aggregator.lock().build_summary();
+    let _ = out_tx.send(ServerMessage::Control(summary)).await;
     let _ = out_tx
         .send(ServerMessage::Control(ServerControl::Closing {
             reason: crate::transport::serve::runner::closing_reason(state).to_string(),

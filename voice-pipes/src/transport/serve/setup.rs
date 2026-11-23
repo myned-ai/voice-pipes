@@ -263,7 +263,7 @@ pub(super) async fn perform_handshake(
             let _ = out_tx.send(ServerMessage::Control(ServerControl::Error {
                 code: ErrorCode::HandshakeTimeout,
                 message: "expected Configure or Resume as the first control message".to_string(),
-                severity: crate::transport::ErrorSeverity::Error,
+                severity: crate::transport::ErrorSeverity::Fatal,
                 turn_id: None,
                 component: Some(crate::transport::ErrorComponent::Transport),
             })).await;
@@ -299,7 +299,7 @@ pub(super) async fn perform_handshake(
                             message: format!(
                                 "Configure app_data + options + tags exceed {MAX_HANDSHAKE_EXTRA_BYTES} bytes ({extra})"
                             ),
-                            severity: crate::transport::ErrorSeverity::Error,
+                            severity: crate::transport::ErrorSeverity::Fatal,
                             turn_id: None,
                             component: Some(crate::transport::ErrorComponent::Transport),
                         })).await;
@@ -311,7 +311,7 @@ pub(super) async fn perform_handshake(
                             let _ = out_tx.send(ServerMessage::Control(ServerControl::Error {
                                 code: ErrorCode::SessionCreateFailed,
                                 message: err.to_string(),
-                                severity: crate::transport::ErrorSeverity::Error,
+                                severity: crate::transport::ErrorSeverity::Fatal,
                                 turn_id: None,
                                 component: Some(crate::transport::ErrorComponent::Transport),
                             })).await;
@@ -343,7 +343,7 @@ pub(super) async fn perform_handshake(
                             let _ = out_tx.send(ServerMessage::Control(ServerControl::Error {
                                 code: ErrorCode::SessionResumeFailed,
                                 message: err.to_string(),
-                                severity: crate::transport::ErrorSeverity::Error,
+                                severity: crate::transport::ErrorSeverity::Fatal,
                                 turn_id: None,
                                 component: Some(crate::transport::ErrorComponent::Transport),
                             })).await;
@@ -360,7 +360,7 @@ pub(super) async fn perform_handshake(
                             "expected Configure or Resume first, got {}",
                             client_message_kind(&other)
                         ),
-                        severity: crate::transport::ErrorSeverity::Error,
+                        severity: crate::transport::ErrorSeverity::Fatal,
                         turn_id: None,
                         component: Some(crate::transport::ErrorComponent::Transport),
                     })).await;
@@ -654,14 +654,54 @@ pub(super) async fn negotiate_and_announce(
             );
             (AudioFormat::PcmI16Le, opts)
         }
-        other => (other, std::collections::HashMap::new()),
+        AudioFormat::PcmF32Le => {
+            warn!(
+                session_id = %session_id,
+                "client requested pcm_f32_le audio_format but this worker transport path currently serves 16-bit PCM; downgrading to pcm_i16_le"
+            );
+            let mut opts = std::collections::HashMap::new();
+            opts.insert(
+                "audio_format_fallback".to_string(),
+                serde_json::Value::String("pcm_f32_le_to_pcm_i16_le".to_string()),
+            );
+            (AudioFormat::PcmI16Le, opts)
+        }
+        AudioFormat::PcmI16Le => (AudioFormat::PcmI16Le, std::collections::HashMap::new()),
     };
+
+    // Tell the client which of its options the realtime runner
+    // will not honour (same allowlist the runner applies), and exclude
+    // those refused keys from `negotiated.options`.
+    let ignored_options = state
+        .config
+        .realtime_provider
+        .as_ref()
+        .map(|rt| {
+            super::client_overrides::filter(&client_cfg.options, &rt.client_overrides).ignored
+        })
+        .unwrap_or_default();
+
     if !client_cfg.options.is_empty() {
-        negotiated_options.extend(client_cfg.options.clone());
+        for (k, v) in &client_cfg.options {
+            if !ignored_options.iter().any(|ign| ign == k) {
+                negotiated_options.insert(k.clone(), v.clone());
+            }
+        }
     }
 
     // Resolve the model actually running for each component (once per session).
     let (stt_model, llm_model, tts_model) = resolve_model_identities(state).await;
+
+    let rt_provider_name = state
+        .config
+        .realtime_provider
+        .as_ref()
+        .map(|rt| rt.provider.clone());
+    let rt_default_voice = state
+        .config
+        .realtime_provider
+        .as_ref()
+        .and_then(|rt| rt.voice.clone());
 
     let negotiated = NegotiatedConfig {
         audio_format: negotiated_audio_format,
@@ -672,20 +712,25 @@ pub(super) async fn negotiate_and_announce(
         voice: client_cfg
             .voice
             .clone()
-            .or_else(|| state.config.tts.as_ref().and_then(|t| t.voice.clone())),
+            .or_else(|| state.config.tts.as_ref().and_then(|t| t.voice.clone()))
+            .or(rt_default_voice),
         stt_provider: Some(
             state
                 .config
                 .stt
                 .as_ref()
-                .map_or_else(|| "unknown".into(), |s| s.provider.clone()),
+                .map(|s| s.provider.clone())
+                .or_else(|| rt_provider_name.clone())
+                .unwrap_or_else(|| "unknown".into()),
         ),
         tts_provider: Some(
             state
                 .config
                 .tts
                 .as_ref()
-                .map_or_else(|| "unknown".into(), |t| t.provider.clone()),
+                .map(|t| t.provider.clone())
+                .or(rt_provider_name)
+                .unwrap_or_else(|| "unknown".into()),
         ),
         app_data: None,
         options: negotiated_options,
@@ -723,16 +768,17 @@ pub(super) async fn negotiate_and_announce(
         tts_model,
         first_utterance_id: crate::transport::FIRST_UTTERANCE_ID,
         text_utterance_id_base: crate::transport::TEXT_UTTERANCE_ID_BASE,
-        // Tell the client which of its options the realtime runner
-        // will not honour (same allowlist the runner applies).
-        ignored_options: state
-            .config
-            .realtime_provider
-            .as_ref()
-            .map(|rt| {
-                super::client_overrides::filter(&client_cfg.options, &rt.client_overrides).ignored
-            })
-            .unwrap_or_default(),
+        barge_in_enabled: client_cfg
+            .barge_in_enabled
+            .or_else(|| state.config.barge_in.as_ref().map(|bi| bi.enabled)),
+        turn_detection_mode: client_cfg.turn_detection_mode.clone().or_else(|| {
+            state
+                .config
+                .turn_detection
+                .as_ref()
+                .map(|td| td.mode.clone())
+        }),
+        ignored_options,
     };
 
     if let Some(client_version) = client_cfg.protocol_version
@@ -1008,7 +1054,7 @@ pub(super) fn setup_audio_pipeline(
     let text_utt_tx = utt_tx.clone();
 
     let barge_in_enabled =
-        session_mode.accepts_audio() && state.config.barge_in.as_ref().is_some_and(|bi| bi.enabled);
+        session_mode.accepts_audio() && negotiated.barge_in_enabled.unwrap_or(false);
 
     let mut spec_rx = None;
     let mut session_turn_detector: Option<std::sync::Arc<dyn crate::stt::turn::TurnDetector>> =
@@ -1025,7 +1071,13 @@ pub(super) fn setup_audio_pipeline(
             .map_or(crate::config::DEFAULT_VAD_PRE_ROLL_MS, |v| {
                 v.effective_pre_roll_ms()
             });
-        let vad = {
+        let vad = if negotiated.turn_detection_mode.as_deref() == Some("push_to_talk") {
+            info!(
+                session_id = %session_id,
+                "turn_detection_mode=push_to_talk: using passthrough VAD (manual commit_input / EOU)"
+            );
+            Box::new(crate::vad::segmenter::PassthroughVad::new())
+        } else {
             // Fetch the shared VAD store (registered once at worker start).
             // When present, the VAD adopts its atomic cells so PATCH
             // /debug/params updates take effect on the next chunk.

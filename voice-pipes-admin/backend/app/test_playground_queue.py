@@ -24,14 +24,14 @@ class PlaygroundQueueTests(unittest.TestCase):
         }
         main = _fresh_app(env)
         from app.core import auth as auth_mod
-        from app. routers import health, playground
+        from app.routers import health, playground, stream
 
         def orch(**kwargs):
             kwargs.pop("headers", None)
             return httpx.AsyncClient(transport=httpx.MockTransport(orch_handler), **kwargs)
 
         stack = ExitStack()
-        for mod in (playground, health):
+        for mod in (playground, health, stream):
             stack.enter_context(mock.patch.object(mod, "orch_client", orch))
             stack.enter_context(mock.patch.object(mod, "ORCHESTRATOR_URL", "http://orch"))
         stack.enter_context(mock.patch.object(playground, "LOOPBACK_HOST", ""))
@@ -260,6 +260,41 @@ class PlaygroundQueueTests(unittest.TestCase):
             deleted_leases,
             [("/api/v1/dispatch/tickets/vp_lease_close", "hf-alice")],
         )
+
+    def test_fleet_stream_includes_capacity_and_scrubs_tenants(self):
+        import asyncio
+
+        from app.routers.stream import _fleet_stream
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            path = request.url.path
+            if path == "/api/v1/workers":
+                return httpx.Response(200, json={"data": {"items": []}})
+            if path == "/api/v1/components":
+                return httpx.Response(200, json={"data": []})
+            if path == "/api/v1/capacity":
+                return httpx.Response(
+                    200,
+                    json={
+                        "data": {
+                            "admission_enabled": True,
+                            "active_sessions": 2,
+                            "leased_sessions": 0,
+                            "capacity_sessions": 4,
+                            "effective_limit": 4,
+                            "queue_depth": 0,
+                            "estimated_wait_s": 0,
+                            "per_tenant_active": {"hf-alice": 1, "hf-bob": 1},
+                        }
+                    },
+                )
+            return httpx.Response(404)
+
+        self._setup_client(handler, multi_tenant=True)
+        snap = asyncio.run(_fleet_stream._fetch())
+        self.assertIsNotNone(snap["capacity"])
+        self.assertEqual(snap["capacity"]["active_sessions"], 2)
+        self.assertNotIn("per_tenant_active", snap["capacity"])
 
 
 if __name__ == "__main__":

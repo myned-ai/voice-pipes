@@ -477,3 +477,50 @@ describe("WebSocketAdapter.sendPlaybackQuality wire mapping", () => {
     });
   });
 });
+
+describe("WebSocketAdapter.connect configure forwarding", () => {
+  it("forwards audio_format, options, protocol_version, and tags in configure", async () => {
+    const adapter = new WebSocketAdapter();
+    const sendControl = vi.spyOn(adapter, "sendControl").mockImplementation(() => {});
+    const origWebSocket = globalThis.WebSocket;
+    class FakeWebSocket {
+      binaryType = "blob";
+      readyState = 1;
+      onopen: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      onclose: ((ev: CloseEvent) => void) | null = null;
+      onmessage: ((ev: MessageEvent) => void) | null = null;
+      constructor() {
+        queueMicrotask(() => this.onopen?.());
+      }
+      send() {}
+      close() {}
+    }
+    vi.stubGlobal("WebSocket", FakeWebSocket);
+    try {
+      await adapter.connect("ws://localhost:8080/ws", {
+        audio_format: "pcm_i16_le",
+        sample_rate: 16000,
+        options: { foo: "bar" },
+        protocol_version: 1,
+        tags: ["env:test"],
+        barge_in_enabled: false,
+        turn_detection_mode: "push_to_talk",
+      });
+      expect(sendControl).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: "configure",
+          audio_format: "pcm_i16_le",
+          sample_rate: 16000,
+          options: { foo: "bar" },
+          protocol_version: 1,
+          tags: ["env:test"],
+          barge_in_enabled: false,
+          turn_detection_mode: "push_to_talk",
+        }),
+      );
+    } finally {
+      vi.stubGlobal("WebSocket", origWebSocket);
+    }
+  });
+});

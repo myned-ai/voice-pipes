@@ -93,6 +93,10 @@ pub(super) struct TurnTracker {
     /// to the client: the pipeline has nothing more to produce and the
     /// client may legitimately report playback complete.
     pub eou_sent: bool,
+    /// Interruption trigger recorded for the active turn, so a subsequent
+    /// `PlaybackReport` emits `BargeInResolved` with the true cause rather
+    /// than hardcoding `ServerVad`.
+    pub last_interruption_trigger: Option<crate::pipeline::events::InterruptionTrigger>,
     /// `TurnMetrics` for the current turn have been emitted (and folded
     /// into the session aggregate). An interrupt arriving after this point
     /// only cuts the client-side tail; it must not emit a second snapshot.
@@ -194,6 +198,7 @@ impl TurnTracker {
             session_aggregator: SessionAggregator::default(),
             start_resource_sample: None,
             eou_sent: false,
+            last_interruption_trigger: None,
             metrics_emitted: false,
         }
     }
@@ -254,6 +259,7 @@ impl TurnTracker {
         self.playback_health = None;
         self.start_resource_sample = crate::telemetry::resources::ProcessSample::capture();
         self.eou_sent = false;
+        self.last_interruption_trigger = None;
         self.metrics_emitted = false;
     }
 

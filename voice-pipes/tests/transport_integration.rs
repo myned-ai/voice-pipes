@@ -606,11 +606,10 @@ async fn concurrent_sessions() {
         }))
         .await
         .unwrap();
-    let pong = timeout(TEST_TIMEOUT, client_b.recv_server())
-        .await
-        .unwrap()
-        .unwrap()
-        .unwrap();
+    let (pong, _) = recv_until(&client_b, |m| {
+        matches!(m, ServerMessage::Control(ServerControl::Pong { .. }))
+    })
+    .await;
     assert!(
         matches!(
             pong,

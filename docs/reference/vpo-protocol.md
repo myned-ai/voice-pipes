@@ -148,9 +148,15 @@ normal teardown.
 | `resume` | `session_token` | Reconnect to a prior session (§3.3). |
 | `playback_report` | `utterance_id`, `last_played_offset_ms`, `last_played_text?` | Sample-accurate report of audio actually played before an interruption. Drives history truncation (Layer 2 §2.4). |
 | `playback_complete` | `utterance_id` | The client finished playing an utterance fully. |
+| `playback_quality` | `utterance_id`, `underrun_count`, `total_silence_ms`, `audio_ms`, `heard_ms`, `wall_ms`, `arrival_wall_ms?`, `interrupted?`, `annotation_late_count?`, `annotation_late_ms_max?`, `gaps[]` | Client-reported per-turn playback health and underrun timeline. |
+| `net_report` | `playback_buffer_ms?`, `underruns?`, `audio_received_ms?`, `wall_ms?`, `uplink_backlog_bytes?` | Periodic client network/buffer telemetry for adaptive quality. |
+| `client_tool_result` | `call_id`, `phase: ClientToolPhase`, `result?`, `speak?` | Outcome of a client-side tool execution (`trigger_action`). |
 | `timing_report` | `utterance_id`, `event`, `client_timestamp_ms`, `detail?` | A client timing event (Layer 1 §4.1). `event` is a `TimingEventKind`. |
 | `inject_audio` | `source`, `scenario_id?`, `experiment_id?`, `speed` | Benchmark: inject a pre-recorded WAV into the pipeline (§9). `speed` 1.0 = realtime, 0.0 = as-fast-as-possible. |
 | `tts_only_synthesize` | `id`, `text`, `language?`, `voice?` | Benchmark: drive TTS directly, bypassing STT+LLM (§9). |
+| `say` | `text`, `interrupt?` | Ask the assistant to speak `text` verbatim as a proactive turn. |
+| `commit_input` | — | Explicitly commit buffered user audio as end-of-utterance (push-to-talk). |
+| `clear_input` | — | Discard uncommitted buffered user audio (push-to-talk cancel). |
 
 `ClientMessage::Audio(AudioChunk)` carries input PCM at the negotiated `input_sample_rate`/format.
 `ClientMessage::Message(PipelineMessage)` carries structured input (text turns, tool results,
@@ -174,18 +180,20 @@ truncate the assistant's retained history at the heard boundary (Layer 2 §2.4,
 | `session_ready` | `SessionInfo` | Handshake complete (§3.1). |
 | `pong` | `client_timestamp_ms`, `server_timestamp_ms` | Liveness echo + RTT basis (§3.2). |
 | `state_changed` | `state: PipelineState` | Turn state transition (§6). |
-| `quality_update` | `quality: ConnectionQuality` | Connection-quality assessment (§7.2). |
+| `quality_update` | `quality: ConnectionQuality`, `tier: QualityTier` | Connection-quality assessment and adaptive fidelity tier (§7.2). |
 | `error` | `code`, `message`, `severity`, `turn_id?`, `component?` | A pipeline error (§10). |
 | `closing` | `reason` | Session teardown (§3.4). |
 | `session_summary` | aggregate metrics | Per-session rollup, sent before `closing` (Layer 1 §7). |
 | `turn_metrics` | `snapshot: TurnMetricsSnapshot` | Per-turn metric breakdown after each utterance (Layer 1 §3). |
 | `clear_audio` | `utterance_id`, `reason` | Flush the client playback buffer immediately (barge-in; §8). |
 | `text_truncated` | `utterance_id`, `final_text` | Sync the client transcript to what the user actually heard after a barge-in (§8). |
+| `utterance_dropped` | `utterance_id`, `reason`, `audio_ms` | Speech segment produced no turn (`empty_transcript`, `too_short`, `stt_timeout`). |
 | `tts_only_result` | `id`, `metrics: TtsOnlyMetrics`, `audio_ref: AudioRef` | Benchmark TTS-only success (§9). |
 | `tts_only_error` | `id`, `error` | Benchmark TTS-only failure (§9). |
 
-`ServerMessage::Audio(AudioChunk)` carries output PCM at the negotiated `output_sample_rate`.
+`ServerMessage::Audio(AudioChunk)` carries output PCM at the negotiated `output_sample_rate` (preceded on WebSocket by an `"audio_meta"` JSON envelope when metadata/caption is attached).
 `ServerMessage::Message(PipelineMessage)` carries the assistant response and structured outputs.
+`ServerMessage::Annotation(AudioAnnotation)` carries time-aligned sideband annotations (`"audio_annotation"`).
 
 ---
 
@@ -373,26 +381,34 @@ CLIENT -> SERVER
     cancel | ping{timestamp_ms} | configure(SessionConfig) | resume{session_token}
     playback_report{utterance_id,last_played_offset_ms,last_played_text?}
     playback_complete{utterance_id}
+    playback_quality{utterance_id,underrun_count,total_silence_ms,audio_ms,heard_ms,wall_ms,arrival_wall_ms?,interrupted?,annotation_late_count?,annotation_late_ms_max?,gaps[]}
+    net_report{playback_buffer_ms?,underruns?,audio_received_ms?,wall_ms?,uplink_backlog_bytes?}
+    client_tool_result{call_id,phase,result?,speak?}
     timing_report{utterance_id,event,client_timestamp_ms,detail?}
     inject_audio{source,scenario_id?,experiment_id?,speed}
     tts_only_synthesize{id,text,language?,voice?}
+    say{text,interrupt?} | commit_input | clear_input
 
 SERVER -> CLIENT
   Audio(AudioChunk)
   Message(PipelineMessage)
+  Annotation(AudioAnnotation)
   Control(ServerControl):
     session_ready(SessionInfo) | pong{client_timestamp_ms,server_timestamp_ms}
-    state_changed{state} | quality_update{quality}
+    state_changed{state} | quality_update{quality,tier}
     error{code,message,severity,turn_id?,component?} | closing{reason}
     session_summary{turns,interrupted_turns,avg_ttft_ms?,avg_ttfb_ms?,avg_total_ms?,total_audio_duration_ms}
     turn_metrics{snapshot} | clear_audio{utterance_id,reason} | text_truncated{utterance_id,final_text}
+    utterance_dropped{utterance_id,reason,audio_ms}
     tts_only_result{id,metrics,audio_ref} | tts_only_error{id,error}
 
 ENUMS
   SessionMode:       voice | text | hybrid | voice_in_text_out | text_in_voice_out
   PipelineState:     listening | processing | speaking | draining
-  AudioFormat:       pcm_i16_le | pcm_f32_le | opus (reserved; always negotiated down to pcm_i16_le)
+  AudioFormat:       pcm_i16_le | pcm_f32_le | opus (always negotiated down to pcm_i16_le)
   ConnectionQuality: excellent | good | poor | lost
+  QualityTier:       full | reduced | minimal | critical
+  ClientToolPhase:   started | progress | completed | failed
   ErrorSeverity:     warning | error | fatal
   ErrorComponent:    stt | llm | tts | pipeline | transport
   TimingEventKind:   speech_start | speech_end | audio_receive | playback_start

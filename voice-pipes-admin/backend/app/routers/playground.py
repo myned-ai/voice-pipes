@@ -117,6 +117,7 @@ async def _wait_in_fifo_queue(
         raise _Refused(4503, "orchestrator returned queued status without ticket_id", before_accept=False)
 
     await client_ws.accept()
+    notify_fleet_change(delay_s=0.05)
     await client_ws.send_text(
         json.dumps(
             {
@@ -197,6 +198,7 @@ async def _wait_in_fifo_queue(
     finally:
         if not lease_granted:
             await _cancel_orchestrator_ticket(ticket_id, tenant_id=tenant_id)
+            notify_fleet_change(delay_s=0.05)
 
 
 async def _poll_ticket_once(
@@ -267,7 +269,9 @@ async def _acquire_admission_slot(
     if status == "granted":
         return False, data.get("lease_id"), []
     if status == "queued":
-        lease_id, buffered = await _wait_in_fifo_queue(client_ws, worker_id, data)
+        lease_id, buffered = await _wait_in_fifo_queue(
+            client_ws, worker_id, data, tenant_id=tenant_id
+        )
         return True, lease_id, buffered
     return False, None, []
 

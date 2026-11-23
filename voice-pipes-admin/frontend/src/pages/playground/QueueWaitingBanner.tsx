@@ -53,10 +53,7 @@ export default function QueueWaitingBanner({
     return () => window.removeEventListener(PLAYGROUND_QUEUE_EVENT, onQueueEvent);
   }, []);
 
-  const isQueuedOrActive = sessionState !== "idle" && sessionState !== "error";
-
   useEffect(() => {
-    if (isQueuedOrActive) return;
     let alive = true;
     const pollCapacity = async () => {
       try {
@@ -71,12 +68,31 @@ export default function QueueWaitingBanner({
       }
     };
     void pollCapacity();
-    const timer = window.setInterval(() => void pollCapacity(), 10_000);
+
+    let es: EventSource | null = null;
+    let timer: number | undefined;
+    if (typeof EventSource !== "undefined") {
+      es = new EventSource(`${API_BASE}/api/v1/stream/fleet`, { withCredentials: true });
+      es.onmessage = (ev) => {
+        try {
+          const snap = JSON.parse(ev.data) as { capacity?: CapacitySummary | null };
+          if (alive && snap.capacity) {
+            setCapacity(snap.capacity);
+          }
+        } catch {
+          /* ignore malformed SSE frame */
+        }
+      };
+    } else {
+      timer = window.setInterval(() => void pollCapacity(), 10_000);
+    }
+
     return () => {
       alive = false;
-      window.clearInterval(timer);
+      es?.close();
+      if (timer !== undefined) window.clearInterval(timer);
     };
-  }, [isQueuedOrActive]);
+  }, []);
 
   const activeQueue = sessionState === "idle" || sessionState === "error" ? null : queueInfo;
   const showCapacityStrip =

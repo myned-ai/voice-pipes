@@ -141,16 +141,16 @@ The client continuously streams audio while the user speaks. Setting
 }
 ```
 
-`kind` values understood by the pipeline:
+`kind` values in the protocol:
 
-| `kind` | Description |
-|---|---|
-| `text` | Chat text message from the user |
-| `tool_result` | Response to a tool call issued by the LLM |
-| `context` | Additional system context to inject |
-| `image` | Image attachment (binary field populated) |
-| `trigger_action` | Ask pipeline to execute a named action |
-| `suggestions` | Client-provided follow-up suggestion list |
+| `kind` | Direction / Status | Description |
+|---|---|---|
+| `text` | Inbound & Outbound | Chat text message; inbound `text` starts a new turn |
+| `context` | Inbound (cascade mode) | Additional background context injected into the LLM history without starting a turn |
+| `tool_result` | Reserved on `message` | Use `control` with `action: "client_tool_result"` for client tool responses |
+| `image` | Reserved (not yet wired) | Image attachment (base64 `binary` field); currently logged and ignored by runners |
+| `trigger_action` | Reserved (not yet wired) | Ask pipeline to execute a named action |
+| `suggestions` | Reserved (not yet wired) | Client-provided follow-up suggestion list |
 
 ### 3.3 `"text"` — legacy text input *(removed — no longer decoded)*
 
@@ -204,6 +204,8 @@ Must be the first client control message after WebSocket open.
   "mode": "voice",                 // "voice" | "text" | "hybrid" | "voice_in_text_out" | "text_in_voice_out"
   "protocol_version": 1,           // optional; the server assumes the current version when absent
   "accepts_negotiated_input_rate": true, // optional, default false — see below
+  "barge_in_enabled": true,        // optional; overrides worker default barge-in setting
+  "turn_detection_mode": "silence",// optional; e.g. "silence" | "server_vad" | "push_to_talk"
   "tags": ["live", "prod"],        // optional session labels
   "app_data": { ... },             // optional opaque client data
   "options": {                     // optional provider-specific overrides
@@ -365,6 +367,10 @@ turns (`audio_ms == 0`); older clients simply never send it.
   "audio_ms": 16120,
   "heard_ms": 16120,
   "wall_ms": 25160,
+  "arrival_wall_ms": 24000,
+  "interrupted": false,
+  "annotation_late_count": 0,
+  "annotation_late_ms_max": 0,
   "gaps": [ { "at_audio_ms": 480, "silence_ms": 288 } ]
 }
 ```
@@ -376,8 +382,67 @@ turns (`audio_ms == 0`); older clients simply never send it.
 | `audio_ms` | Ideal audio delivered to the client (Σ chunk durations) |
 | `heard_ms` | Audio actually heard (enqueue-bounded, per the SD-25 rule) |
 | `wall_ms` | Client wall-clock span of the turn's playback |
+| `arrival_wall_ms` | Optional (`0` default): wall ms from first to last audio frame received |
+| `interrupted` | Optional (`false` default): `true` when emitted from a barge-in / cancel flush |
+| `annotation_late_count` | Optional (`0` default): annotations arriving after their audio started playing |
+| `annotation_late_ms_max` | Optional (`0` default): worst-case annotation lateness in ms |
 | `gaps[].at_audio_ms` | Underrun position in the ideal timeline — indexes straight into the server-side TTS fragment concat |
 | `gaps[].silence_ms` | How long the output was silent there |
+
+#### `action: "net_report"` — periodic client network/buffer telemetry
+
+Sent periodically during an active session to feed the server's adaptive quality controller.
+
+```json
+{
+  "action": "net_report",
+  "playback_buffer_ms": 180,
+  "underruns": 0,
+  "audio_received_ms": 1000,
+  "wall_ms": 1000,
+  "uplink_backlog_bytes": 0
+}
+```
+
+#### `action: "tts_only_synthesize"` — one-shot TTS synthesis (cascade mode)
+
+Requests direct synthesis without an LLM turn. Cascade mode replies with `tts_only_result` or `tts_only_error`; realtime/S2S mode replies with `tts_only_error`.
+
+```json
+{
+  "action": "tts_only_synthesize",
+  "id": "req-1",
+  "text": "Hello world",
+  "language": "en",
+  "voice": "marius"
+}
+```
+
+#### `action: "say"` — proactive assistant speech
+
+Asks the assistant to speak `text` verbatim as a normal assistant turn (e.g., an opening greeting or notification) without faking user input. Supported in both cascade and realtime modes.
+
+```json
+{
+  "action": "say",
+  "text": "Welcome! How can I help you today?",
+  "interrupt": false
+}
+```
+
+- `interrupt`: optional (`false` default). When `true`, interrupts any in-flight assistant response; otherwise queues until idle (`WhenIdle`).
+
+#### `action: "commit_input"` / `"clear_input"` — explicit push-to-talk controls
+
+Explicit JSON alternatives to sending an empty binary `0x01` EOU frame:
+
+```json
+{ "action": "commit_input" }
+{ "action": "clear_input" }
+```
+
+- `commit_input`: commits buffered user audio as end-of-utterance (cascade sends an EOU marker to STT; realtime calls `create_response`).
+- `clear_input`: discards uncommitted user audio buffered before a turn has started.
 
 #### `action: "client_tool_result"` — client-side tool outcome
 
@@ -411,7 +476,7 @@ command's payload.
 
 PCM frames as described in §2.1.  
 Before each TTS fragment's first binary frame, the server sends an
-`"audio_meta"` JSON frame (see §4.7).
+`"audio_meta"` JSON frame (see §4.6).
 
 ### 4.2 `"message"` — unified structured message
 
@@ -425,13 +490,27 @@ Notable server-emitted `kind`s:
 | `tool_call` / `tool_result` | Server/agent tool transparency — *facts about tool activity, not transcripts*; render as activity indicators, never as spoken content |
 | `trigger_action` | **Client-side tool command**: payload `{ call_id, name, arguments }`. The client executes the command and reports back with `action: "client_tool_result"` (§3.5). Issued silently — no spoken filler accompanies it |
 
-### 4.3 `"text"` — legacy text output *(deprecated)*
+### 4.3 `"audio_annotation"` — time-aligned sideband annotations
 
-LLM text response.
+Emitted asynchronously by annotate-mode post-processors (e.g., blendshapes or visemes). Never pairs with binary audio frames.
 
-### 4.4 `"data"` — legacy structured data *(deprecated)*
+```json
+{
+  "type": "audio_annotation",
+  "payload": {
+    "utterance_id": 12,
+    "start_ms": 160,
+    "duration_ms": 160,
+    "kind": "blendshapes",
+    "extras": {},
+    "server_timestamp_ms": 1724700000000
+  }
+}
+```
 
-Rich structured pipeline output.
+### 4.4 `"queue_status"` / `"queue_granted"` — admission queue envelopes
+
+Emitted by the orchestrator admission proxy while a session waits for a worker slot (`queue_status`) and when a slot is granted (`queue_granted`).
 
 ### 4.5 `"control"` — server control signals
 
@@ -502,7 +581,7 @@ Notes:
 | `listening` | Waiting for user speech |
 | `processing` | STT/LLM/TTS running |
 | `speaking` | TTS audio is being streamed to client |
-| `draining` | Server finished streaming, waiting for client playback to conclude |
+| `draining` | Server finished streaming, waiting for client playback to conclude *(cascade mode only; realtime/S2S transitions directly from `speaking` to `listening` or `processing`)* |
 
 Every `state_changed` reports a state the server entered; the frame is never sent for a transition the server refused. A new utterance committed while `draining` moves straight to `processing` (the previous turn is finished on the server; a `clear_audio` for its tail precedes the new turn). A `cancel` with no turn in flight produces only a `clear_audio` and no state change.
 
@@ -514,8 +593,7 @@ Sent during a barge-in event. Indicates exactly what fraction of the agent's res
 {
   "action": "text_truncated",
   "utterance_id": 1,
-  "final_text": "Once upon a time",
-  "reason": "barge_in"
+  "final_text": "Once upon a time"
 }
 ```
 
@@ -536,23 +614,41 @@ Show it: from the client's side speech ended and nothing followed, and after a b
 
 #### `action: "turn_metrics"` — per-turn latency report
 
-Sent after each turn completes or is interrupted.
+Sent after each turn completes or is interrupted. The metrics payload is nested under `snapshot` (`TurnMetricsSnapshot`).
 
 ```json
 {
   "action": "turn_metrics",
-  "utterance_id": 2,
-  "total_ms": 1658,
-  "ttft_ms": 1019,
-  "ttfb_ms": 1179,
-  "interrupted": false,
-  "stt_latency_ms": 6761,
-  "llm_generation_ms": 1278,
-  "llm_tokens": 22,
-  "tts_ttfb_ms": 159,
-  "endpointing_latency_ms": 16
+  "snapshot": {
+    "utterance_id": 2,
+    "total_ms": 1658,
+    "ttft_ms": 1019,
+    "ttfb_ms": 1179,
+    "interrupted": false,
+    "components": []
+  }
 }
 ```
+
+#### `action: "session_summary"` — end-of-session aggregate metrics
+
+Sent immediately before `closing`.
+
+```json
+{
+  "action": "session_summary",
+  "turns": 4,
+  "interrupted_turns": 1,
+  "avg_ttft_ms": 820,
+  "avg_ttfb_ms": 1050,
+  "avg_total_ms": 1540,
+  "total_audio_duration_ms": 12400
+}
+```
+
+#### `action: "tts_only_result"` / `"tts_only_error"` — one-shot TTS response
+
+Replies to `tts_only_synthesize`: `tts_only_result` carries `{ id, metrics, audio_ref }`; `tts_only_error` carries `{ id, error }`.
 
 See §11 for metric definitions.
 
@@ -689,9 +785,8 @@ of each TTS fragment.
 `total_fragment_duration_ms`, and `word_timings` are present when a caption is attached;
 `full_text` and `extras` are emitted only when supplied.
 
-`total_fragment_duration_ms` is optional; present if the backend precalcualted the entire string duration before starting audio transfer.
-`word_timings` is optional; present only when the TTS provider supplies
-word-level alignment (e.g. ElevenLabs with timestamps enabled).
+`total_fragment_duration_ms` is optional; present if the backend precalculated the entire fragment duration before starting audio transfer.
+`word_timings` is always present (set to `null` when unavailable) whenever a caption is attached, and populated with word-level alignment when the TTS provider supplies it (e.g. ElevenLabs with timestamps enabled).
 
 ---
 

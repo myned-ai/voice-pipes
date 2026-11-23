@@ -275,6 +275,7 @@ impl SpeculativeSessionManager {
                         event_dummy_tx,
                         error_reported_dummy,
                         None,
+                        None,
                     )
                     .await;
                 });
