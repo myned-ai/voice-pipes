@@ -79,11 +79,13 @@ impl RealtimeSessionContext<'_> {
         // to flush, but the client stops playback and sends a
         // `PlaybackReport` — hand it the tail so the report truncates the
         // transcript and re-persists the turn as interrupted.
+        let mut had_active = false;
         if self.current_turn.is_none()
             && let Some(tail) = self.playback_tail.take()
             && tail.is_live()
         {
             *self.pending_interruption = Some(tail.pending);
+            had_active = true;
         }
         if let Some(f) = flush_turn_as_interrupted(
             self.current_turn,
@@ -98,6 +100,7 @@ impl RealtimeSessionContext<'_> {
         )
         .await
         {
+            had_active = true;
             self.suppress_audio.arm(f.snapshot.utterance_id);
             if let Some(audit) = self.streaming_audit {
                 let samples = std::mem::take(self.pending_input_audio);
@@ -122,12 +125,14 @@ impl RealtimeSessionContext<'_> {
             *self.pending_interruption = Some(f.pending);
             *self.ignoring_stray_deltas = true;
         }
-        let _ = self
-            .out_tx
-            .send(ServerMessage::Control(ServerControl::StateChanged {
-                state: PipelineState::Listening,
-            }))
-            .await;
+        if had_active {
+            let _ = self
+                .out_tx
+                .send(ServerMessage::Control(ServerControl::StateChanged {
+                    state: PipelineState::Listening,
+                }))
+                .await;
+        }
         self.cancel_turn().await
     }
 
@@ -322,34 +327,45 @@ impl RealtimeSessionContext<'_> {
         &mut self,
         pm: PipelineMessage,
     ) -> Result<(), anyhow::Error> {
-        if let Some(text) = pm.text.as_deref()
-            && !text.trim().is_empty()
-        {
-            *self.pending_user_transcript = Some(text.to_string());
-            // The text submission is this turn's "end of user input" — anchor
-            // TTFB here so it measures submit -> first response byte.
-            if self.current_turn.is_none() {
-                *self.request_anchor = Some(RequestAnchor::now(AnchorSource::TextSubmit));
+        match pm.kind.as_str() {
+            "text" => {
+                if let Some(text) = pm.text.as_deref()
+                    && !text.trim().is_empty()
+                {
+                    *self.pending_user_transcript = Some(text.to_string());
+                    // The text submission is this turn's "end of user input" — anchor
+                    // TTFB here so it measures submit -> first response byte.
+                    if self.current_turn.is_none() {
+                        *self.request_anchor = Some(RequestAnchor::now(AnchorSource::TextSubmit));
+                    }
+                    // Set flushed to true so we don't emit a redundant `stt-` pipeline message,
+                    // which causes the frontend to render a duplicate user bubble.
+                    *self.pending_user_transcript_flushed = true;
+                    let utterance_id = self
+                        .current_turn
+                        .as_ref()
+                        .map_or(*self.next_utterance_id, |t| t.utterance_id);
+                    let _ = self.pe_tx.send(PipelineEvent::UtteranceReceived {
+                        utterance_id,
+                        text: text.to_string(),
+                        source: "Text".to_string(),
+                    });
+                    self.client.send_text(text).await?;
+                    let _ = self
+                        .out_tx
+                        .send(ServerMessage::Control(ServerControl::StateChanged {
+                            state: PipelineState::Processing,
+                        }))
+                        .await;
+                }
             }
-            // Set flushed to true so we don't emit a redundant `stt-` pipeline message,
-            // which causes the frontend to render a duplicate user bubble.
-            *self.pending_user_transcript_flushed = true;
-            let utterance_id = self
-                .current_turn
-                .as_ref()
-                .map_or(*self.next_utterance_id, |t| t.utterance_id);
-            let _ = self.pe_tx.send(PipelineEvent::UtteranceReceived {
-                utterance_id,
-                text: text.to_string(),
-                source: "Text".to_string(),
-            });
-            self.client.send_text(text).await?;
-            let _ = self
-                .out_tx
-                .send(ServerMessage::Control(ServerControl::StateChanged {
-                    state: PipelineState::Processing,
-                }))
-                .await;
+            other => {
+                warn!(
+                    session_id = %self.session_id,
+                    kind = other,
+                    "unhandled pipeline message kind in realtime session"
+                );
+            }
         }
         Ok(())
     }

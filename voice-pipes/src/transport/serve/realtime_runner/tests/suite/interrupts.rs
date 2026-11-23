@@ -373,3 +373,31 @@ async fn transcript_proxy_anchor_does_not_replace_a_better_anchor() {
         );
     }
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn idle_client_cancel_does_not_emit_spurious_listening_state() {
+    let server = MockServer::start(vec![]).await;
+    let proto: Box<dyn RealtimeProtocol> = Box::new(MockRealtimeProtocol::new(server.url()));
+    let mut client = RealtimeClient::connect(proto, 16_000)
+        .await
+        .expect("connect");
+    let (out_tx, mut out_rx) = mpsc::channel(100);
+    let (pe_tx, _) = broadcast::channel(100);
+    let suppress = SuppressGate::new(Arc::new(AtomicBool::new(false)));
+    let mut s = CtxState::new();
+
+    {
+        let mut ctx = agent_test_ctx!(s, client, out_tx, pe_tx, suppress);
+        ctx.handle_client_cancel().await.unwrap();
+    }
+
+    while let Ok(msg) = out_rx.try_recv() {
+        assert!(
+            !matches!(
+                msg,
+                ServerMessage::Control(crate::transport::ServerControl::StateChanged { .. })
+            ),
+            "idle cancel must not emit StateChanged, got {msg:?}"
+        );
+    }
+}

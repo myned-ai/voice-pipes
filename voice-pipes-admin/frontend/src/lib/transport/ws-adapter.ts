@@ -115,13 +115,19 @@ export class WebSocketAdapter implements TransportAdapter {
         if (config) {
           this.sendControl({
             action: "configure",
+            audio_format: config.audio_format,
             sample_rate: config.sample_rate,
             output_sample_rate: config.output_sample_rate,
             channels: config.channels,
             language: config.language,
             voice: config.voice,
+            options: config.options,
             app_data: config.app_data,
             mode: config.mode,
+            protocol_version: config.protocol_version,
+            tags: config.tags,
+            barge_in_enabled: config.barge_in_enabled,
+            turn_detection_mode: config.turn_detection_mode,
             // Default on: this SDK's capture resamples, so it can honour any
             // rate the server picks. Callers can opt out explicitly.
             accepts_negotiated_input_rate:

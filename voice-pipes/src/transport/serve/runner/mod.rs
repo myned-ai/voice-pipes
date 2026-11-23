@@ -277,7 +277,7 @@ async fn run_session_inner(
                          but none is configured — {remedy}",
                         negotiated.mode.as_wire_str()
                     ),
-                    severity: ErrorSeverity::Error,
+                    severity: ErrorSeverity::Fatal,
                     turn_id: None,
                     component: Some(ErrorComponent::Transport),
                 }))
@@ -474,6 +474,12 @@ async fn run_session_inner(
         &tts_name,
         tts_root.supported_inline_tags(),
     ));
+    let session_default_tts_hints =
+        (negotiated.voice.is_some() || negotiated.language.is_some()).then(|| {
+            crate::tts::SynthesisHints::default()
+                .with_voice(negotiated.voice.clone())
+                .with_language(negotiated.language.clone())
+        });
 
     // Per-utterance audio ledgers -- kept so a late PlaybackReport can
     // look up the text<->audio mapping for precise history truncation.
@@ -508,6 +514,15 @@ async fn run_session_inner(
             Arc::new(tokio::sync::Mutex::new(None))
         }
     };
+
+    // Announce the initial `Listening` state right after `SessionReady` and
+    // before spawning background warm-up tasks, so startup ordering is
+    // deterministic and mirrors the realtime runner.
+    let _ = out_tx
+        .send(ServerMessage::Control(ServerControl::StateChanged {
+            state: crate::transport::PipelineState::Listening,
+        }))
+        .await;
 
     // ── Component warm-ups ──────────────────────────────────
     // Spawn STT / LLM / TTS warm-ups in parallel as background tasks.
@@ -809,6 +824,7 @@ async fn run_session_inner(
                     tts_session: Arc::clone(&tts_session),
                     spec_manager: spec_manager.clone(),
                     sanitize_cfg: session_sanitize_cfg.clone(),
+                    default_tts_hints: session_default_tts_hints.clone(),
                     observations: observations.clone(),
                     client_tools: &session_client_tools,
                     client_calls: &mut client_calls,
@@ -930,6 +946,49 @@ async fn run_session_inner(
                         id, text, language, voice,
                     })) => {
                         ctx.handle_tts_only_synthesize(id, text, language, voice, &tts_cold_start, state);
+                    }
+                    Some(ClientMessage::Control(ClientControl::Say { text, interrupt })) => {
+                        if text.trim().is_empty() {
+                            debug!(session_id = %session_id, "ignoring empty client say control");
+                        } else {
+                            let scheduling = if interrupt {
+                                crate::agent::Scheduling::Interrupt
+                            } else {
+                                crate::agent::Scheduling::WhenIdle
+                            };
+                            ctx.handle_agent_event(
+                                crate::agent::AgentEvent::Say { text, scheduling },
+                                &mut pending_agent,
+                                &cancel_watch_tx,
+                                &proc_audio_tx,
+                                &session_post_processors,
+                                &session_output_chunking,
+                                &metrics_tx,
+                                &tts_cold_start,
+                                state,
+                            )
+                            .await;
+                        }
+                    }
+                    Some(ClientMessage::Control(ClientControl::CommitInput)) => {
+                        debug!(session_id = %session_id, "client commit_input received");
+                        let eou = crate::pipeline::AudioChunk {
+                            samples: Vec::new(),
+                            sample_rate: client_sample_rate,
+                            channels: 1,
+                            is_end_of_utterance: true,
+                            caption: None,
+                            utterance_id: 0,
+                            full_text: None,
+                            extras: None,
+                            last_speech_at: None,
+                            synth_duration: None,
+                        };
+                        ctx.handle_audio(eou, session_mode).await;
+                    }
+                    Some(ClientMessage::Control(ClientControl::ClearInput)) => {
+                        debug!(session_id = %session_id, "client clear_input received");
+                        user_speaking.store(false, Ordering::Release);
                     }
                     None => {
                         debug!(session_id = %session_id, "transport closed");

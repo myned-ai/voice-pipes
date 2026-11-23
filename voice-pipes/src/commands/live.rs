@@ -443,6 +443,7 @@ pub async fn run_live(
                 std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
                 None,
                 live_sanitize_cfg,
+                None,
             )
             .await;
         });

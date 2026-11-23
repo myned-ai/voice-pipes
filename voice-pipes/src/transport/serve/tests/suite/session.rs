@@ -1308,3 +1308,440 @@ async fn speech_that_makes_no_turn_is_announced_to_the_client() {
     drop(client);
     let _ = tokio::time::timeout(std::time::Duration::from_secs(5), handle).await;
 }
+
+#[tokio::test]
+async fn session_configure_voice_reaches_tts_hints() {
+    use crate::transport::{MessageRole, PipelineMessage};
+
+    struct RecordingTts {
+        seen_voices: Arc<std::sync::Mutex<Vec<Option<String>>>>,
+    }
+
+    #[async_trait::async_trait]
+    impl crate::tts::TtsProvider for RecordingTts {
+        async fn synthesize(
+            &self,
+            _text: &str,
+        ) -> Result<crate::audio::AudioFrame, crate::tts::TtsError> {
+            Ok(crate::audio::AudioFrame {
+                samples: vec![100; 1600],
+                sample_rate: 16000,
+                channels: 1,
+            })
+        }
+
+        async fn synthesize_stream(
+            &self,
+            req: crate::tts::SynthesisRequest<'_>,
+            tx: tokio::sync::mpsc::Sender<crate::audio::AudioFrame>,
+            _cancel: tokio_util::sync::CancellationToken,
+        ) -> Result<(), crate::tts::TtsError> {
+            self.seen_voices
+                .lock()
+                .unwrap()
+                .push(req.hints.and_then(|h| h.voice.clone()));
+            let _ = tx
+                .send(crate::audio::AudioFrame {
+                    samples: vec![100; 1600],
+                    sample_rate: 16000,
+                    channels: 1,
+                })
+                .await;
+            Ok(())
+        }
+
+        fn sample_rate(&self) -> u32 {
+            16000
+        }
+
+        fn name(&self) -> &'static str {
+            "recording-tts"
+        }
+    }
+
+    let seen_voices = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let seen_clone = Arc::clone(&seen_voices);
+    let state = test_state_customised(true, false, None, move |s| {
+        s.tts = Some(Arc::new(RecordingTts {
+            seen_voices: Arc::clone(&seen_clone),
+        }));
+    });
+
+    let (client, server) = channel_pair();
+    let state2 = Arc::clone(&state);
+    let handle = tokio::spawn(async move {
+        run_session(Box::new(server), state2).await;
+    });
+
+    client
+        .send_client(ClientMessage::Control(ClientControl::Configure(
+            SessionConfig {
+                voice: Some("marius".into()),
+                ..Default::default()
+            },
+        )))
+        .await
+        .unwrap();
+
+    loop {
+        match tokio::time::timeout(std::time::Duration::from_secs(3), client.recv_server()).await {
+            Ok(Ok(Some(ServerMessage::Control(ServerControl::SessionReady { .. })))) => break,
+            Ok(Ok(Some(_))) => continue,
+            other => panic!("expected SessionReady, got {other:?}"),
+        }
+    }
+
+    client
+        .send_client(ClientMessage::Message(PipelineMessage::text(
+            "Hello there",
+            MessageRole::User,
+        )))
+        .await
+        .unwrap();
+
+    let start = std::time::Instant::now();
+    while start.elapsed() < std::time::Duration::from_secs(5) {
+        if !seen_voices.lock().unwrap().is_empty() {
+            break;
+        }
+        let _ = tokio::time::timeout(std::time::Duration::from_millis(50), client.recv_server()).await;
+    }
+
+    assert_eq!(
+        seen_voices.lock().unwrap().as_slice(),
+        &[Some("marius".to_string())],
+        "session voice must reach TTS synthesize_stream hints"
+    );
+
+    drop(client);
+    let _ = tokio::time::timeout(std::time::Duration::from_secs(5), handle).await;
+}
+
+#[tokio::test]
+async fn context_pipeline_message_injects_context_without_starting_turn() {
+    use crate::transport::serve::runner::context::ClassicSessionContext;
+    use crate::transport::{MessageRole, PipelineMessage};
+
+    let injected = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let appended = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let mut bed = AgentTestBed::new(vec![Box::new(CaptureProcessor {
+        injected: Arc::clone(&injected),
+        appended,
+    })]);
+    let (text_utt_tx, mut text_utt_rx) = mpsc::channel(4);
+
+    let msg = PipelineMessage {
+        kind: "context".into(),
+        text: Some("User is viewing the billing page.".into()),
+        payload: None,
+        binary: None,
+        role: MessageRole::User,
+        turn_id: None,
+        message_id: "ctx-1".into(),
+    };
+
+    assert!(classic_ctx!(bed).handle_pipeline_message(msg, &text_utt_tx).await);
+    assert_eq!(
+        injected.lock().unwrap().as_slice(),
+        &["User is viewing the billing page.".to_string()]
+    );
+    assert!(
+        text_utt_rx.try_recv().is_err(),
+        "context message must not trigger a spoken utterance turn"
+    );
+}
+
+#[tokio::test]
+async fn pcm_f32_le_is_downgraded_to_pcm_i16_le() {
+    let state = test_state();
+    let (client, server) = channel_pair();
+
+    let state2 = Arc::clone(&state);
+    let handle = tokio::spawn(async move {
+        run_session(Box::new(server), state2).await;
+    });
+
+    client
+        .send_client(ClientMessage::Control(ClientControl::Configure(
+            SessionConfig {
+                audio_format: AudioFormat::PcmF32Le,
+                sample_rate: 16_000,
+                ..Default::default()
+            },
+        )))
+        .await
+        .unwrap();
+
+    let msg = client.recv_server().await.unwrap().expect("expected message");
+    match msg {
+        ServerMessage::Control(ServerControl::SessionReady(info)) => {
+            assert_eq!(info.negotiated.audio_format, AudioFormat::PcmI16Le);
+            assert_eq!(
+                info.negotiated.options.get("audio_format_fallback"),
+                Some(&serde_json::Value::String(
+                    "pcm_f32_le_to_pcm_i16_le".to_string()
+                ))
+            );
+        }
+        other => panic!("expected SessionReady, got {other:?}"),
+    }
+
+    drop(client);
+    let _ = tokio::time::timeout(std::time::Duration::from_secs(2), handle).await;
+}
+
+#[tokio::test]
+async fn negotiated_options_excludes_ignored_options_and_reports_realtime_identity() {
+    use crate::transport::serve::setup::negotiate_and_announce;
+
+    let mut cfg = (*test_state().config).clone();
+    cfg.stt = None;
+    cfg.tts = None;
+    cfg.realtime_provider = Some(
+        serde_json::from_value(serde_json::json!({
+            "provider": "openai-realtime",
+            "voice": "alloy"
+        }))
+        .unwrap(),
+    );
+    let state = test_state_customised(false, false, None, move |s| {
+        s.config = Arc::new(cfg.clone());
+    });
+
+    let mut options = std::collections::HashMap::new();
+    options.insert("instructions".into(), serde_json::json!("hijack"));
+    let client_cfg = Some(SessionConfig {
+        options,
+        ..Default::default()
+    });
+    let (out_tx, _out_rx) = mpsc::channel(8);
+
+    let negotiated = negotiate_and_announce(
+        &client_cfg,
+        &state,
+        "sess-1",
+        "tok-1",
+        false,
+        &[],
+        &out_tx,
+    )
+    .await;
+    assert!(
+        negotiated.ignored_options.iter().any(|k| k == "instructions"),
+        "instructions should be ignored when not allowlisted"
+    );
+    assert!(
+        !negotiated.options.contains_key("instructions"),
+        "ignored options must not be echoed back in negotiated.options"
+    );
+    assert_eq!(negotiated.voice.as_deref(), Some("alloy"));
+    assert_eq!(negotiated.stt_provider.as_deref(), Some("openai-realtime"));
+    assert_eq!(negotiated.tts_provider.as_deref(), Some("openai-realtime"));
+}
+
+#[tokio::test]
+async fn handshake_rejection_uses_fatal_severity() {
+    let state = test_state();
+    let (client, server) = channel_pair();
+
+    let state2 = Arc::clone(&state);
+    let handle = tokio::spawn(async move {
+        run_session(Box::new(server), state2).await;
+    });
+
+    // Send a non-Configure/Resume frame first -> InvalidHandshake (1003).
+    client
+        .send_client(ClientMessage::Control(ClientControl::Cancel))
+        .await
+        .unwrap();
+
+    let msg = client.recv_server().await.unwrap().expect("expected error");
+    match msg {
+        ServerMessage::Control(ServerControl::Error { code, severity, .. }) => {
+            assert_eq!(code, ErrorCode::InvalidHandshake);
+            assert_eq!(severity, crate::transport::ErrorSeverity::Fatal);
+        }
+        other => panic!("expected Error(InvalidHandshake), got {other:?}"),
+    }
+
+    drop(client);
+    let _ = tokio::time::timeout(std::time::Duration::from_secs(2), handle).await;
+}
+
+#[tokio::test]
+async fn cascade_emits_initial_listening_after_session_ready() {
+    use crate::transport::PipelineState;
+
+    let state = test_state();
+    let (client, server) = channel_pair();
+    let state2 = Arc::clone(&state);
+    let handle = tokio::spawn(async move {
+        run_session(Box::new(server), state2).await;
+    });
+
+    client
+        .send_client(ClientMessage::Control(ClientControl::Configure(
+            SessionConfig::default(),
+        )))
+        .await
+        .unwrap();
+
+    let first = client.recv_server().await.unwrap().expect("SessionReady");
+    assert!(matches!(
+        first,
+        ServerMessage::Control(ServerControl::SessionReady(_))
+    ));
+
+    let second = tokio::time::timeout(std::time::Duration::from_secs(2), client.recv_server())
+        .await
+        .expect("timed out waiting for initial Listening state")
+        .unwrap()
+        .expect("expected StateChanged(Listening)");
+    assert!(
+        matches!(
+            second,
+            ServerMessage::Control(ServerControl::StateChanged {
+                state: PipelineState::Listening
+            })
+        ),
+        "expected StateChanged(Listening) after SessionReady, got {second:?}"
+    );
+
+    drop(client);
+    let _ = tokio::time::timeout(std::time::Duration::from_secs(2), handle).await;
+}
+
+#[tokio::test]
+async fn client_say_synthesizes_proactive_assistant_turn() {
+    use crate::transport::PipelineState;
+
+    let state = test_state();
+    let (client, server) = channel_pair();
+    let state2 = Arc::clone(&state);
+    let handle = tokio::spawn(async move {
+        run_session(Box::new(server), state2).await;
+    });
+
+    handshake(&client).await;
+
+    client
+        .send_client(ClientMessage::Control(ClientControl::Say {
+            text: "Welcome to Voice Pipes!".into(),
+            interrupt: false,
+        }))
+        .await
+        .unwrap();
+
+    let mut saw_audio = false;
+    let mut saw_draining = false;
+    let start = std::time::Instant::now();
+    while start.elapsed() < std::time::Duration::from_secs(5) {
+        match tokio::time::timeout(std::time::Duration::from_secs(2), client.recv_server()).await {
+            Ok(Ok(Some(ServerMessage::Audio(chunk)))) => {
+                if !chunk.samples.is_empty() {
+                    saw_audio = true;
+                }
+            }
+            Ok(Ok(Some(ServerMessage::Control(ServerControl::StateChanged {
+                state: PipelineState::Draining,
+            })))) => {
+                saw_draining = true;
+                break;
+            }
+            Ok(Ok(Some(_))) => continue,
+            _ => break,
+        }
+    }
+    assert!(saw_audio, "ClientControl::Say must synthesize audio");
+    assert!(saw_draining, "ClientControl::Say must finish in Draining");
+
+    drop(client);
+    let _ = tokio::time::timeout(std::time::Duration::from_secs(2), handle).await;
+}
+
+#[tokio::test]
+async fn configure_barge_in_turn_detection_and_commit_input() {
+    let state = test_state();
+    let (client, server) = channel_pair();
+    let state2 = Arc::clone(&state);
+    let handle = tokio::spawn(async move {
+        run_session(Box::new(server), state2).await;
+    });
+
+    client
+        .send_client(ClientMessage::Control(ClientControl::Configure(
+            SessionConfig {
+                sample_rate: 16_000,
+                barge_in_enabled: Some(false),
+                turn_detection_mode: Some("push_to_talk".into()),
+                ..Default::default()
+            },
+        )))
+        .await
+        .unwrap();
+
+    let ready = client.recv_server().await.unwrap().expect("SessionReady");
+    match ready {
+        ServerMessage::Control(ServerControl::SessionReady(info)) => {
+            assert_eq!(info.negotiated.barge_in_enabled, Some(false));
+            assert_eq!(
+                info.negotiated.turn_detection_mode.as_deref(),
+                Some("push_to_talk")
+            );
+        }
+        other => panic!("expected SessionReady, got {other:?}"),
+    }
+    // Consume initial StateChanged(Listening).
+    let _ = client.recv_server().await.unwrap();
+
+    // Send audio without EOU flag, then commit explicitly via `commit_input`.
+    for _ in 0..5 {
+        client
+            .send_client(ClientMessage::Audio(crate::pipeline::AudioChunk {
+                samples: vec![500; 320],
+                sample_rate: 16_000,
+                channels: 1,
+                is_end_of_utterance: false,
+                caption: None,
+                utterance_id: 0,
+                full_text: None,
+                extras: None,
+                last_speech_at: None,
+                synth_duration: None,
+            }))
+            .await
+            .unwrap();
+    }
+    client
+        .send_client(ClientMessage::Control(ClientControl::CommitInput))
+        .await
+        .unwrap();
+
+    let mut saw_processing = false;
+    let start = std::time::Instant::now();
+    while start.elapsed() < std::time::Duration::from_secs(5) {
+        match tokio::time::timeout(std::time::Duration::from_secs(2), client.recv_server()).await {
+            Ok(Ok(Some(ServerMessage::Control(ServerControl::StateChanged {
+                state: crate::transport::PipelineState::Processing,
+            })))) => {
+                saw_processing = true;
+                break;
+            }
+            Ok(Ok(Some(_))) => continue,
+            _ => break,
+        }
+    }
+    assert!(
+        saw_processing,
+        "commit_input must commit buffered audio and start Processing"
+    );
+
+    // ClearInput should be accepted cleanly without closing the session.
+    client
+        .send_client(ClientMessage::Control(ClientControl::ClearInput))
+        .await
+        .unwrap();
+
+    drop(client);
+    let _ = tokio::time::timeout(std::time::Duration::from_secs(2), handle).await;
+}

@@ -73,6 +73,7 @@ pub struct ClassicSessionContext<'a> {
     pub tts_session: Arc<tokio::sync::Mutex<Option<Box<dyn crate::tts::TtsSession>>>>,
     pub spec_manager: Option<Arc<pipeline::SpeculativeSessionManager>>,
     pub sanitize_cfg: Option<voice_pipes_sdk::SanitizeConfig>,
+    pub default_tts_hints: Option<voice_pipes_sdk::SynthesisHints>,
     /// Per-session client-tool allowlist.
     /// On cascade the driving LLM surfaces calls as
     /// [`AgentEvent::ClientToolCall`](crate::agent::AgentEvent); the
@@ -230,6 +231,7 @@ impl ClassicSessionContext<'_> {
                 warn!(session_id = %self.session_id, error = %e, "failed to cancel stateful TTS session during client cancel");
             }
         }
+        self.tracker.last_interruption_trigger = Some(InterruptionTrigger::ClientCancel);
         // Recorded once, by the session's event recorder (`session_events`).
         let _ = self.pe_tx.send(PipelineEvent::Interrupted {
             utterance_id,
@@ -520,7 +522,11 @@ impl ClassicSessionContext<'_> {
         // Recorded once, by the session's event recorder (`session_events`).
         let _ = self.pe_tx.send(PipelineEvent::BargeInResolved {
             utterance_id,
-            trigger: InterruptionTrigger::ServerVad,
+            trigger: self
+                .tracker
+                .last_interruption_trigger
+                .clone()
+                .unwrap_or(InterruptionTrigger::ServerVad),
             played_ms: Some(last_played_offset_ms),
             retained_text: played_text,
             barge_in_rtt_ms,
@@ -587,8 +593,23 @@ impl ClassicSessionContext<'_> {
                     inject_text_utterance(&text, self.tracker, text_utt_tx).await;
                 }
             }
+            "context" => {
+                let text = pipeline_msg.text.as_deref().unwrap_or_default();
+                if text.trim().is_empty() {
+                    debug!(session_id = %self.session_id, "ignoring empty context message");
+                } else {
+                    debug!(
+                        session_id = %self.session_id,
+                        message_id = %pipeline_msg.message_id,
+                        "injecting client context into text processors"
+                    );
+                    for p in self.session_processors.iter() {
+                        p.inject_context(text).await;
+                    }
+                }
+            }
             other => {
-                debug!(
+                warn!(
                     session_id = %self.session_id,
                     kind = other,
                     "unhandled pipeline message kind"
@@ -709,6 +730,7 @@ impl ClassicSessionContext<'_> {
             manager.cancel().await;
         }
         debug!(session_id = %self.session_id, "barge-in: suppress_audio = true");
+        self.tracker.last_interruption_trigger = Some(trigger.clone());
         // Recorded once, by the session's event recorder (`session_events`).
         let _ = self.pe_tx.send(PipelineEvent::Interrupted {
             utterance_id: self.tracker.current_utterance_id,
@@ -911,6 +933,7 @@ impl ClassicSessionContext<'_> {
         let tts_session_arg = Arc::clone(&self.tts_session);
         let spec_manager_arg = self.spec_manager.clone();
         let sanitize_cfg_arg = self.sanitize_cfg.clone();
+        let default_tts_hints_arg = self.default_tts_hints.clone();
         tokio::spawn(async move {
             let metrics = pipeline::process_utterance(
                 &utterance,
@@ -929,6 +952,7 @@ impl ClassicSessionContext<'_> {
                 cold_start_arg,
                 spec_manager_arg,
                 sanitize_cfg_arg,
+                default_tts_hints_arg,
             )
             .await;
             let _ = m_tx.send(metrics).await;

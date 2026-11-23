@@ -736,6 +736,10 @@ export class PureVoicePipesClientFsm {
           }
         } else if (event.type === "SERVER_STATE_CHANGED" && event.serverState === "draining") {
           this.state = "draining";
+        } else if (event.type === "SERVER_STATE_CHANGED" && event.serverState === "listening") {
+          // Realtime/S2S mode transitions directly from speaking to listening without draining.
+          this.state = "listening";
+          this.activeUtteranceId = null;
         } else if (event.type === "CLEAR_AUDIO" && event.utteranceId === this.activeUtteranceId) {
           actions.push({ type: "FREEZE_BUBBLE_AT_POSITION", utteranceId: event.utteranceId });
           actions.push({ type: "SEND_PLAYBACK_REPORT", utteranceId: event.utteranceId });

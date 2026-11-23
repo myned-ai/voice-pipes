@@ -62,8 +62,13 @@ pub struct PipelineMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub payload: Option<serde_json::Value>,
 
-    /// Optional binary attachment (images, documents, audio clips).
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// Optional binary attachment (images, documents, audio clips), encoded as
+    /// base64 on the JSON wire format.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "opt_base64_bytes"
+    )]
     pub binary: Option<Vec<u8>>,
 
     /// Who produced this message.
@@ -81,6 +86,36 @@ pub struct PipelineMessage {
 
 fn generate_message_id() -> String {
     uuid::Uuid::new_v4().to_string()
+}
+
+mod opt_base64_bytes {
+    use base64::Engine as _;
+    use base64::engine::general_purpose::STANDARD;
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S>(value: &Option<Vec<u8>>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match value {
+            Some(bytes) => serializer.serialize_str(&STANDARD.encode(bytes)),
+            None => serializer.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<Vec<u8>>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let opt = Option::<String>::deserialize(deserializer)?;
+        match opt {
+            Some(encoded) => STANDARD
+                .decode(encoded.as_bytes())
+                .map(Some)
+                .map_err(serde::de::Error::custom),
+            None => Ok(None),
+        }
+    }
 }
 
 impl PipelineMessage {
@@ -415,6 +450,23 @@ pub enum ClientControl {
         #[serde(skip_serializing_if = "Option::is_none")]
         voice: Option<String>,
     },
+    /// Ask the assistant to speak `text` proactively as a normal turn
+    /// (e.g., an opening greeting or notification) without faking user input.
+    Say {
+        /// Text for the assistant to speak verbatim.
+        text: String,
+        /// When `true`, interrupt any in-flight assistant response; otherwise
+        /// queue until the session is idle (`Scheduling::WhenIdle`).
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        interrupt: bool,
+    },
+    /// Explicitly commit the buffered user audio as end-of-utterance
+    /// (push-to-talk / manual turn-detection alternative to an empty binary
+    /// `0x01` EOU frame).
+    CommitInput,
+    /// Discard any uncommitted user audio buffered on the server before a turn
+    /// has started (push-to-talk cancel).
+    ClearInput,
 }
 
 /// Lifecycle phase of a client-side tool execution reported via
@@ -731,6 +783,14 @@ pub struct SessionConfig {
     /// (`AudioCaptureService` converts whatever the `AudioContext` gives it).
     #[serde(default)]
     pub accepts_negotiated_input_rate: bool,
+    /// Optional per-session override for barge-in detection (`true` enables,
+    /// `false` disables, `None` inherits the worker's configured default).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub barge_in_enabled: Option<bool>,
+    /// Optional per-session turn-detection mode override (e.g. `"server_vad"`,
+    /// `"silence"`, `"push_to_talk"`). `None` inherits the worker's default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turn_detection_mode: Option<String>,
 }
 
 /// Resolved input sample rate from a [`SessionConfig`].
@@ -772,6 +832,8 @@ impl Default for SessionConfig {
             // Conservative: a client that never said it can adapt is assumed
             // not to, so the server honours its proposed rate verbatim.
             accepts_negotiated_input_rate: false,
+            barge_in_enabled: None,
+            turn_detection_mode: None,
         }
     }
 }
@@ -1055,6 +1117,12 @@ pub struct NegotiatedConfig {
     /// ten thousand, and every spoken turn after it would be mislabelled.
     #[serde(default = "default_text_utterance_id_base")]
     pub text_utterance_id_base: u32,
+    /// Effective barge-in setting for this session (client override or worker default).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub barge_in_enabled: Option<bool>,
+    /// Effective turn-detection mode for this session (e.g. `"silence"`, `"push_to_talk"`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turn_detection_mode: Option<String>,
 }
 
 /// The id of a session's first spoken utterance, in every session kind.

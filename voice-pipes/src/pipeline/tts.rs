@@ -462,6 +462,40 @@ impl TurnFragmentAccumulator {
     }
 }
 
+/// Merge per-fragment synthesis hints over session-level defaults.
+///
+/// Fragment-level fields take precedence over session defaults; `options` maps
+/// are merged with fragment keys overriding session keys.
+fn merge_synthesis_hints(
+    frag_hints: Option<voice_pipes_sdk::SynthesisHints>,
+    default_hints: Option<&voice_pipes_sdk::SynthesisHints>,
+) -> Option<voice_pipes_sdk::SynthesisHints> {
+    match (frag_hints, default_hints) {
+        (None, None) => None,
+        (Some(f), None) => Some(f),
+        (None, Some(d)) => Some(d.clone()),
+        (Some(mut f), Some(d)) => {
+            if f.voice.is_none() {
+                f.voice.clone_from(&d.voice);
+            }
+            if f.language.is_none() {
+                f.language.clone_from(&d.language);
+            }
+            if f.speed.is_none() {
+                f.speed = d.speed;
+            }
+            for (k, v) in &d.options {
+                f.options.entry(k.clone()).or_insert_with(|| v.clone());
+            }
+            Some(f)
+        }
+    }
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "tts_task orchestrates streaming synthesis, resampling, chunking, and telemetry"
+)]
 pub async fn tts_task(
     mut frag_rx: mpsc::Receiver<TextFragment>,
     audio_tx: mpsc::Sender<AudioChunk>,
@@ -475,6 +509,7 @@ pub async fn tts_task(
     event_tx: mpsc::Sender<ServerMessage>,
     error_reported: Arc<AtomicBool>,
     sanitize_cfg: Option<voice_pipes_sdk::SanitizeConfig>,
+    default_hints: Option<voice_pipes_sdk::SynthesisHints>,
 ) {
     let tts_rate = tts.sample_rate();
     let tts_name = tts.name().to_string();
@@ -677,12 +712,13 @@ pub async fn tts_task(
             }
 
             // Start synthesis for this fragment.
+            let merged_hints = merge_synthesis_hints(raw.hints.clone(), default_hints.as_ref());
             let (handle, frx, wrx) = spawn_synthesis_task(
                 Arc::clone(&tts),
                 Arc::clone(&tts_session),
                 has_stateful_session,
                 spoken_text.clone(),
-                raw.hints.clone(),
+                merged_hints,
                 synth_max_retries,
                 cancel.clone(),
             );
@@ -854,12 +890,14 @@ pub async fn tts_task(
                             // Empty fragment (possibly end-sentinel) -- defer.
                             deferred_frag = Some(nf);
                         } else {
+                            let merged_hints =
+                                merge_synthesis_hints(nf.hints.clone(), default_hints.as_ref());
                             let (nhandle, nrx, nwrx) = spawn_synthesis_task(
                                 Arc::clone(&tts),
                                 Arc::clone(&tts_session),
                                 has_stateful_session,
                                 n_spoken.clone(),
-                                nf.hints.clone(),
+                                merged_hints,
                                 synth_max_retries,
                                 cancel.clone(),
                             );

@@ -33,6 +33,7 @@ async fn test_tts_task_end_to_end() {
         evt_tx,
         err_flag,
         None,
+        None,
     ));
 
     frag_tx
@@ -134,6 +135,7 @@ async fn test_tts_task_stateful_session_does_not_deadlock() {
         evt_tx,
         err_flag,
         None,
+        None,
     ));
 
     for (text, is_end) in [("one", false), ("two", false), ("three", true)] {
@@ -192,6 +194,7 @@ async fn test_tts_task_fragment_idx_increments_without_audit() {
         evt_tx,
         err_flag,
         None,
+        None,
     ));
 
     for (text, is_end) in [("hello", false), ("world", true)] {
@@ -247,6 +250,7 @@ async fn test_tts_task_skips_empty_fragment() {
         evt_tx,
         err_flag,
         None,
+        None,
     ));
 
     // Send empty fragment followed by real one
@@ -292,6 +296,7 @@ async fn test_tts_task_emits_tts_timing_on_empty_final_fragment() {
         Some(audit),
         evt_tx,
         err_flag,
+        None,
         None,
     ));
 
@@ -368,6 +373,7 @@ async fn test_tts_task_resamples_to_output_rate() {
         evt_tx,
         err_flag,
         None,
+        None,
     ));
 
     frag_tx
@@ -426,6 +432,7 @@ async fn test_tts_task_resampler_is_fresh_per_fragment() {
         None,
         evt_tx,
         err_flag,
+        None,
         None,
     ));
 
@@ -492,6 +499,7 @@ async fn test_tts_task_no_resample_when_none() {
         evt_tx,
         err_flag,
         None,
+        None,
     ));
 
     frag_tx
@@ -536,6 +544,7 @@ async fn test_tts_task_fixed_chunking_splits_large_frames() {
         None,
         evt_tx,
         err_flag,
+        None,
         None,
     ));
 
@@ -588,6 +597,7 @@ async fn test_tts_task_fixed_chunking_preserves_fragment_boundaries() {
         None,
         evt_tx,
         err_flag,
+        None,
         None,
     ));
 
@@ -643,6 +653,7 @@ async fn test_tts_task_cancel_stops_processing() {
         None,
         evt_tx,
         err_flag,
+        None,
         None,
     ));
 
@@ -747,6 +758,7 @@ async fn test_tts_prefetch_word_timings() {
         evt_tx,
         err_flag,
         None,
+        None,
     ));
 
     frag_tx.send(TextFragment::new("first")).await.unwrap();
@@ -814,6 +826,7 @@ async fn test_tts_sentinel_channel_metadata() {
         evt_tx,
         err_flag,
         None,
+        None,
     ));
 
     frag_tx
@@ -875,6 +888,7 @@ async fn test_tts_clean_exit_on_end() {
         None,
         evt_tx,
         err_flag,
+        None,
         None,
     ));
 
@@ -969,6 +983,7 @@ async fn words_sent_before_the_first_frame_do_not_stall_the_fragment() {
         evt_tx,
         err_flag,
         None,
+        None,
     ));
     frag_tx
         .send(TextFragment::new("a long sentence").with_is_end_of_response(true))
@@ -1042,6 +1057,7 @@ async fn test_tts_task_dual_track_sanitizer_and_lexicon() {
         evt_tx,
         err_flag,
         Some(sanitize_cfg),
+        None,
     ));
 
     frag_tx
@@ -1130,6 +1146,7 @@ async fn test_tts_task_sentence_chunking_false_buffers_entire_turn() {
         None,
         evt_tx,
         err_flag,
+        None,
         None,
     ));
 

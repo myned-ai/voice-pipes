@@ -102,7 +102,7 @@ describe("VoicePipesSessionCore — clean vs. unexpected close", () => {
   it("does not downgrade an already-surfaced fatal error to idle", () => {
     const fatal: ServerMessage = {
       kind: "control",
-      control: { action: "error", code: "500", message: "boom", severity: "fatal" },
+      control: { action: "error", code: 500, message: "boom", severity: "fatal" },
     };
     core["handleMessage"](fatal);
     // Fatal error triggers transport.disconnect() internally; simulate the

@@ -52,6 +52,7 @@ async fn test_mock_pipeline_end_to_end() {
         evt_tx,
         err_flag,
         None,
+        None,
     ));
 
     // Feed an utterance
@@ -126,6 +127,7 @@ async fn test_graceful_shutdown() {
         None,
         evt_tx,
         err_flag,
+        None,
         None,
     ));
     // Use a simple drain consumer instead of playback_task, because
@@ -296,7 +298,8 @@ async fn test_process_utterance_cancel() {
                 std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
                 None,
                 None,
-            )
+        None,
+    )
             .await;
         }
     });
@@ -383,6 +386,7 @@ async fn test_orchestrator_nonblocking_llm_cancel() {
         Arc::new(AtomicBool::new(false)),
         None,
         None,
+        None,
     )
     .await;
 
@@ -458,7 +462,8 @@ async fn eou_sentinel_does_not_wait_for_the_llm_stream_to_close() {
             Arc::new(AtomicBool::new(false)),
             None,
             None,
-        )
+        None,
+    )
         .await
     });
 
@@ -517,6 +522,7 @@ async fn agent_say_turn_has_null_llm_ttft_and_skip_reason() {
         None,
         ledger,
         Arc::new(AtomicBool::new(false)),
+        None,
         None,
         None,
     )
@@ -603,6 +609,7 @@ async fn speculative_accepted_turn_has_null_llm_ttft_and_skip_reason() {
         ledger,
         Arc::new(AtomicBool::new(false)),
         Some(manager),
+        None,
         None,
     )
     .await;
@@ -739,6 +746,7 @@ async fn telescoping_stage_latencies_sum_to_commit_to_first_audio() {
         None,
         ledger,
         Arc::new(AtomicBool::new(false)),
+        None,
         None,
         None,
     )

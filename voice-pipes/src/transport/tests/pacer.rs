@@ -282,3 +282,105 @@ async fn burst_releases_the_head_of_the_utterance_immediately() {
         "the remainder is paced at 50 ms per chunk"
     );
 }
+
+/// `StateChanged(Draining)` must not overtake audio chunks still queued in
+/// the pacer; the client should receive all audio for the turn before
+/// `draining` arrives.
+#[tokio::test(start_paused = true)]
+async fn draining_waits_for_queued_audio_to_drain() {
+    use crate::transport::{PipelineState, ServerControl};
+
+    let config = PacerConfig {
+        enabled: true,
+        pace_factor: 2.0,
+        burst_ms: 300,
+        max_buffer_ms: 300_000,
+    };
+    let (tx, rx) = mpsc::channel(64);
+    let mut paced_rx = spawn_pacer(config, rx, Arc::new(AtomicBool::new(false)));
+    for _ in 0..6 {
+        tx.send(audio_100ms()).await.unwrap();
+    }
+    tx.send(ServerMessage::Control(ServerControl::StateChanged {
+        state: PipelineState::Draining,
+    }))
+    .await
+    .unwrap();
+
+    let mut audio_seen = 0usize;
+    let mut draining_at = None;
+    for idx in 0..7 {
+        let msg = tokio::time::timeout(Duration::from_secs(5), paced_rx.recv())
+            .await
+            .expect("pacer timed out")
+            .expect("pacer closed");
+        match msg {
+            ServerMessage::Audio(_) => audio_seen += 1,
+            ServerMessage::Control(ServerControl::StateChanged {
+                state: PipelineState::Draining,
+            }) => {
+                draining_at = Some(idx);
+            }
+            other => panic!("unexpected message: {other:?}"),
+        }
+    }
+    assert_eq!(audio_seen, 6);
+    assert_eq!(
+        draining_at,
+        Some(6),
+        "draining must arrive only after all 6 queued audio chunks"
+    );
+}
+
+/// If `ClearAudio` arrives while `StateChanged(Draining)` is held behind
+/// queued audio, `Draining` must flush before `ClearAudio` (and queued
+/// audio must be dropped) so state transitions are never reordered.
+#[tokio::test(start_paused = true)]
+async fn clear_audio_flushes_pending_draining_before_clear_audio() {
+    use crate::transport::{PipelineState, ServerControl};
+
+    let config = PacerConfig {
+        enabled: true,
+        pace_factor: 2.0,
+        burst_ms: 0,
+        max_buffer_ms: 300_000,
+    };
+    let (tx, rx) = mpsc::channel(64);
+    let mut paced_rx = spawn_pacer(config, rx, Arc::new(AtomicBool::new(false)));
+    for _ in 0..4 {
+        tx.send(audio_100ms()).await.unwrap();
+    }
+    tx.send(ServerMessage::Control(ServerControl::StateChanged {
+        state: PipelineState::Draining,
+    }))
+    .await
+    .unwrap();
+    tx.send(ServerMessage::Control(ServerControl::ClearAudio {
+        utterance_id: 1,
+        reason: "barge_in".into(),
+    }))
+    .await
+    .unwrap();
+
+    let first = tokio::time::timeout(Duration::from_secs(1), paced_rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    let second = tokio::time::timeout(Duration::from_secs(1), paced_rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(matches!(
+        first,
+        ServerMessage::Control(ServerControl::StateChanged {
+            state: PipelineState::Draining
+        })
+    ));
+    assert!(matches!(
+        second,
+        ServerMessage::Control(ServerControl::ClearAudio {
+            utterance_id: 1,
+            ..
+        })
+    ));
+}

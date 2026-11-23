@@ -1614,7 +1614,8 @@ export class VoicePipesSessionCore {
 
   private handleErrorControl(ctrl: Extract<ServerControl, { action: "error" }>): void {
     this.logEvent("in", "error", `[${ctrl.severity ?? "error"}] ${ctrl.component ? ctrl.component + ": " : ""}${ctrl.message}`);
-    this.emit("errorRaised", parseInt(ctrl.code) || 500, ctrl.message, ctrl.component);
+    const numericCode = typeof ctrl.code === "number" ? ctrl.code : parseInt(String(ctrl.code), 10) || 500;
+    this.emit("errorRaised", numericCode, ctrl.message, ctrl.component);
 
     if (ctrl.severity === "fatal") {
       // The error is already surfaced; the socket close we trigger next is an

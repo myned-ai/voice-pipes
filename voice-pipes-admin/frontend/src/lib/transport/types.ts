@@ -96,6 +96,14 @@ export interface SessionConfig {
   app_data?: unknown;
   /** Session mode — determines which pipeline components are active. */
   mode?: SessionMode;
+  /** Protocol version requested by the client (current: 1). */
+  protocol_version?: number;
+  /** Session-level tags attached to every turn record. */
+  tags?: string[];
+  /** Per-session override for barge-in detection (inherits worker default when omitted). */
+  barge_in_enabled?: boolean;
+  /** Per-session turn-detection mode override (e.g. "silence", "server_vad", "push_to_talk"). */
+  turn_detection_mode?: string;
   /** This client will capture at whatever `input_sample_rate` the server
    *  returns in `session_ready`, rather than at the `sample_rate` it proposed.
    *
@@ -137,8 +145,13 @@ export type ClientControl =
   | { action: "cancel" }
   | { action: "ping"; timestamp_ms: number }
   | { action: "net_report"; playback_buffer_ms?: number; underruns?: number; audio_received_ms?: number; wall_ms?: number; uplink_backlog_bytes?: number }
-  | { action: "configure"; audio_format?: string; sample_rate?: number; output_sample_rate?: number; channels?: number; language?: string; voice?: string; options?: Record<string, unknown>; app_data?: unknown; mode?: string; accepts_negotiated_input_rate?: boolean }
+  | { action: "configure"; audio_format?: string; sample_rate?: number; output_sample_rate?: number; channels?: number; language?: string; voice?: string; options?: Record<string, unknown>; app_data?: unknown; mode?: string; protocol_version?: number; tags?: string[]; accepts_negotiated_input_rate?: boolean; barge_in_enabled?: boolean; turn_detection_mode?: string }
   | { action: "resume"; session_token: string }
+  | { action: "inject_audio"; samples_b64: string; sample_rate: number; label?: string }
+  | { action: "tts_only_synthesize"; id: string; text: string; language?: string; voice?: string }
+  | { action: "say"; text: string; interrupt?: boolean }
+  | { action: "commit_input" }
+  | { action: "clear_input" }
   | { action: "playback_report"; utterance_id: number; last_played_offset_ms: number; last_played_text?: string }
   | { action: "timing_report"; utterance_id: number; event: string; client_timestamp_ms: number; detail?: unknown }
   | { action: "playback_complete"; utterance_id: number }
@@ -187,6 +200,8 @@ export interface NegotiatedConfig {
   tts_provider?: string;
   app_data?: unknown;
   options?: Record<string, unknown>;
+  mode?: SessionMode;
+  protocol_version?: number;
   /** Per-component metric descriptors collected from each component's
    *  `Component::turn_descriptor()` at session build time. Drives the
    *  generic per-turn metrics table; absent / empty for older servers. */
@@ -199,6 +214,8 @@ export interface NegotiatedConfig {
   first_utterance_id?: number;
   /** Ids above this are typed-text turns, numbered from a range of their own. */
   text_utterance_id_base?: number;
+  barge_in_enabled?: boolean;
+  turn_detection_mode?: string;
 }
 
 // ── Session info ────────────────────────────────────────────
@@ -214,11 +231,11 @@ export interface SessionInfo {
 }
 
 export type ServerControl =
-  | { action: "session_ready"; session_id: string; session_token?: string; negotiated?: NegotiatedConfig; client_config?: SessionConfig }
+  | { action: "session_ready"; session_id: string; session_token?: string; resumed?: boolean; negotiated?: NegotiatedConfig; client_config?: SessionConfig }
   | { action: "pong"; client_timestamp_ms: number; server_timestamp_ms: number }
   | { action: "state_changed"; state: PipelineState }
   | { action: "quality_update"; quality: string; tier?: QualityTier }
-  | { action: "error"; code: string; message: string; severity?: ErrorSeverity; turn_id?: string; component?: ErrorComponent }
+  | { action: "error"; code: number; message: string; severity?: ErrorSeverity; turn_id?: string; component?: ErrorComponent }
   | { action: "closing"; reason: string }
   | { action: "session_summary"; turns: number; interrupted_turns: number; avg_ttft_ms?: number; avg_ttfb_ms?: number; avg_total_ms?: number; total_audio_duration_ms: number }
   | { action: "turn_metrics"; snapshot: TurnMetricsSnapshot }
@@ -228,7 +245,9 @@ export type ServerControl =
    *  (`empty_transcript`), too few (`too_short`) or never answered
    *  (`stt_timeout`). `utterance_id` is the id the speech would have
    *  become; the next committed utterance takes it. */
-  | { action: "utterance_dropped"; utterance_id: number; reason: string; audio_ms: number };
+  | { action: "utterance_dropped"; utterance_id: number; reason: string; audio_ms: number }
+  | { action: "tts_only_result"; id: string; metrics: Record<string, unknown>; audio_ref: Record<string, unknown> }
+  | { action: "tts_only_error"; id: string; error: string };
 
 // ── Per-turn metrics registry ────────────────────────
 
@@ -450,7 +469,7 @@ export interface PipelineMessage {
   kind: string;
   text?: string;
   payload?: unknown;
-  binary?: number[];
+  binary?: string;
   role: "user" | "assistant" | "system";
   turn_id?: string;
   message_id: string;
