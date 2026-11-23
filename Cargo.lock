@@ -4762,7 +4762,6 @@ dependencies = [
  "hound",
  "rustfft",
  "serde_json",
- "tracing",
  "voice-pipes-sdk",
 ]
 
@@ -4775,7 +4774,6 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
- "tracing",
  "voice-pipes-sdk",
 ]
 
