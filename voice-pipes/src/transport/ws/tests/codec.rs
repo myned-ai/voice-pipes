@@ -670,7 +670,7 @@ fn rust_and_typescript_control_actions_match() {
                 stt_provider: None,
                 tts_provider: None,
                 app_data: None,
-                options: Default::default(),
+                options: std::collections::HashMap::default(),
                 mode: SessionMode::Voice,
                 protocol_version: 1,
                 metric_descriptors: Vec::new(),

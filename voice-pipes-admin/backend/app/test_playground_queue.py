@@ -263,6 +263,7 @@ class PlaygroundQueueTests(unittest.TestCase):
 
     def test_fleet_stream_includes_capacity_and_scrubs_tenants(self):
         import asyncio
+
         from app.routers.stream import _fleet_stream
 
         def handler(request: httpx.Request) -> httpx.Response:

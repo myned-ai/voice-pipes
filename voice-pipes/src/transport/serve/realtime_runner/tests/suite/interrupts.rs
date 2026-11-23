@@ -389,7 +389,7 @@ async fn idle_client_cancel_does_not_emit_spurious_listening_state() {
     {
         let mut ctx = agent_test_ctx!(s, client, out_tx, pe_tx, suppress);
         ctx.handle_client_cancel().await.unwrap();
-    }
+    };
 
     while let Ok(msg) = out_rx.try_recv() {
         assert!(
