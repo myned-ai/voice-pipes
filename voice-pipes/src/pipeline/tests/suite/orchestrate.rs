@@ -298,8 +298,8 @@ async fn test_process_utterance_cancel() {
                 std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
                 None,
                 None,
-        None,
-    )
+                None,
+            )
             .await;
         }
     });
@@ -462,8 +462,8 @@ async fn eou_sentinel_does_not_wait_for_the_llm_stream_to_close() {
             Arc::new(AtomicBool::new(false)),
             None,
             None,
-        None,
-    )
+            None,
+        )
         .await
     });
 

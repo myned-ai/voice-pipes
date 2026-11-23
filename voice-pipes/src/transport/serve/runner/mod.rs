@@ -474,8 +474,8 @@ async fn run_session_inner(
         &tts_name,
         tts_root.supported_inline_tags(),
     ));
-    let session_default_tts_hints =
-        (negotiated.voice.is_some() || negotiated.language.is_some()).then(|| {
+    let session_default_tts_hints = (negotiated.voice.is_some() || negotiated.language.is_some())
+        .then(|| {
             crate::tts::SynthesisHints::default()
                 .with_voice(negotiated.voice.clone())
                 .with_language(negotiated.language.clone())

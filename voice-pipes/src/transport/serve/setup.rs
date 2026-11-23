@@ -771,10 +771,13 @@ pub(super) async fn negotiate_and_announce(
         barge_in_enabled: client_cfg
             .barge_in_enabled
             .or_else(|| state.config.barge_in.as_ref().map(|bi| bi.enabled)),
-        turn_detection_mode: client_cfg
-            .turn_detection_mode
-            .clone()
-            .or_else(|| state.config.turn_detection.as_ref().map(|td| td.mode.clone())),
+        turn_detection_mode: client_cfg.turn_detection_mode.clone().or_else(|| {
+            state
+                .config
+                .turn_detection
+                .as_ref()
+                .map(|td| td.mode.clone())
+        }),
         ignored_options,
     };
 

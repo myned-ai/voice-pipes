@@ -624,8 +624,9 @@ pub async fn run_realtime_session_inner(
     let session_id_for_turns = session_id.clone();
     let provider_label_for_turns = provider_label.clone();
     let playback_health_for_turns = std::sync::Arc::clone(&pending_playback_health);
-    let session_aggregator =
-        std::sync::Arc::new(parking_lot::Mutex::new(super::turn::SessionAggregator::default()));
+    let session_aggregator = std::sync::Arc::new(parking_lot::Mutex::new(
+        super::turn::SessionAggregator::default(),
+    ));
     let aggregator_for_turns = std::sync::Arc::clone(&session_aggregator);
     let persist_turn = |snapshot: crate::pipeline::metrics::TurnMetricsSnapshot,
                         user_text: Option<String>| {

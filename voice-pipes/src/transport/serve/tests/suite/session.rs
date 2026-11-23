@@ -1404,7 +1404,8 @@ async fn session_configure_voice_reaches_tts_hints() {
         if !seen_voices.lock().unwrap().is_empty() {
             break;
         }
-        let _ = tokio::time::timeout(std::time::Duration::from_millis(50), client.recv_server()).await;
+        let _ =
+            tokio::time::timeout(std::time::Duration::from_millis(50), client.recv_server()).await;
     }
 
     assert_eq!(
@@ -1440,7 +1441,11 @@ async fn context_pipeline_message_injects_context_without_starting_turn() {
         message_id: "ctx-1".into(),
     };
 
-    assert!(classic_ctx!(bed).handle_pipeline_message(msg, &text_utt_tx).await);
+    assert!(
+        classic_ctx!(bed)
+            .handle_pipeline_message(msg, &text_utt_tx)
+            .await
+    );
     assert_eq!(
         injected.lock().unwrap().as_slice(),
         &["User is viewing the billing page.".to_string()]
@@ -1472,7 +1477,11 @@ async fn pcm_f32_le_is_downgraded_to_pcm_i16_le() {
         .await
         .unwrap();
 
-    let msg = client.recv_server().await.unwrap().expect("expected message");
+    let msg = client
+        .recv_server()
+        .await
+        .unwrap()
+        .expect("expected message");
     match msg {
         ServerMessage::Control(ServerControl::SessionReady(info)) => {
             assert_eq!(info.negotiated.audio_format, AudioFormat::PcmI16Le);
@@ -1516,18 +1525,13 @@ async fn negotiated_options_excludes_ignored_options_and_reports_realtime_identi
     });
     let (out_tx, _out_rx) = mpsc::channel(8);
 
-    let negotiated = negotiate_and_announce(
-        &client_cfg,
-        &state,
-        "sess-1",
-        "tok-1",
-        false,
-        &[],
-        &out_tx,
-    )
-    .await;
+    let negotiated =
+        negotiate_and_announce(&client_cfg, &state, "sess-1", "tok-1", false, &[], &out_tx).await;
     assert!(
-        negotiated.ignored_options.iter().any(|k| k == "instructions"),
+        negotiated
+            .ignored_options
+            .iter()
+            .any(|k| k == "instructions"),
         "instructions should be ignored when not allowlisted"
     );
     assert!(
