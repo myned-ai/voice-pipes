@@ -430,6 +430,20 @@ async fn speak(client: &DirectTransport) {
     }
 }
 
+/// Wait for connection 0 to finish its session handshake before sending
+/// audio, since audio sent while the provider opens is dropped.
+async fn speak_after_handshake(client: &DirectTransport, recorded: &Recorded) {
+    let _ = wait_for_frame(recorded, |f| f["type"] == "session" && f["conn"] == 0).await;
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    for _ in 0..20 {
+        speak(client).await;
+        if recorded.lock().iter().any(|f| f["type"] == "audio") {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+}
+
 /// Read the session's messages until one carries audio; return the
 /// warnings and errors seen on the way.
 async fn until_audio(client: &DirectTransport) -> Vec<String> {
@@ -507,7 +521,7 @@ async fn a_session_runs_on_a_provider_the_engine_never_saw() {
     let (client, session) = open_session(config).await;
 
     // The caller speaks; the audio goes up to the vendor.
-    speak(&client).await;
+    speak_after_handshake(&client, &recorded).await;
 
     // The transcript, the tool call and the spoken reply come back down.
     let (mut heard, mut tool_call, mut audio) = (false, false, false);
@@ -644,17 +658,7 @@ async fn a_refused_resumption_starts_a_fresh_session() {
     let (url, recorded) = start_vendor(refusing_the_token).await;
     let (client, session) = open_session(config(&url)).await;
 
-    // Wait for connection 0 to finish its session handshake (`ready` + `resumable`)
-    // before sending audio, since audio sent while the provider opens is dropped.
-    let _ = wait_for_frame(&recorded, |f| f["type"] == "session" && f["conn"] == 0).await;
-    tokio::time::sleep(Duration::from_millis(50)).await;
-    for _ in 0..20 {
-        speak(&client).await;
-        if recorded.lock().iter().any(|f| f["type"] == "audio") {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(25)).await;
-    }
+    speak_after_handshake(&client, &recorded).await;
     let frames = wait_for_frame(&recorded, |f| f["type"] == "session" && f["conn"] == 2).await;
     let sessions: Vec<_> = frames
         .iter()
