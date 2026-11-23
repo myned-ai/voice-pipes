@@ -6,6 +6,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { API_BASE } from '../../config/api';
 import { formatStarted } from './detail/utils';
 import type { ApiEnvelope, PaginatedResponse, PipelineGroup, SessionListItem } from '../../lib/orchestrator';
+import { BP_LG, useMediaQuery } from '../../lib/useMediaQuery';
 
 const API = API_BASE;
 
@@ -77,7 +78,7 @@ function Segmented({ options, value, onChange, ariaLabel, isDark }: {
     <div
       role="group"
       aria-label={ariaLabel}
-      className={`inline-flex items-stretch h-8 rounded-lg border p-0.5 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-300'}`}
+      className={`inline-flex items-stretch min-h-8 rounded-lg border p-0.5 overflow-x-auto max-w-full ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-300'}`}
     >
       {options.map(opt => (
         <button
@@ -110,7 +111,7 @@ function CopyIdButton({ id, isDark }: { id: string; isDark: boolean }) {
         setCopied(true);
         setTimeout(() => setCopied(false), 1500);
       }}
-      className={`p-1 rounded flex-none opacity-0 group-hover:opacity-100 transition-opacity ${
+      className={`touch-visible p-1 rounded flex-none opacity-0 group-hover:opacity-100 transition-opacity ${
         copied
           ? 'text-emerald-400 opacity-100'
           : isDark ? 'text-slate-500 hover:text-slate-300 hover:bg-slate-700' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
@@ -142,6 +143,7 @@ function pageWindow(current: number, count: number): (number | '…')[] {
 
 export default function SessionsList() {
   const { isDark } = useTheme();
+  const isLg = useMediaQuery(BP_LG);
   const navigate = useNavigate();
   const searchRef = useRef<HTMLInputElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
@@ -265,7 +267,7 @@ export default function SessionsList() {
   const faintText = isDark ? 'text-slate-500' : 'text-gray-400';
 
   return (
-    <div className={`p-8 h-full flex flex-col overflow-hidden transition-colors ${isDark ? 'bg-[#0f172a] text-slate-200' : 'bg-gray-50 text-gray-800'}`}>
+    <div className={`p-3 sm:p-6 lg:p-8 h-full flex flex-col overflow-hidden transition-colors ${isDark ? 'bg-[#0f172a] text-slate-200' : 'bg-gray-50 text-gray-800'}`}>
       <div className="max-w-6xl mx-auto w-full flex flex-col min-h-0 flex-1">
         <div className="flex items-baseline gap-3 mb-4">
           <h1 className={`text-2xl font-bold flex items-center gap-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>
@@ -343,7 +345,7 @@ export default function SessionsList() {
               )}
             </button>
             {filtersOpen && (
-              <div className={`absolute right-0 top-9 z-20 w-64 rounded-xl border p-1.5 shadow-xl ${isDark ? 'bg-slate-800 border-slate-700 shadow-black/50' : 'bg-white border-gray-200 shadow-gray-300/50'}`}>
+              <div className={`fixed left-3 right-3 mt-1 sm:mt-0 sm:absolute sm:left-auto sm:right-0 sm:top-9 z-20 sm:w-64 rounded-xl border p-1.5 shadow-xl ${isDark ? 'bg-slate-800 border-slate-700 shadow-black/50' : 'bg-white border-gray-200 shadow-gray-300/50'}`}>
                 <label className={`flex items-start gap-2.5 px-2.5 py-2 rounded-lg cursor-pointer text-sm ${isDark ? 'hover:bg-slate-700/60' : 'hover:bg-gray-50'}`}>
                   <input
                     type="checkbox"
@@ -438,9 +440,10 @@ export default function SessionsList() {
           </div>
         ) : (
           <>
-          {/* Session table: header sticks while rows scroll */}
+          {/* Session list: 7-column table on >= 1024px, compact cards on < 1024px */}
           <div className={`flex-1 min-h-0 rounded-xl border overflow-hidden flex flex-col ${isDark ? 'border-slate-700' : 'border-gray-200'}`}>
             <div className="flex-1 min-h-0 overflow-auto">
+              {isLg ? (
               <div className="min-w-[900px]">
                 <div className={`${GRID_COLS} sticky top-0 z-10 h-9 text-[10px] font-semibold uppercase tracking-wider border-b ${isDark ? 'bg-slate-900 border-slate-700/60 text-slate-500' : 'bg-gray-100 border-gray-200 text-gray-400'}`}>
                   <span>Status</span>
@@ -524,6 +527,66 @@ export default function SessionsList() {
                   );
                 })}
               </div>
+              ) : (
+                <div data-testid="sessions-mobile-cards" className={`divide-y ${isDark ? 'divide-slate-800' : 'divide-gray-100'}`}>
+                  {sessions.map((session) => {
+                    const id = session.id;
+                    const status = statusMeta(session.status ?? 'completed');
+                    const startedAt = session.started_at;
+                    const endedAt = session.ended_at;
+                    const turnCount = session.turn_count ?? 0;
+                    const tags: string[] = Array.isArray(session.tags) ? session.tags : [];
+                    const when = startedAt ? formatStarted(startedAt) : null;
+                    const duration = startedAt ? formatLength(startedAt, endedAt ?? null) : '—';
+
+                    return (
+                      <Link
+                        key={id}
+                        to={`/sessions/${id}`}
+                        className={`flex flex-col gap-1.5 px-3.5 py-3 transition-colors ${
+                          isDark ? 'hover:bg-slate-800/80' : 'hover:bg-gray-50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className={`inline-flex items-center gap-1.5 text-xs font-semibold shrink-0 ${status.text}`}>
+                              <i className={`w-[7px] h-[7px] rounded-full flex-none ${status.dot} ${status.pulse ? 'animate-pulse' : ''}`} />
+                              {status.label}
+                            </span>
+                            <span className={`text-sm font-medium truncate ${isDark ? 'text-slate-200' : 'text-gray-800'}`}>
+                              {session.pipeline_name || '—'}
+                            </span>
+                          </div>
+                          <span className={`text-xs tabular-nums shrink-0 ${mutedText}`}>
+                            {when ? when.rel : '—'}
+                            {duration !== '—' ? ` · ${duration}` : ''}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-2 text-xs">
+                          <span className={`font-mono truncate ${faintText}`}>{id}</span>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {tags.map((tag) => (
+                              <span
+                                key={tag}
+                                className={`px-1.5 py-px rounded-full text-[10px] font-semibold border ${
+                                  tag === 'benchmark'
+                                    ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                                    : isDark ? 'bg-violet-500/10 border-violet-500/30 text-violet-400' : 'bg-violet-50 border-violet-200 text-violet-600'
+                                }`}
+                              >
+                                {tag}
+                              </span>
+                            ))}
+                            <span className={`tabular-nums font-medium ${turnCount === 0 ? faintText : mutedText}`}>
+                              {turnCount} turn{turnCount !== 1 ? 's' : ''}
+                            </span>
+                          </div>
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
 

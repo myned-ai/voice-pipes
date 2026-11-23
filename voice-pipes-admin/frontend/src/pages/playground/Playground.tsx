@@ -22,6 +22,7 @@ import {
   waitForExtensionsReady,
 } from "./extensionRegistry";
 import { useTheme } from "../../contexts/ThemeContext";
+import { BP_LG, useMediaQuery } from "../../lib/useMediaQuery";
 // TEMP: Hide metrics bar and legend UI
 const HIDE_METRICS_BAR = true;
 import { API_BASE, WS_URL } from "../../config/api";
@@ -208,6 +209,7 @@ export default function Playground({ session }: { session: PlaygroundSession }) 
   }, [showStage]);
   const [showMetricsLegend, setShowMetricsLegend] = useState(false);
   const [showComponentDetails, setShowComponentDetails] = useState(false);
+  const isLg = useMediaQuery(BP_LG);
   const [settings, setSettings] = useState<Settings>({
     sampleRate: 48000,
     fixedOutputChunking: true,
@@ -415,9 +417,21 @@ export default function Playground({ session }: { session: PlaygroundSession }) 
         onPipelineChange={setSelectedPipeline}
         onToggleSettings={() => setShowSettings((s) => !s)}
         showSettings={showSettings}
-        onToggleEvents={() => setShowEvents((s) => !s)}
+        onToggleEvents={() => {
+          setShowEvents((s) => {
+            const next = !s;
+            if (next && !isLg) setShowTimeline(false);
+            return next;
+          });
+        }}
         showEvents={showEvents}
-        onToggleTimeline={() => setShowTimeline((s) => !s)}
+        onToggleTimeline={() => {
+          setShowTimeline((s) => {
+            const next = !s;
+            if (next && !isLg) setShowEvents(false);
+            return next;
+          });
+        }}
         showTimeline={showTimeline}
         hasExtensions={(extensionCount ?? 0) > 0}
         showStage={showStage}
@@ -433,16 +447,41 @@ export default function Playground({ session }: { session: PlaygroundSession }) 
 
       {/* Main content area */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Settings panel (collapsible left) */}
+        {/* Settings panel (collapsible left on >= lg, overlay drawer on < lg) */}
         {showSettings && (
-          <SettingsPanel
-            settings={settings}
-            onChange={setSettings}
-            onClose={() => setShowSettings(false)}
-            onOpenMicCheck={() => setShowMicCheck(true)}
-            onOpenComponentCheck={() => setShowComponentCheck(true)}
-            disabled={connected}
-          />
+          isLg ? (
+            <SettingsPanel
+              settings={settings}
+              onChange={setSettings}
+              onClose={() => setShowSettings(false)}
+              onOpenMicCheck={() => setShowMicCheck(true)}
+              onOpenComponentCheck={() => setShowComponentCheck(true)}
+              disabled={connected}
+            />
+          ) : (
+            <div
+              data-testid="playground-settings-overlay"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Session settings"
+              className="fixed inset-0 z-40 flex justify-start"
+            >
+              <div
+                className="fixed inset-0 bg-black/60 backdrop-blur-xs"
+                onClick={() => setShowSettings(false)}
+              />
+              <div className="relative z-10 h-full w-full max-w-sm flex shadow-2xl">
+                <SettingsPanel
+                  settings={settings}
+                  onChange={setSettings}
+                  onClose={() => setShowSettings(false)}
+                  onOpenMicCheck={() => setShowMicCheck(true)}
+                  onOpenComponentCheck={() => setShowComponentCheck(true)}
+                  disabled={connected}
+                />
+              </div>
+            </div>
+          )
         )}
 
         {/* Center: conversation + audio viz + input */}
@@ -528,20 +567,53 @@ export default function Playground({ session }: { session: PlaygroundSession }) 
           />
         </div>
 
-        {/* Event log (collapsible right) */}
-        {showEvents && (
-          <EventLog
-            events={session.events}
-            onClose={() => setShowEvents(false)}
-          />
-        )}
-
-        {/* State timeline (collapsible right, T6) */}
-        {showTimeline && (
-          <StateTimeline
-            timeline={session.stateTimeline}
-            onClose={() => setShowTimeline(false)}
-          />
+        {/* Event log & State timeline (side-by-side on >= lg, overlay drawer on < lg) */}
+        {isLg ? (
+          <>
+            {showEvents && (
+              <EventLog
+                events={session.events}
+                onClose={() => setShowEvents(false)}
+              />
+            )}
+            {showTimeline && (
+              <StateTimeline
+                timeline={session.stateTimeline}
+                onClose={() => setShowTimeline(false)}
+              />
+            )}
+          </>
+        ) : (
+          (showEvents || showTimeline) && (
+            <div
+              data-testid="playground-mobile-overlay"
+              role="dialog"
+              aria-modal="true"
+              aria-label={showEvents ? "Event log" : "State timeline"}
+              className="fixed inset-0 z-40 flex justify-end"
+            >
+              <div
+                className="fixed inset-0 bg-black/60 backdrop-blur-xs"
+                onClick={() => {
+                  setShowEvents(false);
+                  setShowTimeline(false);
+                }}
+              />
+              <div className="relative z-10 h-full w-full max-w-sm flex shadow-2xl">
+                {showEvents ? (
+                  <EventLog
+                    events={session.events}
+                    onClose={() => setShowEvents(false)}
+                  />
+                ) : (
+                  <StateTimeline
+                    timeline={session.stateTimeline}
+                    onClose={() => setShowTimeline(false)}
+                  />
+                )}
+              </div>
+            </div>
+          )
         )}
       </div>
 

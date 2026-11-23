@@ -117,7 +117,7 @@ export function TurnCardHeader({ utt, displayState, turnStatus, summary, orchTur
   const isAgentTurn = utt.metric_snapshot?.initiator === 'agent';
 
   return (
-    <div className={`flex items-center justify-between pb-3 border-b ${isDark ? 'border-slate-700' : 'border-gray-200'}`}>
+    <div className={`flex items-center justify-between flex-wrap gap-y-2 pb-3 border-b ${isDark ? 'border-slate-700' : 'border-gray-200'}`}>
       {/* ── Left: turn number + status + anomaly chips ── */}
       <h4 className={`font-bold flex items-center gap-2 flex-wrap ${isDark ? 'text-white' : 'text-gray-900'}`}>
         <span className={`text-xs font-mono px-2 py-0.5 rounded ${isTerminated ? 'bg-orange-500/20 text-orange-300' : 'bg-indigo-500/20 text-indigo-300'}`}>
@@ -264,7 +264,7 @@ export function TurnCardHeader({ utt, displayState, turnStatus, summary, orchTur
       </h4>
 
       {/* ── Right: metric chips ── */}
-      <div className={`flex items-center gap-3 text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+      <div className={`flex items-center gap-x-3 gap-y-1 flex-wrap text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
         {/* Server-VAD or client-cancel barge-in (server-side interruption) */}
         {displayState === 'interrupted' && (
           <span
@@ -336,7 +336,7 @@ export function TurnCardHeader({ utt, displayState, turnStatus, summary, orchTur
         )}
 
         {summary?.ttft_ms != null && (
-          <span className="flex items-center gap-1" title="Time to First Token">
+          <span className="hidden md:inline-flex items-center gap-1" title="Time to First Token">
             TTFT {Math.round(summary.ttft_ms)}ms
           </span>
         )}
@@ -367,7 +367,7 @@ export function TurnCardHeader({ utt, displayState, turnStatus, summary, orchTur
               : (isDark ? 'bg-slate-700/60 text-slate-300 ring-slate-600' : 'bg-gray-100 text-gray-600 ring-gray-300');
           return (
             <span
-              className={`text-[10px] font-medium px-1.5 py-0.5 rounded ring-1 ${cls}`}
+              className={`hidden md:inline-flex text-[10px] font-medium px-1.5 py-0.5 rounded ring-1 ${cls}`}
               title={`End-of-speech anchor for this turn's TTFB: ${a.detail} (ttfb_anchor_source=${summary.ttfb_anchor_source})`}
             >
               anchor: {a.label}
@@ -418,7 +418,7 @@ export function TurnCardHeader({ utt, displayState, turnStatus, summary, orchTur
             <>
               {ramLabel && (
                 <span
-                  className={`text-[10px] font-mono font-medium px-1.5 py-0.5 rounded ring-1 ${ramStyle}`}
+                  className={`hidden md:inline-flex text-[10px] font-mono font-medium px-1.5 py-0.5 rounded ring-1 ${ramStyle}`}
                   title={tipParts}
                 >
                   {ramLabel}
@@ -426,7 +426,7 @@ export function TurnCardHeader({ utt, displayState, turnStatus, summary, orchTur
               )}
               {cpuPct && (
                 <span
-                  className={`text-[10px] font-mono font-medium px-1.5 py-0.5 rounded ring-1 ${
+                  className={`hidden md:inline-flex text-[10px] font-mono font-medium px-1.5 py-0.5 rounded ring-1 ${
                     isDark ? 'bg-teal-500/15 text-teal-300 ring-teal-500/30' : 'bg-teal-50 text-teal-700 ring-teal-300'
                   }`}
                   title={tipParts}
@@ -440,7 +440,7 @@ export function TurnCardHeader({ utt, displayState, turnStatus, summary, orchTur
 
         {orchTurn?.otel_trace_id && (
           <span
-            className={`font-mono text-[10px] ${isDark ? 'text-slate-600' : 'text-gray-400'}`}
+            className={`hidden md:inline font-mono text-[10px] ${isDark ? 'text-slate-600' : 'text-gray-400'}`}
             title="OTEL Trace ID"
           >
             {orchTurn.otel_trace_id.slice(0, 12)}…

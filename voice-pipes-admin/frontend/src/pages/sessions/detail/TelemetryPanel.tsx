@@ -1,5 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { BarChart3 } from 'lucide-react';
+import { BarChart3, X } from 'lucide-react';
 import { useTheme } from '../../../contexts/ThemeContext';
 import type { Utterance, SessionEvent, SessionData, SessionMetrics } from './types';
 import { computeSessionMetrics, type AggregatedSessionMetrics } from './metrics';
@@ -545,7 +545,7 @@ const AggregatedMetricsPanel = ({ utterances, events, eventsTotal, sessionMetric
   );
 };
 
-export const TelemetryPanel = ({ data }: { data: SessionData }) => {
+export const TelemetryPanel = ({ data, onClose }: { data: SessionData; onClose?: () => void }) => {
   const { isDark } = useTheme();
   const isRealtime = isRealtimeSession(data.metadata);
 
@@ -565,7 +565,7 @@ export const TelemetryPanel = ({ data }: { data: SessionData }) => {
   }, [data.metadata]);
 
   return (
-    <div className={`w-1/3 min-w-[360px] shrink-0 p-8 overflow-y-auto shadow-xl z-10 flex flex-col gap-6 ${isDark ? 'bg-[#0f172a] border-l border-slate-800' : 'bg-gray-50 border-l border-gray-200'}`}>
+    <div className={`w-full xl:w-1/3 xl:min-w-[360px] shrink-0 p-4 sm:p-6 xl:p-8 overflow-y-auto shadow-xl z-10 flex flex-col gap-6 ${isDark ? 'bg-[#0f172a] border-l border-slate-800' : 'bg-gray-50 border-l border-gray-200'}`}>
       <h2 className={`text-xl font-bold flex items-center gap-2 pb-4 ${isDark ? 'text-white border-b border-slate-800' : 'text-gray-900 border-b border-gray-200'}`}>
         <BarChart3 className="text-indigo-400"/>
         Telemetry
@@ -576,6 +576,18 @@ export const TelemetryPanel = ({ data }: { data: SessionData }) => {
           >
             Realtime S2S
           </span>
+        )}
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close telemetry panel"
+            className={`touch-target ml-auto p-1.5 rounded-lg transition-colors ${
+              isDark ? 'text-slate-400 hover:text-white hover:bg-slate-800' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-200'
+            }`}
+          >
+            <X size={18} />
+          </button>
         )}
       </h2>
 

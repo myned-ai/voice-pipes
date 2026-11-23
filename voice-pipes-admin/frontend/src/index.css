@@ -82,3 +82,21 @@ html[data-theme="dark"] audio {
   border-radius: 4px;
 }
 
+/* Scoped 44x44px touch target for coarse pointers (phones & tablets).
+   Apply via className="touch-target" on nav links, header icon buttons,
+   and toolbar triggers — never globally on all <button> elements. */
+@media (pointer: coarse) {
+  .touch-target {
+    min-block-size: 44px;
+    min-inline-size: 44px;
+  }
+}
+
+/* Make hover-only controls (e.g. CopyIdButton) visible on touch devices
+   (phones & iPads/Galaxy Tabs) that have no hover capability. */
+@media (hover: none) {
+  .touch-visible {
+    opacity: 1 !important;
+  }
+}
+

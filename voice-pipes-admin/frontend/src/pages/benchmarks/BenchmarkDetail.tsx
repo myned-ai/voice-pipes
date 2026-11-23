@@ -101,7 +101,7 @@ export default function BenchmarkDetail() {
   ];
 
   return (
-    <div className="p-8 overflow-y-auto h-full">
+    <div className="p-3 sm:p-6 lg:p-8 overflow-y-auto h-full">
       {/* Header */}
       <Link to="/benchmarks" className={`flex items-center gap-2 text-sm mb-4 ${isDark ? 'text-slate-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'}`}>
         <ArrowLeft size={16} /> Back to Benchmarks

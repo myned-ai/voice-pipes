@@ -56,6 +56,7 @@ export type AuthCheck = {
   hf_oauth_url?: string;
   allow_guest?: boolean;
   tenant_id?: string | null;
+  is_operator?: boolean;
 };
 
 /** Where earlier builds of the console kept the worker credential
@@ -88,6 +89,7 @@ export async function checkAuth(): Promise<AuthCheck | null> {
     if (d.hf_oauth_url !== undefined) out.hf_oauth_url = d.hf_oauth_url;
     if (d.allow_guest !== undefined) out.allow_guest = d.allow_guest;
     if (d.tenant_id !== undefined) out.tenant_id = d.tenant_id;
+    if (d.is_operator !== undefined) out.is_operator = d.is_operator;
     return out;
   } catch {
     return null;

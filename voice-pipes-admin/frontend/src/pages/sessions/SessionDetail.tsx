@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState, useCallback, useSyncExternalStore } from 'react';
+import { Fragment, useEffect, useState, useCallback } from 'react';
 import axios from 'axios';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, PlayCircle, Database, PanelRightClose, PanelRightOpen, ClipboardCopy, Check, AlertTriangle, Activity } from 'lucide-react';
@@ -8,6 +8,7 @@ import { normalizeLlmTiming, formatDuration, formatStarted, isRealtimeSession, f
 import type { DeviceTone } from './detail/utils';
 import { StatusBadge } from '../../components/StatusBadge';
 import { API_BASE } from '../../config/api';
+import { BP_XL, useMediaQuery } from '../../lib/useMediaQuery';
 
 // Extracted sub-components
 import { TurnCard } from './detail/TurnCard';
@@ -23,24 +24,6 @@ import { ResourceBreakdownModal } from './detail/ResourceBreakdownModal';
 
 const API = API_BASE;
 
-// Telemetry panel is w-1/3 of the viewport — below this width that third is
-// too cramped to be readable, so the panel defaults to closed. The manual
-// toggle still works either way; it just changes the default.
-const TELEMETRY_MIN_VIEWPORT = '(min-width: 1280px)';
-
-/** Whether the viewport currently matches a media query, kept live.
- *  `matchMedia` is an external store: subscribe to its `change` events and
- *  read the current match on every render, so a query change or a resize
- *  between render and subscription is never missed. */
-function useMediaQuery(query: string): boolean {
-  const subscribe = useCallback((onChange: () => void) => {
-    const mq = window.matchMedia(query);
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
-  }, [query]);
-  return useSyncExternalStore(subscribe, () => window.matchMedia(query).matches);
-}
-
 // ── Main component ──────────────────────────────────────────
 
 export default function SessionDetail() {
@@ -54,7 +37,7 @@ export default function SessionDetail() {
   // Open by default only when the viewport is wide enough for a useful
   // third; an explicit user toggle overrides the responsive default until
   // they toggle again (or the page reloads).
-  const telemetryFits = useMediaQuery(TELEMETRY_MIN_VIEWPORT);
+  const telemetryFits = useMediaQuery(BP_XL);
   const [telemetryPref, setTelemetryPref] = useState<boolean | null>(null);
   const showTelemetry = telemetryPref ?? telemetryFits;
   const [viewMode, setViewMode] = useState<'timeline' | 'turns'>('turns');
@@ -302,11 +285,11 @@ export default function SessionDetail() {
                 ].filter(Boolean).join(' · ');
                 return (
                   <>
-                    <span className={isDark ? 'text-slate-600' : 'text-gray-300'}>·</span>
+                    <span className={`hidden md:inline ${isDark ? 'text-slate-600' : 'text-gray-300'}`}>·</span>
                     <button
                       type="button"
                       onClick={() => setShowResourceModal(true)}
-                      className={`inline-flex items-center gap-1.5 text-[11px] font-mono px-2.5 py-0.5 rounded-full ring-1 transition-all cursor-pointer ${
+                      className={`hidden md:inline-flex items-center gap-1.5 text-[11px] font-mono px-2.5 py-0.5 rounded-full ring-1 transition-all cursor-pointer ${
                         isDark
                           ? 'bg-cyan-500/15 text-cyan-300 ring-cyan-500/30 hover:bg-cyan-500/25 hover:ring-cyan-500/50'
                           : 'bg-cyan-50 text-cyan-700 ring-cyan-300 hover:bg-cyan-100 hover:ring-cyan-400'
@@ -322,11 +305,11 @@ export default function SessionDetail() {
               })()}
               {data.metadata?.avg_turn_cpu_ms != null && (
                 <>
-                  <span className={isDark ? 'text-slate-600' : 'text-gray-300'}>·</span>
+                  <span className={`hidden md:inline ${isDark ? 'text-slate-600' : 'text-gray-300'}`}>·</span>
                   <button
                     type="button"
                     onClick={() => setShowResourceModal(true)}
-                    className={`inline-flex items-center gap-1.5 text-[11px] font-mono px-2.5 py-0.5 rounded-full ring-1 transition-all cursor-pointer ${
+                    className={`hidden md:inline-flex items-center gap-1.5 text-[11px] font-mono px-2.5 py-0.5 rounded-full ring-1 transition-all cursor-pointer ${
                       isDark
                         ? 'bg-teal-500/15 text-teal-300 ring-teal-500/30 hover:bg-teal-500/25 hover:ring-teal-500/50'
                         : 'bg-teal-50 text-teal-700 ring-teal-300 hover:bg-teal-100 hover:ring-teal-400'
@@ -359,7 +342,7 @@ export default function SessionDetail() {
               <button
                 onClick={copyReportForLlm}
                 disabled={reportCopyState === 'loading'}
-                className={`flex items-center gap-1.5 h-8 px-3 text-sm font-medium rounded-lg border transition-colors disabled:opacity-50 whitespace-nowrap ${
+                className={`hidden md:flex items-center gap-1.5 h-8 px-3 text-sm font-medium rounded-lg border transition-colors disabled:opacity-50 whitespace-nowrap ${
                   reportCopyState === 'copied'
                     ? 'bg-emerald-600 border-emerald-600 text-white'
                     : reportCopyState === 'error'
@@ -402,7 +385,7 @@ export default function SessionDetail() {
 
           {/* Meta line: full UUID (copyable) + resolved provider identity, so
               the reader doesn't have to drill into per-turn telemetry. */}
-          <div className={`flex items-center gap-x-4 gap-y-1 flex-wrap mt-1.5 sm:pl-9 font-mono text-[11px] ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
+          <div className={`hidden md:flex items-center gap-x-4 gap-y-1 flex-wrap mt-1.5 sm:pl-9 font-mono text-[11px] ${isDark ? 'text-slate-500' : 'text-gray-500'}`}>
             <span className="flex items-center gap-1 min-w-0">
               <span className={`truncate ${isDark ? 'text-slate-400' : 'text-gray-600'}`} title={id}>{id}</span>
               <button
@@ -461,7 +444,7 @@ export default function SessionDetail() {
           </div>
         </div>
 
-        <div className="p-6 xl:p-8 space-y-6">
+        <div className="p-3 sm:p-6 xl:p-8 space-y-6">
           
           {data.captures_missing && (
             <div className={`p-4 rounded-lg flex items-start gap-3 border ${isDark ? 'bg-amber-900/20 border-amber-500/30 text-amber-200' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
@@ -659,8 +642,28 @@ export default function SessionDetail() {
         </div>
       </div>
 
-      {/* RIGHT: Telemetry Panel */}
-      {showTelemetry && <TelemetryPanel data={data} />}
+      {/* RIGHT: Telemetry Panel (side-by-side on >= xl, slide-over sheet on < xl) */}
+      {showTelemetry && (
+        telemetryFits ? (
+          <TelemetryPanel data={data} />
+        ) : (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Telemetry panel"
+            className="fixed inset-0 z-50 flex justify-end"
+          >
+            <div
+              data-testid="telemetry-backdrop"
+              className="fixed inset-0 bg-black/60 backdrop-blur-xs"
+              onClick={() => setTelemetryPref(false)}
+            />
+            <div className="relative z-10 w-full max-w-md h-full flex">
+              <TelemetryPanel data={data} onClose={() => setTelemetryPref(false)} />
+            </div>
+          </div>
+        )
+      )}
 
       {/* Quick Session Summary Modal */}
       {data && (
@@ -672,6 +675,7 @@ export default function SessionDetail() {
           anomaliesByUtt={anomaliesByUtt}
           onCopyReportForLlm={copyReportForLlm}
           reportCopyState={reportCopyState}
+          onOpenResourceBreakdown={() => setShowResourceModal(true)}
         />
       )}
 

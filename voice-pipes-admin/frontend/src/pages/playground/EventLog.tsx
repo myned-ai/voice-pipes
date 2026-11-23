@@ -210,7 +210,7 @@ export default function EventLog({ events, onClose }: Props) {
   };
 
   return (
-    <div className={`w-80 border-l flex flex-col shrink-0 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+    <div className={`w-full lg:w-80 border-l flex flex-col shrink-0 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
       {/* Header */}
       <div className={`flex items-center justify-between px-3 py-2.5 border-b ${isDark ? 'border-slate-700' : 'border-gray-200'}`}>
         <div className="flex items-center gap-2">
@@ -224,7 +224,7 @@ export default function EventLog({ events, onClose }: Props) {
             </span>
           )}
         </div>
-        <button onClick={onClose} className={`transition-colors ${isDark ? 'text-slate-400 hover:text-white' : 'text-gray-400 hover:text-gray-900'}`}>
+        <button onClick={onClose} aria-label="Close event log" className={`transition-colors ${isDark ? 'text-slate-400 hover:text-white' : 'text-gray-400 hover:text-gray-900'}`}>
           <X size={14} />
         </button>
       </div>
@@ -242,7 +242,9 @@ export default function EventLog({ events, onClose }: Props) {
                 onClick={() => setFilter(f.key)}
                 className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
                   filter === f.key
-                    ? f.key === "error" ? "bg-red-600/30 text-red-300" : "bg-indigo-600/30 text-indigo-300"
+                    ? f.key === "error"
+                      ? (isDark ? "bg-red-600/30 text-red-300" : "bg-red-100 text-red-700 font-semibold")
+                      : (isDark ? "bg-indigo-600/30 text-indigo-300" : "bg-indigo-100 text-indigo-700 font-semibold")
                     : isDark ? "text-slate-500 hover:text-slate-300" : "text-gray-400 hover:text-gray-600"
                 }`}
               >

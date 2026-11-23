@@ -275,7 +275,7 @@ export default function Dashboard({ productionMode = DASHBOARD_PRODUCTION_MODE }
   /* ── render ──────────────────────────────────────────── */
 
   return (
-    <div className={`p-8 h-full flex flex-col overflow-y-auto transition-colors ${isDark ? 'bg-[#0f172a] text-slate-200' : 'bg-gray-50 text-gray-800'}`}>
+    <div className={`p-3 sm:p-6 lg:p-8 h-full flex flex-col overflow-y-auto transition-colors ${isDark ? 'bg-[#0f172a] text-slate-200' : 'bg-gray-50 text-gray-800'}`}>
       <div className="max-w-7xl mx-auto w-full flex flex-col gap-6 flex-1">
         {/* Header */}
         <DashboardHeader
