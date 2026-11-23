@@ -35,7 +35,7 @@ export function DashboardHeader({
 
   return (
     <div className="flex items-center justify-between flex-wrap gap-3">
-      <h1 className={`text-3xl font-bold flex items-center gap-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+      <h1 className={`text-2xl sm:text-3xl font-bold flex items-center gap-3 ${isDark ? 'text-white' : 'text-gray-900'}`}>
         <BarChart3 className="text-indigo-400" />
         Dashboard
       </h1>
@@ -48,7 +48,9 @@ export function DashboardHeader({
             onClick={() => setDays(opt.value)}
             className={`px-3 py-1 text-sm rounded-lg border transition-colors ${
               days === opt.value
-                ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-300'
+                ? isDark
+                  ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-300'
+                  : 'bg-indigo-50 border-indigo-300 text-indigo-700 font-semibold'
                 : isDark
                   ? 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
                   : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-100'
@@ -100,7 +102,7 @@ export function DashboardHeader({
           </button>
           {customizeOpen && (
             <div
-              className={`absolute right-0 mt-1 z-30 w-72 max-h-[70vh] overflow-y-auto rounded-lg border shadow-xl ${
+              className={`fixed left-3 right-3 sm:absolute sm:left-auto sm:right-0 mt-1 z-30 sm:w-72 max-h-[70vh] overflow-y-auto rounded-lg border shadow-xl ${
                 isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'
               }`}
             >

@@ -52,10 +52,383 @@ export function CustomPipelineNode({ data }: NodeProps<PipelineNodeData>) {
   const extraRows = flattenMetadata(metadata, schematedKeys);
 
   const hasConfig = visibleSchemaParams.length > 0 || extraRows.length > 0;
-  
   const isModelNode = ['stt', 'turn_detector', 'llm', 'tts', 'realtime'].includes(data.componentType);
   const isInputNode = data.componentType === 'input';
   const isOutputNode = data.componentType === 'output';
+
+  // ── Refined precision theme (feature flag: live_graph_redesign) ─────────
+  if (data.refinedDesign) {
+    const accentByType: Record<string, string> = {
+      input: '#10b981',
+      output: '#f59e0b',
+      llm: '#6366f1',
+      realtime: '#6366f1',
+      stt: '#0ea5e9',
+      tts: '#8b5cf6',
+      turn_detector: '#14b8a6',
+      vad: '#64748b',
+      resample: '#64748b',
+      post: '#ec4899',
+      core: '#64748b',
+    };
+    const accent = accentByType[data.componentType] ?? '#64748b';
+    const roleLabel = isInputNode
+      ? 'INPUT'
+      : isOutputNode
+        ? 'OUTPUT'
+        : isModelNode
+          ? 'AI'
+          : null;
+
+    const surface = isDark ? '#0f172a' : '#ffffff';
+    const borderCol = isDark ? '#1e293b' : '#e2e8f0';
+    const sectionBg = isDark ? '#0b1120' : '#f8fafc';
+    const titleCol = isDark ? '#f1f5f9' : '#0f172a';
+    const mutedCol = isDark ? '#94a3b8' : '#64748b';
+    const dividerCol = isDark ? '#1e293b' : '#e2e8f0';
+
+    return (
+      <div
+        style={{
+          padding: '14px 16px',
+          borderRadius: '12px',
+          background: surface,
+          borderTop: `2.5px solid ${accent}`,
+          borderRight: `1px solid ${borderCol}`,
+          borderBottom: `1px solid ${borderCol}`,
+          borderLeft: `1px solid ${borderCol}`,
+          boxShadow: isDark
+            ? '0 4px 16px -4px rgba(0, 0, 0, 0.45)'
+            : '0 4px 14px -4px rgba(15, 23, 42, 0.08)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '10px',
+          minWidth: data.isVertical ? '300px' : '264px',
+          width: data.isVertical ? '300px' : undefined,
+          boxSizing: 'border-box',
+          fontFamily: 'system-ui, -apple-system, sans-serif',
+          transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
+        }}
+      >
+        {data.componentType !== 'input' && (
+          <Handle
+            type="target"
+            position={data.isVertical ? Position.Top : Position.Left}
+            style={{
+              width: 9,
+              height: 9,
+              background: accent,
+              border: `2px solid ${surface}`,
+            }}
+          />
+        )}
+
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div
+            style={{
+              width: 34,
+              height: 34,
+              borderRadius: '8px',
+              background: `${accent}1a`,
+              border: `1px solid ${accent}33`,
+              color: accent,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <Icon size={18} strokeWidth={2} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div
+                style={{
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  color: titleCol,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  letterSpacing: '-0.01em',
+                }}
+              >
+                {data.label}
+              </div>
+              {roleLabel && (
+                <span
+                  style={{
+                    fontSize: '9px',
+                    fontWeight: 700,
+                    letterSpacing: '0.06em',
+                    padding: '1px 6px',
+                    borderRadius: '9999px',
+                    background: `${accent}18`,
+                    color: accent,
+                    border: `1px solid ${accent}30`,
+                    flexShrink: 0,
+                  }}
+                >
+                  {roleLabel}
+                </span>
+              )}
+            </div>
+            {data.provider && (
+              <div
+                style={{
+                  fontSize: '12px',
+                  color: mutedCol,
+                  marginTop: '1px',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {data.provider}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Sample rate badges */}
+        {(data.input_sample_rate || data.output_sample_rate) && (
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            {data.input_sample_rate && (
+              <span
+                style={{
+                  fontSize: '10px',
+                  fontWeight: 600,
+                  fontFamily: 'monospace',
+                  padding: '2px 7px',
+                  borderRadius: '5px',
+                  background: sectionBg,
+                  color: mutedCol,
+                  border: `1px solid ${dividerCol}`,
+                }}
+              >
+                IN {(data.input_sample_rate / 1000).toFixed(0)} kHz
+              </span>
+            )}
+            {data.output_sample_rate && (
+              <span
+                style={{
+                  fontSize: '10px',
+                  fontWeight: 600,
+                  fontFamily: 'monospace',
+                  padding: '2px 7px',
+                  borderRadius: '5px',
+                  background: sectionBg,
+                  color: mutedCol,
+                  border: `1px solid ${dividerCol}`,
+                }}
+              >
+                OUT {(data.output_sample_rate / 1000).toFixed(0)} kHz
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Configuration */}
+        {hasConfig && (
+          <div
+            style={{
+              background: sectionBg,
+              border: `1px solid ${dividerCol}`,
+              borderRadius: '8px',
+              padding: '8px 10px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px',
+            }}
+          >
+            <div
+              style={{
+                fontSize: '10px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+                color: mutedCol,
+                fontWeight: 600,
+              }}
+            >
+              Configuration
+            </div>
+
+            {visibleSchemaParams.map(param => {
+              const val = metadata[param.key];
+              if (val == null || val === '') return null;
+              const displayVal = typeof val === 'object' ? JSON.stringify(val) : String(val);
+              return (
+                <div
+                  key={param.key}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    fontSize: '12px',
+                    gap: '12px',
+                    alignItems: 'center',
+                  }}
+                >
+                  <span
+                    title={param.description}
+                    style={{
+                      color: mutedCol,
+                      cursor: 'help',
+                      borderBottom: '1px dotted currentColor',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {param.label}
+                    {param.mutable && (
+                      <span
+                        title="Can be changed at runtime without restarting the worker"
+                        style={{ display: 'inline-flex', alignItems: 'center' }}
+                      >
+                        <Edit2 size={9} style={{ opacity: 0.65 }} />
+                      </span>
+                    )}
+                  </span>
+                  {param.mutable && onParamUpdate ? (
+                    <EditableParam
+                      param={param}
+                      value={val}
+                      displayColor={titleCol}
+                      accentColor={accent}
+                      inputBg={surface}
+                      inputBorder={isDark ? '#334155' : '#cbd5e1'}
+                      errorColor="#ef4444"
+                      disabled={!data.workerId}
+                      onSubmit={(newValue) => onParamUpdate(data.nodeId, param.key, newValue)}
+                    />
+                  ) : (
+                    <span
+                      style={{
+                        color: titleCol,
+                        fontWeight: 500,
+                        fontFamily: 'monospace',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        maxWidth: '140px',
+                        textAlign: 'right',
+                      }}
+                      title={displayVal}
+                    >
+                      {displayVal}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+
+            {extraRows.map(([label, display, raw]) => (
+              <div
+                key={label}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  fontSize: '12px',
+                  gap: '12px',
+                }}
+              >
+                <span style={{ color: mutedCol }}>{label.replace(/_/g, ' ')}</span>
+                <span
+                  style={{
+                    color: titleCol,
+                    fontWeight: 500,
+                    fontFamily: 'monospace',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    maxWidth: '140px',
+                    textAlign: 'right',
+                  }}
+                  title={metaTooltip(raw)}
+                >
+                  {display}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Live Metrics */}
+        {data.showMetrics && metricKeys.length > 0 && (
+          <div
+            style={{
+              background: `${accent}10`,
+              border: `1px solid ${accent}33`,
+              borderRadius: '8px',
+              padding: '8px 10px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px',
+            }}
+          >
+            <div
+              style={{
+                fontSize: '10px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+                color: accent,
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}
+            >
+              <Gauge size={12} />
+              Live Metrics (last 60s)
+            </div>
+            {metricKeys.map(key => (
+              <div
+                key={key}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  fontSize: '12px',
+                  gap: '12px',
+                }}
+              >
+                <span style={{ color: mutedCol }}>{key.replace(/_/g, ' ')}</span>
+                <span
+                  style={{
+                    color: titleCol,
+                    fontWeight: 600,
+                    fontFamily: 'monospace',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    maxWidth: '140px',
+                    textAlign: 'right',
+                  }}
+                >
+                  {String(data.metrics[key])}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {data.componentType !== 'output' && (
+          <Handle
+            type="source"
+            position={data.isVertical ? Position.Bottom : Position.Right}
+            style={{
+              width: 9,
+              height: 9,
+              background: accent,
+              border: `2px solid ${surface}`,
+            }}
+          />
+        )}
+      </div>
+    );
+  }
+
   const isSpecial = isModelNode || isInputNode || isOutputNode;
 
   
@@ -120,13 +493,15 @@ export function CustomPipelineNode({ data }: NodeProps<PipelineNodeData>) {
       display: 'flex',
       flexDirection: 'column',
       gap: '12px',
-      minWidth: '260px',
+      minWidth: data.isVertical ? '300px' : '260px',
+      width: data.isVertical ? '300px' : undefined,
+      boxSizing: 'border-box',
       fontFamily: 'system-ui, sans-serif',
       transition: 'all 0.3s ease-in-out'
     }}>
       {/* Input Handle */}
       {data.componentType !== 'input' && (
-        <Handle type="target" position={Position.Left} style={{ width: 12, height: 12, background: isSpecial ? accentMain : '#3b82f6', border: '2px solid white' }} />
+        <Handle type="target" position={data.isVertical ? Position.Top : Position.Left} style={{ width: 12, height: 12, background: isSpecial ? accentMain : '#3b82f6', border: '2px solid white' }} />
       )}
       
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -228,7 +603,7 @@ export function CustomPipelineNode({ data }: NodeProps<PipelineNodeData>) {
                     whiteSpace: 'nowrap',
                     maxWidth: '140px',
                     textAlign: 'right'
-                  }} title={String(val)}>{String(val)}</span>
+                  }} title={typeof val === 'object' ? JSON.stringify(val) : String(val)}>{typeof val === 'object' ? JSON.stringify(val) : String(val)}</span>
                 )}
               </div>
             );
@@ -289,7 +664,7 @@ export function CustomPipelineNode({ data }: NodeProps<PipelineNodeData>) {
 
       {/* Output Handle */}
       {data.componentType !== 'output' && (
-        <Handle type="source" position={Position.Right} style={{ width: 12, height: 12, background: isSpecial ? accentMain : '#3b82f6', border: '2px solid white' }} />
+        <Handle type="source" position={data.isVertical ? Position.Bottom : Position.Right} style={{ width: 12, height: 12, background: isSpecial ? accentMain : '#3b82f6', border: '2px solid white' }} />
       )}
     </div>
   );

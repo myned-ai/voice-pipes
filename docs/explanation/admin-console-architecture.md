@@ -59,6 +59,7 @@ To prevent networking crashes (especially when crossing the Docker boundary), th
   *Fix:* It must be wrapped in `useMemo(() => ({ custom: CustomPipelineNode }), [])` or declared statically outside the main App component.
 * **Theme System:** Defaults to Dark Mode. Handled via React Context (`ThemeContext`). UI styling is deeply integrated with Tailwind-like inline shades (`#1e293b`, `#334155`).
 * **Icons:** Dynamic rendering via `lucide-react`. The `iconMap` safely matches pipeline string component types (`"stt"`, `"llm"`) to corresponding SVGs (`Activity`, `BrainCircuit`).
+* **Responsive Shell (`AppShell` & `useMediaQuery`):** `AppContent` renders `<AppShell>` inside `<Router>` using `h-dvh` and `src/lib/useMediaQuery.ts` (`BP_MD` / `BP_LG` / `BP_XL`). Below `768px`, the sidebar is replaced by a mobile top bar and slide-over navigation drawer; at `768px–1023px`, the sidebar defaults to collapsed (`w-20`) and `SessionsList` renders compact cards; below `1280px`, `TelemetryPanel` renders in a right-aligned overlay drawer rather than squeezing the transcript column. Never add non-wrapping toolbars or fixed side-by-side drawers below `lg:`/`xl:`. Vitest tests mock viewport widths via `setMockViewport` (`src/test/viewport.ts`, defaulting to `1440px` in `src/test-setup.ts`).
 
 ---
 

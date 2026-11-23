@@ -98,6 +98,8 @@ export interface PipelineNodeData {
   metrics: Record<string, string>;
   workerId?: string;
   onParamUpdate?: (nodeId: string, key: string, value: unknown) => Promise<string | null>;
+  isVertical?: boolean;
+  refinedDesign?: boolean;
 }
 
 export type PipelineFlowNode = Node<PipelineNodeData>;

@@ -26,6 +26,7 @@ export interface SessionSummaryDialogProps {
   anomaliesByUtt?: Record<string, ReportAnomaly[]>;
   onCopyReportForLlm?: () => void;
   reportCopyState?: 'idle' | 'loading' | 'copied' | 'error';
+  onOpenResourceBreakdown?: () => void;
 }
 
 export function SessionSummaryDialog({
@@ -36,6 +37,7 @@ export function SessionSummaryDialog({
   anomaliesByUtt = {},
   onCopyReportForLlm,
   reportCopyState = 'idle',
+  onOpenResourceBreakdown,
 }: SessionSummaryDialogProps) {
   const { isDark } = useTheme();
 
@@ -446,7 +448,24 @@ export function SessionSummaryDialog({
             <span>{metadata?.turn_count ?? metrics?.totalTurns ?? 0} total turns</span>
             {metrics?.serverBargeIns ? ` · ${metrics.serverBargeIns} barge-in(s)` : ''}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {onOpenResourceBreakdown && (metadata?.peak_rss_bytes != null || metadata?.avg_turn_cpu_ms != null) && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenResourceBreakdown();
+                }}
+                className={`flex items-center gap-1.5 h-7 sm:h-8 px-2.5 sm:px-3 text-xs font-medium rounded-lg border transition-colors ${
+                  isDark
+                    ? 'bg-slate-800 border-slate-700 text-cyan-300 hover:bg-slate-700'
+                    : 'bg-white border-gray-300 text-cyan-700 hover:bg-gray-100'
+                }`}
+              >
+                <Cpu size={13} />
+                <span>Resource Breakdown</span>
+              </button>
+            )}
             {onCopyReportForLlm && (
               <button
                 onClick={onCopyReportForLlm}

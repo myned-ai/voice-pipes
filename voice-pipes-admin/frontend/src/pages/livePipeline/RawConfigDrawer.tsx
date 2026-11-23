@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { X, FileCode, Copy, Check } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
 
@@ -13,6 +13,15 @@ interface Props {
 export function RawConfigDrawer({ open, onClose, pipelineName, workerId, tomlContent }: Props) {
   const { isDark } = useTheme();
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
 
   if (!open) return null;
 
@@ -41,14 +50,14 @@ export function RawConfigDrawer({ open, onClose, pipelineName, workerId, tomlCon
         }`}
       >
         {/* Header */}
-        <div className={`flex items-center justify-between px-6 py-4 border-b ${isDark ? 'border-slate-800 bg-slate-900/80' : 'border-gray-200 bg-gray-50/80'}`}>
-          <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-lg ${isDark ? 'bg-indigo-950/60 text-indigo-400' : 'bg-indigo-50 text-indigo-600'}`}>
+        <div className={`flex items-center justify-between gap-2 px-4 sm:px-6 py-3.5 sm:py-4 border-b ${isDark ? 'border-slate-800 bg-slate-900/80' : 'border-gray-200 bg-gray-50/80'}`}>
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className={`p-2 rounded-lg shrink-0 ${isDark ? 'bg-indigo-950/60 text-indigo-400' : 'bg-indigo-50 text-indigo-600'}`}>
               <FileCode size={18} />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h3 className="text-sm font-semibold tracking-tight">Raw Pipeline Config</h3>
+                <h3 className="text-sm font-semibold tracking-tight whitespace-nowrap">Raw Pipeline Config</h3>
                 <span className={`text-xs px-2 py-0.5 rounded-full font-mono font-medium ${
                   isDark ? 'bg-slate-800 text-slate-300' : 'bg-gray-200 text-gray-700'
                 }`}>

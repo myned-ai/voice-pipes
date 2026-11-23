@@ -53,7 +53,7 @@ export default function StateTimeline({ timeline, onClose }: Props) {
 
   return (
     <div
-      className={`flex flex-col w-72 shrink-0 border-l ${
+      className={`flex flex-col w-full lg:w-72 shrink-0 border-l ${
         isDark ? "bg-slate-900 border-slate-700" : "bg-white border-gray-200"
       }`}
     >

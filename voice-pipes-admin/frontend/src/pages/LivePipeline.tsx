@@ -2,10 +2,12 @@ import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import axios from 'axios'
 import ReactFlow, { Background, Controls, applyNodeChanges, applyEdgeChanges } from 'reactflow'
 import type { Node, Edge, NodeChange, EdgeChange, ReactFlowInstance } from 'reactflow'
-import { Activity, AudioLines, FileCode, Gauge, WifiOff, Users, Tag, Globe, Hash, Cpu } from 'lucide-react'
+import { Activity, AudioLines, FileCode, Gauge, WifiOff, Users, Tag, Globe, Hash, Cpu, ArrowUpDown, ArrowLeftRight } from 'lucide-react'
 import 'reactflow/dist/style.css'
 import { useTheme } from '../contexts/ThemeContext';
 import { API_BASE } from '../config/api';
+import { checkAuth } from '../lib/adminAuth';
+import { BP_MD, useMediaQuery } from '../lib/useMediaQuery';
 import { groupFleetByPipeline } from '../lib/fleet';
 import type { ApiEnvelope, PipelineGraph } from '../lib/orchestrator';
 import { FLEET_COLORS, healthBadgeStyle } from './livePipeline/styles';
@@ -23,7 +25,7 @@ function describeRequestError(e: unknown): string {
   return String(msg);
 }
 
-export default function LivePipeline() {
+export default function LivePipeline({ refinedDesign = true }: { refinedDesign?: boolean }) {
   const nodeTypes = useMemo(() => ({ custom: CustomPipelineNode }), []);
   const [rawNodes, setRawNodes] = useState<PipelineFlowNode[]>([]);
   const [rawEdges, setRawEdges] = useState<Edge[]>([]);
@@ -40,8 +42,33 @@ export default function LivePipeline() {
   const [workers, setWorkers] = useState<LiveWorker[]>([]);
   const [overallMetrics, setOverallMetrics] = useState<OverallMetrics | null>(null);
   const [selectedWorkerId, setSelectedWorkerId] = useState<string>('');
+  const [canEditParams, setCanEditParams] = useState(true);
+  const isMd = useMediaQuery(BP_MD);
+  const [orientationOverride, setOrientationOverride] = useState<{
+    forIsMd: boolean;
+    value: 'vertical' | 'horizontal';
+  } | null>(null);
+  const orientationPref =
+    orientationOverride && orientationOverride.forIsMd === isMd
+      ? orientationOverride.value
+      : null;
+  const isVertical = orientationPref ? orientationPref === 'vertical' : !isMd;
+  const [measuredHeights, setMeasuredHeights] = useState<Record<string, number>>({});
   const pipelineLoaded = useRef(false);
   const workersInitialized = useRef(false);
+
+  useEffect(() => {
+    let active = true;
+    void checkAuth().then((auth) => {
+      if (!active || !auth) return;
+      if (auth.is_operator !== undefined) {
+        setCanEditParams(auth.is_operator);
+      } else if (auth.auth_mode === 'hf_oauth' || auth.auth_mode === 'guest') {
+        setCanEditParams(false);
+      }
+    });
+    return () => { active = false; };
+  }, []);
 
   const { isDark } = useTheme();
   const isOffline = !health || health.status === 'offline';
@@ -108,21 +135,57 @@ export default function LivePipeline() {
   // `EditableParam` can submit changes (kept here, not in `fetchPipeline`, so
   // switching the selected worker re-binds the callback without a re-fetch).
   const layout = useMemo<GraphLayout>(() => {
+    const VERTICAL_GAP = 64;
+    const positionList = (list: PipelineFlowNode[]) => {
+      let yCursor = 40;
+      return list.map((n, i) => {
+        const pos = isVertical
+          ? { x: 40, y: yCursor }
+          : { x: 100 + i * 320, y: 250 + (i % 2 === 0 ? -120 : 120) };
+        yCursor += (measuredHeights[n.id] ?? 200) + VERTICAL_GAP;
+        return decorate({ ...n, position: pos });
+      });
+    };
     const decorate = (n: PipelineFlowNode): PipelineFlowNode => ({
       ...n,
       data: {
         ...n.data,
         workerId: selectedWorkerId,
-        onParamUpdate: applyParamUpdate,
+        onParamUpdate: canEditParams ? applyParamUpdate : undefined,
+        isVertical,
+        refinedDesign,
       },
     });
+    const styleEdge = (e: Edge): Edge =>
+      refinedDesign
+        ? {
+            ...e,
+            style: {
+              ...(e.style ?? {}),
+              stroke: isDark ? '#475569' : '#94a3b8',
+              strokeWidth: 1.75,
+            },
+            labelStyle: {
+              ...(e.labelStyle ?? {}),
+              fill: isDark ? '#cbd5e1' : '#334155',
+              fontWeight: 600,
+              fontSize: 11,
+            },
+            labelBgStyle: {
+              ...(e.labelBgStyle ?? {}),
+              fill: isDark ? '#0f172a' : '#ffffff',
+              fillOpacity: 0.95,
+              stroke: isDark ? '#334155' : '#cbd5e1',
+              strokeWidth: 1,
+            },
+          }
+        : e;
     if (showResample) {
-      const repositioned = rawNodes.map((n, i) => decorate({ ...n, position: { x: 100 + i * 320, y: 250 + (i % 2 === 0 ? -120 : 120) } }));
-      return { nodes: repositioned, edges: rawEdges };
+      return { nodes: positionList(rawNodes), edges: rawEdges.map(styleEdge) };
     }
     const resampleIds = new Set(rawNodes.filter(n => n.data.componentType === 'resample').map(n => n.id));
     const visible = rawNodes.filter(n => !resampleIds.has(n.id));
-    const repositioned = visible.map((n, i) => decorate({ ...n, position: { x: 100 + i * 320, y: 250 + (i % 2 === 0 ? -120 : 120) } }));
+    const repositioned = positionList(visible);
     // Rewire edges: for each resample node, connect its incoming source to its outgoing target
     let rewired = [...rawEdges];
     for (const rid of resampleIds) {
@@ -142,8 +205,8 @@ export default function LivePipeline() {
         }
       }
     }
-    return { nodes: repositioned, edges: rewired };
-  }, [showResample, rawNodes, rawEdges, selectedWorkerId, applyParamUpdate]);
+    return { nodes: repositioned, edges: rewired.map(styleEdge) };
+  }, [showResample, rawNodes, rawEdges, selectedWorkerId, canEditParams, isVertical, measuredHeights, refinedDesign, isDark, applyParamUpdate]);
 
   // Interactive edits (drag, select, measure) applied on top of the current
   // layout. Keyed on the `layout` they were made against, so a new layout
@@ -156,11 +219,27 @@ export default function LivePipeline() {
 
   // Allow nodes & edges to be dragged and moved interactively
   const onNodesChange = useCallback(
-    (changes: NodeChange[]) => setEdited(prev => {
-      const cur = prev?.base === layout ? prev : { base: layout, nodes: layout.nodes, edges: layout.edges };
-      return { ...cur, nodes: applyNodeChanges(changes, cur.nodes) };
-    }),
-    [layout]
+    (changes: NodeChange[]) => {
+      if (isVertical) {
+        const dimUpdates: Record<string, number> = {};
+        for (const ch of changes) {
+          if (ch.type === 'dimensions' && ch.dimensions?.height) {
+            dimUpdates[ch.id] = ch.dimensions.height;
+          }
+        }
+        if (Object.keys(dimUpdates).length > 0) {
+          setMeasuredHeights(prev => {
+            const changed = Object.entries(dimUpdates).some(([id, h]) => prev[id] !== h);
+            return changed ? { ...prev, ...dimUpdates } : prev;
+          });
+        }
+      }
+      setEdited(prev => {
+        const cur = prev?.base === layout ? prev : { base: layout, nodes: layout.nodes, edges: layout.edges };
+        return { ...cur, nodes: applyNodeChanges(changes, cur.nodes) };
+      });
+    },
+    [layout, isVertical]
   );
   const onEdgesChange = useCallback(
     (changes: EdgeChange[]) => setEdited(prev => {
@@ -169,6 +248,15 @@ export default function LivePipeline() {
     }),
     [layout]
   );
+
+  const measuredCount = Object.keys(measuredHeights).length;
+  useEffect(() => {
+    if (!rfInstance) return;
+    const frame = requestAnimationFrame(() => {
+      rfInstance.fitView({ padding: 0.1, maxZoom: 1 });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [rfInstance, isVertical, showResample, measuredCount]);
 
   const onNodeDoubleClick = useCallback((_: React.MouseEvent, node: Node) => {
     if (rfInstance) {
@@ -393,9 +481,9 @@ export default function LivePipeline() {
 
   return (
       <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: isDark ? '#0f172a' : '#f8fafc', transition: 'background-color 0.3s ease' }}>
-        <header style={{ padding: '1rem 2rem', background: isDark ? '#1e293b' : '#ffffff', color: isDark ? '#f8fafc' : '#0f172a', borderBottom: isDark ? '1px solid #334155' : '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontFamily: 'system-ui, sans-serif', transition: 'all 0.3s ease' }}>
-          <div />
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '14px', fontWeight: 500, color: isDark ? '#f8fafc' : '#334155' }}>
+        <header className="px-3 py-2.5 sm:px-8 sm:py-4" style={{ background: isDark ? '#1e293b' : '#ffffff', color: isDark ? '#f8fafc' : '#0f172a', borderBottom: isDark ? '1px solid #334155' : '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', fontFamily: 'system-ui, sans-serif', transition: 'all 0.3s ease' }}>
+          <div className="hidden sm:block" />
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px 12px', fontSize: '14px', fontWeight: 500, color: isDark ? '#f8fafc' : '#334155' }}>
 
             <button 
               onClick={() => setShowWorkers(prev => !prev)}
@@ -489,6 +577,34 @@ export default function LivePipeline() {
               {showResample ? 'Hide Resamplers' : 'Show Resamplers'}
             </button>
 
+            <button
+              type="button"
+              onClick={() =>
+                setOrientationOverride({
+                  forIsMd: isMd,
+                  value: isVertical ? 'horizontal' : 'vertical',
+                })
+              }
+              style={{
+                background: orientationPref ? (isDark ? '#1e293b' : '#f1f5f9') : 'transparent',
+                border: orientationPref ? (isDark ? '1px solid #475569' : '1px solid #cbd5e1') : '1px solid transparent',
+                color: isDark ? '#94a3b8' : '#64748b',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 12px',
+                borderRadius: '8px',
+                fontWeight: 600,
+                fontSize: '12px',
+                transition: 'all 0.2s',
+              }}
+              title={isVertical ? 'Switch to Horizontal Graph Layout' : 'Switch to Vertical Graph Layout'}
+            >
+              {isVertical ? <ArrowLeftRight size={16} /> : <ArrowUpDown size={16} />}
+              {isVertical ? 'Horizontal' : 'Vertical'}
+            </button>
+
             <button 
               onClick={() => setShowRawConfig(true)}
               style={{
@@ -510,6 +626,17 @@ export default function LivePipeline() {
               <FileCode size={16} />
               Raw Config
             </button>
+
+            {!canEditParams && (
+              <span
+                title="Parameter editing is disabled in multi-tenant mode"
+                className={`text-xs font-medium px-2.5 py-1 rounded-md border ${
+                  isDark ? 'bg-slate-800 border-slate-700 text-slate-400' : 'bg-gray-100 border-gray-200 text-gray-500'
+                }`}
+              >
+                Read-only
+              </span>
+            )}
 
             <div style={{ width: '1px', height: '24px', background: isDark ? '#334155' : '#e2e8f0' }} />
 
@@ -646,18 +773,23 @@ export default function LivePipeline() {
             </div>
           ) : (
           <>
-          <ReactFlow 
-              nodes={nodes} 
-              edges={edges} 
+          <ReactFlow
+              key={isVertical ? 'vertical' : 'horizontal'}
+              nodes={nodes}
+              edges={edges}
               nodeTypes={nodeTypes}
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
               onNodeDoubleClick={onNodeDoubleClick}
               onInit={setRfInstance}
+              minZoom={0.2}
               fitView
               fitViewOptions={{ padding: 0.1, maxZoom: 1 }}
           >
-            <Background color={isDark ? '#334155' : '#cbd5e1'} gap={16} />
+            <Background
+              color={refinedDesign ? (isDark ? '#1e293b' : '#94a3b8') : (isDark ? '#334155' : '#cbd5e1')}
+              gap={refinedDesign ? 20 : 16}
+            />
             <Controls style={{ 
                 backgroundColor: isDark ? '#1e293b' : 'white', 
                 color: isDark ? '#f8fafc' : '#111827',
@@ -670,8 +802,8 @@ export default function LivePipeline() {
           {showMetrics && overallMetrics && (
              <div style={{
                 position: 'absolute',
-                top: 20,
-                right: 20,
+                top: 12,
+                right: 12,
                 background: isDark ? 'rgba(30, 41, 59, 0.85)' : 'rgba(255, 255, 255, 0.85)',
                 backdropFilter: 'blur(8px)',
                 border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
@@ -680,6 +812,7 @@ export default function LivePipeline() {
                 borderRadius: '12px',
                 zIndex: 10,
                 minWidth: '220px',
+                maxWidth: 'calc(100vw - 24px)',
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '12px',
@@ -705,8 +838,8 @@ export default function LivePipeline() {
           {showWorkers && (
              <div style={{
                 position: 'absolute',
-                top: 20,
-                left: 20,
+                top: 12,
+                left: 12,
                 background: isDark ? 'rgba(30, 41, 59, 0.92)' : 'rgba(255, 255, 255, 0.92)',
                 backdropFilter: 'blur(8px)',
                 border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
@@ -714,8 +847,8 @@ export default function LivePipeline() {
                 padding: '16px',
                 borderRadius: '12px',
                 zIndex: 10,
-                minWidth: '280px',
-                maxWidth: '340px',
+                minWidth: '260px',
+                maxWidth: 'min(340px, calc(100vw - 24px))',
                 maxHeight: 'calc(100% - 40px)',
                 overflowY: 'auto',
                 display: 'flex',

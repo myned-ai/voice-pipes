@@ -194,14 +194,14 @@ export default function ConnectionBar({
 
   return (
     <div className="flex flex-col shrink-0">
-    <div className={`flex items-center gap-3 px-4 py-2.5 border-b ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+    <div className={`flex items-center flex-wrap gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 border-b ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
       {/* Status dot */}
       <div className={`w-2.5 h-2.5 rounded-full ${stateColors[sessionState]}`} title={sessionState} />
 
       {/* Where the session goes. Hidden once it is going: the choice is made,
           and what matters then is where it landed. */}
       {!connected && !connecting && (
-        <div className={`flex flex-1 min-w-0 rounded-lg border overflow-hidden ${isDark ? 'border-slate-600' : 'border-gray-300'}`}>
+        <div className={`flex w-full sm:w-auto sm:flex-1 min-w-[200px] rounded-lg border overflow-hidden ${isDark ? 'border-slate-600' : 'border-gray-300'}`}>
           <select
             value={source}
             onChange={(e) => onSourceChange(e.target.value as ConnectSource)}
@@ -247,7 +247,7 @@ export default function ConnectionBar({
       {/* Where the session landed */}
       {(connected || connecting) && (
         <span
-          className={`flex-1 min-w-0 truncate text-sm ${isDark ? 'text-slate-300' : 'text-gray-700'}`}
+          className={`flex-1 min-w-[140px] truncate text-sm ${isDark ? 'text-slate-300' : 'text-gray-700'}`}
           title={target ? target.url : url}
         >
           {target ? describeTarget(target) : url}

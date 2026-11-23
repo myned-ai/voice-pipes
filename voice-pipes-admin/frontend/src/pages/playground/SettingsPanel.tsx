@@ -58,10 +58,10 @@ export default function SettingsPanel({ settings, onChange, onClose, onOpenMicCh
   const checkboxClass = `h-4 w-4 rounded border ${isDark ? 'border-slate-500 bg-slate-900 text-indigo-400' : 'border-gray-300 bg-white text-indigo-600'}`;
 
   return (
-    <div className={`w-72 border-l flex flex-col shrink-0 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+    <div className={`w-full lg:w-72 border-r flex flex-col shrink-0 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
       <div className={`flex items-center justify-between px-4 py-3 border-b ${isDark ? 'border-slate-700' : 'border-gray-200'}`}>
         <h3 className={`text-sm font-semibold ${isDark ? 'text-slate-200' : 'text-gray-800'}`}>Session Settings</h3>
-        <button onClick={onClose} className={`transition-colors ${isDark ? 'text-slate-400 hover:text-white' : 'text-gray-400 hover:text-gray-900'}`}>
+        <button onClick={onClose} aria-label="Close settings" className={`transition-colors ${isDark ? 'text-slate-400 hover:text-white' : 'text-gray-400 hover:text-gray-900'}`}>
           <X size={16} />
         </button>
       </div>

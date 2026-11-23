@@ -93,6 +93,17 @@ Historical session browser with drill-down into individual sessions.
 - **Pagination** — 25 items per page with prev/next controls
 - **Session detail view** — audio playback with conversation player (user/AI audio fragments), playlist builder, playback controls (play/pause/stop/skip), LLM prompt and response cards with timing breakdown (stacked bar chart), telemetry panel
 
+## Responsive & Mobile Layout
+
+The console adapts across four viewport tiers while keeping the full desktop layout untouched at `>= 1024px` / `>= 1280px`:
+
+- **Phones (`< 768px`)**: Top header bar with slide-over navigation drawer (`<AppShell>`), compact session cards in `/sessions`, trimmed sticky header in `/sessions/:id` (with full UUID, provider metadata, LLM diagnostic copy, and resource breakdown accessible via **Quick Summary**), collapsible per-turn **Timing & stats** on `TurnCard`, and overlay drawers for `TelemetryPanel`, `EventLog`, and `StateTimeline`.
+- **Tablets — Portrait (`768px–1023px`)**: Left sidebar defaults to a collapsed icon rail (`w-20`), `/sessions` renders compact cards, and side panels open as overlay drawers.
+- **Tablets — Landscape / Small Laptops (`1024px–1279px`)**: Expanded sidebar (`w-64`), 7-column `/sessions` table, inline Playground panels, and overlay `TelemetryPanel`.
+- **Desktop (`>= 1280px`)**: Full side-by-side `TelemetryPanel` open by default.
+
+> Touch devices (`@media (pointer: coarse)` and `@media (hover: none)`) get scoped `44×44px` `.touch-target` sizing on navigation/toolbar controls and always-visible row actions (`.touch-visible`).
+
 ## Core Services
 
 - **Transport layer** — `WebSocketAdapter` with typed binary PCM framing (6-byte header) and JSON control envelopes

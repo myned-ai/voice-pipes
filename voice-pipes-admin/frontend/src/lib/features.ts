@@ -12,6 +12,7 @@ import { API_BASE } from "../config/api";
 export type AdminFeatures = {
   benchmarks: boolean;
   test_suites: boolean;
+  live_graph_redesign: boolean;
 };
 
 function parseBuildFlag(raw: string | undefined, fallback: boolean): boolean {
@@ -22,6 +23,7 @@ function parseBuildFlag(raw: string | undefined, fallback: boolean): boolean {
 export const DEFAULT_ADMIN_FEATURES: AdminFeatures = {
   benchmarks: parseBuildFlag(import.meta.env.VITE_FEATURE_BENCHMARKS, true),
   test_suites: parseBuildFlag(import.meta.env.VITE_FEATURE_TEST_SUITES, true),
+  live_graph_redesign: parseBuildFlag(import.meta.env.VITE_FEATURE_LIVE_GRAPH_REDESIGN, true),
 };
 
 export async function fetchAdminFeatures(): Promise<AdminFeatures> {
@@ -33,6 +35,10 @@ export async function fetchAdminFeatures(): Promise<AdminFeatures> {
     return {
       benchmarks: typeof d?.benchmarks === "boolean" ? d.benchmarks : DEFAULT_ADMIN_FEATURES.benchmarks,
       test_suites: typeof d?.test_suites === "boolean" ? d.test_suites : DEFAULT_ADMIN_FEATURES.test_suites,
+      live_graph_redesign:
+        typeof d?.live_graph_redesign === "boolean"
+          ? d.live_graph_redesign
+          : DEFAULT_ADMIN_FEATURES.live_graph_redesign,
     };
   } catch {
     return DEFAULT_ADMIN_FEATURES;

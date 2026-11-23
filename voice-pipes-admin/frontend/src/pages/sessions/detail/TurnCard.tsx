@@ -9,6 +9,7 @@ import { FragmentPlayer } from './AudioPlayers';
 import { fragmentTextsFor } from './fragments';
 import { deriveTurnDisplayState, firstSentenceStartupMs } from './utils';
 import { API_BASE } from '../../../config/api';
+import { BP_MD, useMediaQuery } from '../../../lib/useMediaQuery';
 
 export const TurnCard = ({ utt, sessionId, llmTiming, ttsTiming, sttTiming, orchTurn, anomalies, isColdStart, isRealtime, sessionSttProvider, sessionTtsProvider }: { utt: Utterance; sessionId: string; llmTiming?: LlmTiming; ttsTiming?: TtsTiming; sttTiming?: SttTiming; orchTurn?: OrchTurn; anomalies?: ReportAnomaly[]; isColdStart?: boolean; isRealtime?: boolean; sessionSttProvider?: string; sessionTtsProvider?: string }) => {
   const { isDark } = useTheme();
@@ -34,6 +35,10 @@ export const TurnCard = ({ utt, sessionId, llmTiming, ttsTiming, sttTiming, orch
 
   const [promptOpen, setPromptOpen] = useState(false);
   const [ttsInputOpen, setTtsInputOpen] = useState(false);
+  const isMd = useMediaQuery(BP_MD);
+  const [mobileTimingOpen, setMobileTimingOpen] = useState(false);
+  const showTimingDetails = isMd || mobileTimingOpen;
+  const hasTimeline = sttMs > 0 || llmMs > 0 || ttsMs > 0;
 
   // TTS input differences (spoken_text vs display_text, directives applied/stripped)
   const ttsDirectives = utt.llm_output?.tts_directives ?? [];
@@ -94,7 +99,7 @@ export const TurnCard = ({ utt, sessionId, llmTiming, ttsTiming, sttTiming, orch
         : `Interrupted — audio below is the full synthesized output; only part was heard before the barge-in.${asHeardHint}`;
 
   return (
-    <div className={`rounded-xl p-5 space-y-4 border ${isTerminated ? (isDark ? 'bg-slate-800/60 border-orange-500/30' : 'bg-orange-50/30 border-orange-200') : (isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200')}`}>
+    <div className={`rounded-xl p-3.5 sm:p-5 space-y-3.5 sm:space-y-4 border ${isTerminated ? (isDark ? 'bg-slate-800/60 border-orange-500/30' : 'bg-orange-50/30 border-orange-200') : (isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200')}`}>
       <TurnCardHeader
         utt={utt}
         displayState={displayState}
@@ -106,8 +111,8 @@ export const TurnCard = ({ utt, sessionId, llmTiming, ttsTiming, sttTiming, orch
         isRealtime={isRealtime}
       />
 
-      {/* Pipeline Timeline */}
-      {(sttMs > 0 || llmMs > 0 || ttsMs > 0) && (
+      {/* Pipeline Timeline (inline on >= md, collapsible on < md) */}
+      {showTimingDetails && hasTimeline && (
         <PipelineTimeline
           sttMs={sttMs} llmMs={llmMs} ttsMs={ttsMs}
           ttftMs={summary?.ttft_ms}
@@ -146,7 +151,7 @@ export const TurnCard = ({ utt, sessionId, llmTiming, ttsTiming, sttTiming, orch
             </span>
           </div>
           {userAudioEntries.length > 0 && (
-            <div className="pl-7">
+            <div className="pl-0 sm:pl-7">
               <FragmentPlayer entries={userAudioEntries} sessionId={sessionId} />
             </div>
           )}
@@ -172,7 +177,7 @@ export const TurnCard = ({ utt, sessionId, llmTiming, ttsTiming, sttTiming, orch
             </div>
           )}
           {aiAudioEntries.length > 0 && (
-            <div className="pl-7 flex flex-col gap-1">
+            <div className="pl-0 sm:pl-7 flex flex-col gap-1">
               {heardNote && (
                 <div className={`flex items-start gap-1.5 text-[10px] leading-snug ${isDark ? 'text-amber-400/80' : 'text-amber-600'}`}>
                   <AlertCircle size={11} className="mt-px shrink-0" />
@@ -325,8 +330,25 @@ export const TurnCard = ({ utt, sessionId, llmTiming, ttsTiming, sttTiming, orch
         </div>
       )}
 
+      {/* ── Mobile Timing & Stats disclosure toggle (< md) ── */}
+      {!isMd && (hasTimeline || hasStats) && (
+        <div className="pt-1">
+          <button
+            type="button"
+            onClick={() => setMobileTimingOpen((o) => !o)}
+            aria-expanded={mobileTimingOpen}
+            className={`flex items-center gap-1.5 text-xs font-medium transition-colors ${
+              isDark ? 'text-slate-400 hover:text-slate-200' : 'text-gray-500 hover:text-gray-800'
+            }`}
+          >
+            <ChevronDown size={13} className={`transition-transform duration-150 ${mobileTimingOpen ? '' : '-rotate-90'}`} />
+            <span>Timing &amp; stats</span>
+          </button>
+        </div>
+      )}
+
       {/* ── Stats footer: perf numbers + providers in one compact row ── */}
-      {hasStats && (
+      {showTimingDetails && hasStats && (
         <div className={`flex flex-wrap gap-x-5 gap-y-1 text-[10px] pt-3 border-t ${isDark ? 'text-slate-500 border-slate-700/50' : 'text-gray-400 border-gray-200'}`}>
           {llmTiming?.tokens_per_sec != null && (
             <span className={`font-mono font-semibold ${isDark ? 'text-amber-400/80' : 'text-amber-600'}`}>{llmTiming.tokens_per_sec.toFixed(1)} tok/s</span>

@@ -157,9 +157,9 @@ export default function BenchmarksList() {
   };
 
   return (
-    <div className="p-8 overflow-y-auto h-full">
+    <div className="p-3 sm:p-6 lg:p-8 overflow-y-auto h-full">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between flex-wrap gap-3 mb-6">
         <div className="flex items-center gap-3">
           <FlaskConical size={24} className="text-indigo-400" />
           <h1 className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Benchmarks</h1>

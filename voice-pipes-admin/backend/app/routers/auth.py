@@ -76,12 +76,14 @@ async def auth_check(request: Request):
     """
     if _auth.ADMIN_MULTI_TENANT:
         tenant_id = _auth.tenant_from_scope(request.scope)
+        is_operator = _auth.token_matches(_auth.credential_from_scope(request.scope))
         data: dict = {
             "auth_required": True,
             "authenticated": tenant_id is not None,
             "auth_mode": _auth.auth_mode(),
             "allow_guest": _auth.ADMIN_ALLOW_GUEST,
             "tenant_id": tenant_id,
+            "is_operator": is_operator,
         }
         if _auth.hf_oauth_enabled():
             data["hf_oauth_url"] = "/api/v1/auth/hf/login"

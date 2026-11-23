@@ -37,7 +37,7 @@ export default function InputBar({
 
   return (
     <div className={`flex flex-col border-t shrink-0 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-    <div className="flex items-center gap-2 px-4 py-3">
+    <div className="flex items-center gap-2 px-3 sm:px-4 pt-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
       {/* Mic toggle */}
       <button
         onClick={micActive ? onStopMic : onStartMic}
