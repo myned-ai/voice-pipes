@@ -202,6 +202,12 @@ Each needs the engine's speech-to-speech client (`realtime`). Built by default.
 | `s2s-gemini` | `realtime`, `dep:voice-pipes-s2s-gemini` | Google Gemini Live. |
 | `s2s-openai` | `realtime`, `dep:voice-pipes-s2s-openai` | OpenAI Realtime speech-to-speech as a voice-pipes plugin, on the SDK only. |
 | `s2s-elevenlabs` | `realtime`, `dep:voice-pipes-s2s-elevenlabs` | ElevenLabs Agents speech-to-speech as a voice-pipes plugin, on the SDK only. |
+
+### Plugin telephony / media-stream transports
+
+| Feature | Enables | Notes |
+|---|---|---|
+| `transport-twilio` | `dep:voice-pipes-transport-twilio` | Twilio Media Streams (TwiML webhook + JSON/base64 µ-law WebSocket). |
 <!-- generated:end cli-features -->
 
 The CLI's own `ort-cuda` forwards to every linked ONNX plugin that has a
