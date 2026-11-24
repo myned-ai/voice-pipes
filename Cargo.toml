@@ -29,6 +29,7 @@ members = [
     "plugins/stt/moonshine",     # Moonshine STT (ONNX), English
     "plugins/filter/deepfilter", # DeepFilterNet noise suppression
     "plugins/tts/neutts",        # NeuTTS-Air TTS (GGUF + ONNX NeuCodec)
+    "plugins/transport/twilio",  # Twilio Media Streams telephony transport plugin
 ]
 resolver = "2"
 
@@ -64,6 +65,7 @@ voice-pipes-vad-silero = { path = "plugins/vad/silero", version = "0.3.0" }
 voice-pipes-stt-moonshine = { path = "plugins/stt/moonshine", version = "0.3.0" }
 voice-pipes-filter-deepfilter = { path = "plugins/filter/deepfilter", version = "0.3.0" }
 voice-pipes-tts-neutts = { path = "plugins/tts/neutts", version = "0.3.0" }
+voice-pipes-transport-twilio = { path = "plugins/transport/twilio", version = "0.3.0" }
 
 anyhow = "1"
 arc-swap = "1"

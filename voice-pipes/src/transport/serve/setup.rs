@@ -88,6 +88,7 @@ pub(super) async fn bootstrap_session(
     // ── Audio pacer ─────────────────────────────────────────
     let pacer_config = match session.metadata().transport_type {
         TransportType::WebSocket => PacerConfig::websocket(),
+        TransportType::MediaStream => PacerConfig::telephony(),
         TransportType::WebTransport | TransportType::Direct => PacerConfig::independent_streams(),
     };
     let paced_rx = spawn_pacer(pacer_config, out_rx, Arc::clone(&suppress_audio));

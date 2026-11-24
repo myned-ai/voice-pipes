@@ -46,6 +46,7 @@ pub fn channel_pair() -> (DirectTransport, DirectTransport) {
             quality: ConnectionQuality::Excellent,
             rtt_ms: Some(0),
             auth_identity: None,
+            external_id: None,
         },
         closed: Arc::new(std::sync::atomic::AtomicBool::new(false)),
     };
@@ -62,6 +63,7 @@ pub fn channel_pair() -> (DirectTransport, DirectTransport) {
             quality: ConnectionQuality::Excellent,
             rtt_ms: Some(0),
             auth_identity: None,
+            external_id: None,
         },
         closed: Arc::new(std::sync::atomic::AtomicBool::new(false)),
     };

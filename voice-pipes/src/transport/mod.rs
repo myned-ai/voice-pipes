@@ -20,6 +20,7 @@ pub mod direct;
 pub mod error;
 pub mod health;
 pub mod inject;
+pub mod media_stream;
 pub mod pacer;
 pub mod rate;
 pub mod serve;
@@ -1195,6 +1196,9 @@ pub struct SessionMetadata {
     pub rtt_ms: Option<u64>,
     /// Identity from authentication, if any.
     pub auth_identity: Option<String>,
+    /// Optional external correlation identifier (e.g., W3C `traceparent` or
+    /// sanitized allowlisted header such as a simulation/call ID).
+    pub external_id: Option<String>,
 }
 
 /// Transport protocol discriminator.
@@ -1203,6 +1207,8 @@ pub struct SessionMetadata {
 pub enum TransportType {
     /// WebSocket (RFC 6455).
     WebSocket,
+    /// Telephony or raw media stream over WebSocket (paced for carrier buffers).
+    MediaStream,
     /// WebTransport over QUIC (future).
     WebTransport,
     /// In-process channels (CLI, tests).

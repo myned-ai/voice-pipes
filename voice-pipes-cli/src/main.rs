@@ -401,6 +401,18 @@ fn register_each_plugin() -> Result<(), voice_pipes::plugins::RegistrationError>
     plugin!("s2s-elevenlabs", Realtime, voice_pipes_s2s_elevenlabs);
     plugin!("turn-smart", Turn, voice_pipes_turn_smart);
     plugin!("turn-vap", Turn, voice_pipes_turn_vap, no wizard entries);
+    #[cfg(feature = "transport-twilio")]
+    voice_pipes::transport::media_stream::register_media_stream_factory(
+        voice_pipes_transport_twilio::factory(),
+    )
+    .map_err(
+        |existing| voice_pipes::plugins::RegistrationError::NameTaken {
+            stage: "transport",
+            provider: "twilio".to_string(),
+            name: "twilio".to_string(),
+            existing,
+        },
+    )?;
     // What a pipeline without `[stt]` or `[tts]` runs: the recogniser and
     // voice this binary ships as its defaults, on the machine, needing no
     // key.

@@ -30,6 +30,7 @@ const PROVIDER_PREFIXES: &[&str] = &[
     "voice-pipes-turn-",
     "voice-pipes-s2s-",
     "voice-pipes-filter-",
+    "voice-pipes-transport-",
 ];
 
 fn root() -> PathBuf {
@@ -2664,6 +2665,7 @@ const CONFORMANCE_HELPERS: &[&str] = &[
     "assert_vad_metrics_conformance",
     "assert_filter_metrics_conformance",
     "assert_s2s_metrics_conformance",
+    "assert_transport_metrics_conformance",
     "two_utterances_on_one_stream",
     "back_to_back_utterances_stay_apart",
 ];

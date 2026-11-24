@@ -142,6 +142,10 @@ s2s-openai = ["realtime", "dep:voice-pipes-s2s-openai"]
 # ElevenLabs Agents speech-to-speech as a voice-pipes plugin, on the SDK only.
 s2s-elevenlabs = ["realtime", "dep:voice-pipes-s2s-elevenlabs"]
 
+# ── Plugin telephony / media-stream transports ───────────────
+# Twilio Media Streams (TwiML webhook + JSON/base64 µ-law WebSocket).
+transport-twilio = ["dep:voice-pipes-transport-twilio"]
+
 [dependencies]
 voice-pipes.workspace = true
 # Benchmarking host extension. Drop this dependency (and the wiring in
@@ -171,6 +175,7 @@ voice-pipes-turn-smart = { workspace = true, optional = true }
 voice-pipes-turn-vap = { workspace = true, optional = true }
 voice-pipes-filter-deepfilter = { workspace = true, optional = true }
 voice-pipes-tts-neutts = { workspace = true, optional = true }
+voice-pipes-transport-twilio = { workspace = true, optional = true }
 
 mimalloc.workspace = true
 anyhow.workspace = true

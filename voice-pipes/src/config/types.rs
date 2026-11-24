@@ -1123,6 +1123,19 @@ pub struct TransportConfig {
     /// Overridable via `VP_MAX_SESSION_DURATION_S`.
     #[serde(default)]
     pub max_session_duration_s: u64,
+    /// Allowlisted HTTP upgrade header names whose sanitized value is captured
+    /// as `SessionMetadata.external_id` and recorded on the root session span
+    /// (e.g., `["x-correlation-id", "x-request-id"]`).
+    #[serde(default)]
+    pub correlation_headers: Vec<String>,
+    /// Whether the generic raw PCM/G.711 WebSocket route (`/ws/raw`) is enabled.
+    /// Defaults to `false` (fail-closed) and always requires authentication.
+    #[serde(default)]
+    pub raw_ws_enabled: bool,
+    /// Per-dialect configuration map for registered `MediaStreamDialect`
+    /// plugins, keyed by dialect name (e.g. `[transport.media_streams.twilio]`).
+    #[serde(default)]
+    pub media_streams: std::collections::HashMap<String, serde_json::Value>,
 }
 
 impl Default for TransportConfig {
@@ -1134,6 +1147,9 @@ impl Default for TransportConfig {
             max_sessions: default_transport_max_sessions(),
             write_timeout_ms: default_transport_write_timeout_ms(),
             max_session_duration_s: 0,
+            correlation_headers: Vec::new(),
+            raw_ws_enabled: false,
+            media_streams: std::collections::HashMap::new(),
         }
     }
 }
