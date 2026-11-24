@@ -15,6 +15,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse, Response
 
+from ..captures.jsonl import iter_jsonl
 from ..captures.reader import _resolve_session_dir
 from ..captures.speech_bounds import speech_bounds
 from ..core import auth as _auth
@@ -176,54 +177,28 @@ def _turn_barge_in_cut(session_dir: Path, utterance_id: int) -> tuple[bool, floa
         except (OSError, ValueError, AttributeError):
             pass
 
-    pe_path = session_dir / "pipeline_events.jsonl"
-    if pe_path.exists():
-        try:
-            with open(pe_path, encoding="utf-8") as fh:
-                for line in fh:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        evt = json.loads(line)
-                    except ValueError:
-                        continue
-                    kind = evt.get("kind")
-                    if kind in ("interrupted", "barge_in_resolved") and evt.get("utterance_id") == utterance_id:
-                        interrupted = True
-                        if kind == "barge_in_resolved" and isinstance(evt.get("played_ms"), (int, float)):
-                            played_ms = float(evt["played_ms"])
-                    elif kind == "history_modified":
-                        mod = evt.get("modification") or {}
-                        if mod.get("utterance_id") == utterance_id and mod.get("method") == "playback_report":
-                            interrupted = True
-                            if played_ms is None and isinstance(mod.get("played_ms"), (int, float)):
-                                played_ms = float(mod["played_ms"])
-        except OSError:
-            pass
+    for evt in iter_jsonl(session_dir / "pipeline_events.jsonl"):
+        kind = evt.get("kind")
+        if kind in ("interrupted", "barge_in_resolved") and evt.get("utterance_id") == utterance_id:
+            interrupted = True
+            if kind == "barge_in_resolved" and isinstance(evt.get("played_ms"), (int, float)):
+                played_ms = float(evt["played_ms"])
+        elif kind == "history_modified":
+            mod = evt.get("modification") or {}
+            if mod.get("utterance_id") == utterance_id and mod.get("method") == "playback_report":
+                interrupted = True
+                if played_ms is None and isinstance(mod.get("played_ms"), (int, float)):
+                    played_ms = float(mod["played_ms"])
 
     if played_ms is None:
-        events_path = session_dir / "events.jsonl"
-        if events_path.exists():
-            try:
-                with open(events_path, encoding="utf-8") as fh:
-                    for line in fh:
-                        line = line.strip()
-                        if not line:
-                            continue
-                        try:
-                            evt = json.loads(line)
-                        except ValueError:
-                            continue
-                        if evt.get("event_type") == "barge_in_rtt":
-                            p = evt.get("payload") or {}
-                            if p.get("utterance_id") == utterance_id and isinstance(
-                                p.get("last_played_offset_ms"), (int, float)
-                            ):
-                                interrupted = True
-                                played_ms = float(p["last_played_offset_ms"])
-            except OSError:
-                pass
+        for evt in iter_jsonl(session_dir / "events.jsonl"):
+            if evt.get("event_type") == "barge_in_rtt":
+                p = evt.get("payload") or {}
+                if p.get("utterance_id") == utterance_id and isinstance(
+                    p.get("last_played_offset_ms"), (int, float)
+                ):
+                    interrupted = True
+                    played_ms = float(p["last_played_offset_ms"])
 
     return interrupted, played_ms
 
