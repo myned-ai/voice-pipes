@@ -157,6 +157,77 @@ async def get_turn_as_heard(
     return await asyncio.to_thread(_turn_as_heard, session_id, utterance_id, eff_tenant)
 
 
+def _turn_barge_in_cut(session_dir: Path, utterance_id: int) -> tuple[bool, float | None]:
+    """Return ``(interrupted, played_ms)`` from turn_resolved + event logs.
+
+    ``turn_resolved.json`` can still say ``interrupted: false`` on late
+    barge-ins that happen after the LLM finished, and ``playback.json``'s
+    ``heard_ms`` reflects audio *delivered* to the client buffer rather than
+    the ``last_played_offset_ms`` actually heard before barge-in.
+    """
+    interrupted = False
+    played_ms: float | None = None
+
+    resolved_path = session_dir / f"{utterance_id:03d}_turn_resolved.json"
+    if resolved_path.exists():
+        try:
+            with open(resolved_path, encoding="utf-8") as fh:
+                interrupted = bool(json.load(fh).get("interrupted"))
+        except (OSError, ValueError, AttributeError):
+            pass
+
+    pe_path = session_dir / "pipeline_events.jsonl"
+    if pe_path.exists():
+        try:
+            with open(pe_path, encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        evt = json.loads(line)
+                    except ValueError:
+                        continue
+                    kind = evt.get("kind")
+                    if kind in ("interrupted", "barge_in_resolved") and evt.get("utterance_id") == utterance_id:
+                        interrupted = True
+                        if kind == "barge_in_resolved" and isinstance(evt.get("played_ms"), (int, float)):
+                            played_ms = float(evt["played_ms"])
+                    elif kind == "history_modified":
+                        mod = evt.get("modification") or {}
+                        if mod.get("utterance_id") == utterance_id and mod.get("method") == "playback_report":
+                            interrupted = True
+                            if played_ms is None and isinstance(mod.get("played_ms"), (int, float)):
+                                played_ms = float(mod["played_ms"])
+        except OSError:
+            pass
+
+    if played_ms is None:
+        events_path = session_dir / "events.jsonl"
+        if events_path.exists():
+            try:
+                with open(events_path, encoding="utf-8") as fh:
+                    for line in fh:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            evt = json.loads(line)
+                        except ValueError:
+                            continue
+                        if evt.get("event_type") == "barge_in_rtt":
+                            p = evt.get("payload") or {}
+                            if p.get("utterance_id") == utterance_id and isinstance(
+                                p.get("last_played_offset_ms"), (int, float)
+                            ):
+                                interrupted = True
+                                played_ms = float(p["last_played_offset_ms"])
+            except OSError:
+                pass
+
+    return interrupted, played_ms
+
+
 def _turn_as_heard(
     session_id: str, utterance_id: int, tenant_id: str | None = None
 ) -> Response:
@@ -180,26 +251,23 @@ def _turn_as_heard(
             # Unreadable or torn report: play the server track as is.
             health = None
     gaps = (health or {}).get("gaps") or []
-    if not gaps and health is None:
+    interrupted, played_ms = _turn_barge_in_cut(session_dir, utterance_id)
+    if not gaps and health is None and not interrupted:
         # No client report — as-heard is indistinguishable from the server track.
         return _wav_response(params, ideal)
 
-    # Interrupted turns: never include ideal audio past what the client heard.
-    # `heard_ms` is enqueue-bounded so it is a safe clamp; a resolved
-    # `interrupted` flag gates it so a merely-lossy report can't truncate a
-    # completed turn.
-    resolved_path = session_dir / f"{utterance_id:03d}_turn_resolved.json"
-    interrupted = False
-    if resolved_path.exists():
-        try:
-            with open(resolved_path, encoding="utf-8") as fh:
-                interrupted = bool(json.load(fh).get("interrupted"))
-        except (OSError, ValueError, AttributeError):
-            # Unreadable or not an object: treat the turn as completed, so
-            # nothing is clamped.
-            pass
-    if interrupted and health and health.get("heard_ms") is not None:
-        clamp_frames = min(total_frames, round(health["heard_ms"] / 1000 * rate))
+    # Interrupted turns: never include ideal audio past what the client actually
+    # played (`played_ms` / `last_played_offset_ms`), falling back to
+    # `playback.json`'s `heard_ms` when no barge-in offset was recorded.
+    heard_ms = health.get("heard_ms") if health else None
+    cut_candidates = [
+        float(v)
+        for v in (played_ms, heard_ms)
+        if isinstance(v, (int, float)) and not isinstance(v, bool)
+    ]
+    if interrupted and cut_candidates:
+        cut_ms = min(cut_candidates)
+        clamp_frames = min(total_frames, max(0, round(cut_ms / 1000 * rate)))
         ideal = ideal[: clamp_frames * frame_bytes]
         total_frames = clamp_frames
 

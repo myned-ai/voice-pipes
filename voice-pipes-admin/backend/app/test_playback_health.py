@@ -114,6 +114,43 @@ class AsHeardRouteTest(_CapturesTest):
         # Clamped to heard_ms=500ms → 8000 frames; no audio past the barge-in.
         self.assertEqual(n_frames, 8000)
 
+    def test_late_barge_in_clamps_to_played_ms_when_turn_resolved_is_false(self) -> None:
+        self._seed_frags()
+        # PlaybackQuality reports full delivered buffer (750 ms), while
+        # turn_resolved.json was written before the late barge-in (false).
+        (self.sdir / "001_playback.json").write_text(
+            json.dumps(
+                {
+                    "underrun_count": 0,
+                    "total_silence_ms": 0,
+                    "audio_ms": 750,
+                    "heard_ms": 750,
+                    "wall_ms": 750,
+                    "gaps": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (self.sdir / "001_turn_resolved.json").write_text(
+            json.dumps({"utterance_id": 1, "interrupted": False}), encoding="utf-8"
+        )
+        (self.sdir / "pipeline_events.jsonl").write_text(
+            json.dumps(
+                {
+                    "kind": "barge_in_resolved",
+                    "utterance_id": 1,
+                    "trigger": "server_vad",
+                    "played_ms": 350,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        resp = asyncio.run(audio_router.get_turn_as_heard(self.session, 1))
+        _, n_frames, _ = _read_wav(resp.body)
+        # Clamped to played_ms=350ms → 5600 frames @ 16 kHz.
+        self.assertEqual(n_frames, 5600)
+
 
 class ReaderProjectionTest(_CapturesTest):
     def test_playback_json_projects_onto_summary_and_rollup(self) -> None:

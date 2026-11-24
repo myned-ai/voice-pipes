@@ -79,14 +79,16 @@ export const TurnCard = ({ utt, sessionId, llmTiming, ttsTiming, sttTiming, orch
   const heardS = playedOffsetMs != null ? playedOffsetMs / 1000 : undefined;
 
   // The as-heard reconstruction differs from the server track when the
-  // client reported underruns *or* the turn was cut by
-  // a barge-in — the backend clamps it to `heard_ms` in that case. Without a
-  // client playback report there is nothing to reconstruct from.
-  const asHeardAvailable = !!utt.playback_health && ((summary?.audio_underruns ?? 0) > 0 || isInterruptedTurn);
-  // Where the client stopped receiving audio, in ideal-audio ms. Mirrors the
-  // backend's clamp source (`playback_health.heard_ms`), falling back to the
-  // barge-in offset for captures without a playback report.
-  const cutMs: number | null = isInterruptedTurn ? (utt.playback_health?.heard_ms ?? playedOffsetMs ?? null) : null;
+  // client reported underruns *or* the turn was cut by a barge-in — the
+  // backend clamps it to the actual played offset (falling back to
+  // `heard_ms`).
+  const heardCutCandidates = [playedOffsetMs, utt.playback_health?.heard_ms].filter(
+    (v): v is number => v != null,
+  );
+  const cutMs: number | null = isInterruptedTurn && heardCutCandidates.length > 0
+    ? Math.min(...heardCutCandidates)
+    : null;
+  const asHeardAvailable = (!!utt.playback_health && (summary?.audio_underruns ?? 0) > 0) || cutMs != null;
   const heard = { gaps: summary?.playback_gaps ?? [], cutMs };
 
   const asHeardHint = asHeardAvailable ? ' Switch to “as heard” for the delivered portion.' : '';
