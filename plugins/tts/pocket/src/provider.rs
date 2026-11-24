@@ -263,6 +263,52 @@ impl TtsProvider for PocketHttpTts {
         ))
     }
 
+    /// Synthesize a tiny throwaway utterance so the local Pocket-TTS sidecar
+    /// loads the model and primes the configured voice on session connect
+    /// instead of paying a multi-second cold-start penalty on Turn 1.
+    /// Result is discarded and does not record turn metrics or audit timing.
+    #[instrument(skip_all, fields(provider = "pocket-http"))]
+    async fn warm_up(&self) -> Result<(), TtsError> {
+        let _serialize_guard = self.serialize.lock().await;
+        let voice = (*self.config.current_voice()).clone();
+        let url = self.url();
+        let form = [("text", "Hi."), ("voice_url", voice.as_str())];
+        let response = self
+            .client
+            .post(&url)
+            .form(&form)
+            .send()
+            .await
+            .map_err(|e| TtsError::NetworkError(format!("pocket-tts warm-up failed: {e}")))?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let body = voice_pipes_net::error_body(response).await;
+            return Err(map_http_error(status.as_u16(), &body));
+        }
+
+        // Drain the full response stream so the sidecar completes initial
+        // model/voice synthesis rather than aborting mid-request.
+        let mut byte_stream = response.bytes_stream();
+        let mut wav = WavStripper::requiring_header();
+        let mut pcm_bytes_seen = 0usize;
+        while let Some(item) = byte_stream.next().await {
+            let bytes = item.map_err(|e| {
+                TtsError::NetworkError(format!("pocket-tts warm-up stream read failed: {e}"))
+            })?;
+            let pcm_bytes = wav
+                .feed(&bytes)
+                .map_err(|e| TtsError::InferenceFailed(format!("pocket-tts warm-up: {e}")))?;
+            pcm_bytes_seen += pcm_bytes.len();
+        }
+        if !wav.stripped_header() || pcm_bytes_seen == 0 {
+            return Err(TtsError::InferenceFailed(
+                "pocket-tts warm-up: server returned empty/invalid WAV stream".into(),
+            ));
+        }
+        Ok(())
+    }
+
     async fn synthesize(&self, text: &str) -> Result<AudioFrame, TtsError> {
         let voice = (*self.config.current_voice()).clone();
         let stream = voice_pipes_sdk::tts::collect_stream(SAMPLE_RATE, |tx| {

@@ -247,6 +247,40 @@ impl TtsProvider for NeuTtsAir {
         Some(DeviceInfo::static_("cpu", "on-device CPU"))
     }
 
+    /// Synthesize a tiny throwaway phrase so the phonemizer, GGUF backbone,
+    /// and ONNX codec are warmed on session connect instead of on Turn 1.
+    /// Result is discarded and does not record turn metrics.
+    #[instrument(skip_all, fields(provider = "neutts"))]
+    async fn warm_up(&self) -> Result<(), TtsError> {
+        let phonemes =
+            tokio::task::spawn_blocking(|| phonemize_preserving_punctuation("Hello.", "en-us"))
+                .await
+                .map_err(|e| {
+                    TtsError::PhonemizationFailed(format!("phonemize join error: {e}"))
+                })??;
+
+        if phonemes.trim().is_empty() {
+            return Ok(());
+        }
+
+        let pool = Arc::clone(&self.pool);
+        let mut slot = pool
+            .checkout_within(std::time::Duration::from_secs(30))
+            .await
+            .map_err(|e| TtsError::busy(format!("engine pool checkout failed: {e}")))?;
+
+        let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+        let cancel = tokio_util::sync::CancellationToken::new();
+        let cancel_clone = cancel.clone();
+        let synth =
+            tokio::task::spawn_blocking(move || slot.synthesize(&phonemes, &cancel_clone, &tx));
+        let drain = async { while rx.recv().await.is_some() {} };
+        let (synth_res, ()) = tokio::join!(synth, drain);
+        synth_res
+            .map_err(|e| TtsError::InferenceFailed(format!("synthesis join error: {e}")))??;
+        Ok(())
+    }
+
     #[instrument(skip_all, fields(text_len = text.len()))]
     async fn synthesize(&self, text: &str) -> Result<AudioFrame, TtsError> {
         let req = SynthesisRequest::new(text);

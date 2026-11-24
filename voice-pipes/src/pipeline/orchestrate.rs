@@ -598,14 +598,36 @@ pub async fn process_utterance(
                     }
 
                     // ── AudioLedger bookkeeping ─────────────────────
-                    // When a chunk carries CaptionMeta, it marks the start
-                    // of a new fragment.  Flush the previous fragment's
-                    // accumulated samples into the ledger.
+                    // When a chunk carries CaptionMeta:
+                    // - A 0-sample chunk matching the active `fragment_idx` is
+                    //   `tts_task`'s end-of-fragment metadata update carrying
+                    //   `word_timings` / `total_fragment_duration_ms`. Attach
+                    //   those timings and flush the fragment once without
+                    //   starting a duplicate 0-ms entry.
+                    // - Otherwise it marks the start of a new fragment: flush
+                    //   the previous fragment's accumulated samples and begin
+                    //   the new one (skipping 0-sample captions that produced
+                    //   no audio at all).
                     if let Some(ref caption) = c.caption {
-                        fragment.flush(&ledger);
-                        fragment.start(caption, c.sample_rate);
+                        if c.samples.is_empty()
+                            && fragment.text.is_some()
+                            && fragment.idx == caption.fragment_idx
+                        {
+                            if caption.word_timings.is_some() {
+                                fragment.word_timings.clone_from(&caption.word_timings);
+                            }
+                            fragment.flush(&ledger);
+                        } else {
+                            fragment.flush(&ledger);
+                            if !c.samples.is_empty() {
+                                fragment.start(caption, c.sample_rate);
+                            }
+                        }
                     }
-                    fragment.samples += c.samples.len() as u64;
+                    if !c.samples.is_empty() {
+                        fragment.samples +=
+                            c.samples.len() as u64 / u64::from(c.channels.max(1));
+                    }
 
                     // Flush final fragment on end-of-utterance sentinel.
                     if c.is_end_of_utterance {

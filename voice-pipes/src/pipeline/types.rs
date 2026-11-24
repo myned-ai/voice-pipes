@@ -319,13 +319,25 @@ impl AudioLedger {
             return None;
         }
         let mut result = String::new();
+        let append_part = |buf: &mut String, part: &str| {
+            if part.is_empty() {
+                return;
+            }
+            if !buf.is_empty()
+                && !buf.ends_with(char::is_whitespace)
+                && !part.starts_with(char::is_whitespace)
+            {
+                buf.push(' ');
+            }
+            buf.push_str(part);
+        };
         for entry in &self.entries {
             let fragment_start_ms = entry.cumulative_ms.saturating_sub(entry.duration_ms);
             if played_ms > fragment_start_ms {
                 // Playback reached into (or past) this fragment.
                 if played_ms >= entry.cumulative_ms {
                     // Fully played -- include the entire fragment text.
-                    result.push_str(&entry.text);
+                    append_part(&mut result, &entry.text);
                 } else if let Some(ref wt) = entry.word_timings {
                     // Partially played and we have word timings.
                     // `offset_within` is ms from the fragment's audio start.
@@ -352,14 +364,14 @@ impl AudioLedger {
                         }
                     }
                     if heard_count >= total_words && total_words > 0 {
-                        result.push_str(&entry.text);
+                        append_part(&mut result, &entry.text);
                     } else {
                         let word_prefix = nth_word_prefix(&entry.text, heard_count);
                         let slice_len = last_included.max(word_prefix.len());
                         if slice_len > 0
                             && let Some(prefix) = entry.text.get(..slice_len)
                         {
-                            result.push_str(prefix);
+                            append_part(&mut result, prefix);
                         }
                     }
                 } else {
@@ -373,7 +385,7 @@ impl AudioLedger {
                     } else {
                         0.0
                     };
-                    result.push_str(proportional_prefix(&entry.text, frac));
+                    append_part(&mut result, proportional_prefix(&entry.text, frac));
                 }
             } else {
                 break;

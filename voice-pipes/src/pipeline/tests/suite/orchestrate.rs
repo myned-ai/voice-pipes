@@ -793,3 +793,115 @@ async fn telescoping_stage_latencies_sum_to_commit_to_first_audio() {
     assert!(out_span.latency_ms.is_some());
     assert!(out_span.finished_at_ms.is_some());
 }
+
+struct MultiFragmentLlm {
+    fragments: Vec<String>,
+}
+
+#[async_trait]
+impl TextProcessor for MultiFragmentLlm {
+    fn name(&self) -> &'static str {
+        "multi-fragment-llm"
+    }
+    async fn process(&self, input: &str) -> Result<String, TextProcessorError> {
+        Ok(input.to_string())
+    }
+    async fn process_stream(
+        &self,
+        _input: &str,
+        tx: mpsc::Sender<TextFragment>,
+        _cancel: CancellationToken,
+    ) -> Result<(), TextProcessorError> {
+        let last = self.fragments.len().saturating_sub(1);
+        for (i, text) in self.fragments.iter().enumerate() {
+            let _ = tx
+                .send(TextFragment::new(text.clone()).with_is_end_of_response(i == last))
+                .await;
+        }
+        Ok(())
+    }
+}
+
+/// Regression test: `tts_task` emits a 0-sample `final_caption` metadata update
+/// at the end of every fragment. `process_utterance` must NOT push a duplicate
+/// 0-ms `AudioLedgerEntry` for it, which previously doubled `text_at_offset`
+/// retained text and `tts.chars` on every completed fragment.
+#[tokio::test]
+async fn audio_ledger_does_not_duplicate_final_caption_metadata_chunks() {
+    let f1 = "For most bonsai, a well-draining, airy soil mix is best to prevent root rot.";
+    let f2 = "You can mix akadama, pumice, and lava rock for good drainage.";
+    let full = format!("{f1} {f2}");
+
+    let (audio_tx, mut audio_rx) = mpsc::channel(64);
+    let (event_tx, _flag) = test_event_channel();
+    let processors: Arc<Vec<Box<dyn TextProcessor>>> = Arc::new(vec![Box::new(MultiFragmentLlm {
+        fragments: vec![f1.to_string(), f2.to_string()],
+    })]);
+    // 1600 samples @ 16 kHz = 100 ms per fragment (200 ms total).
+    let tts: Arc<dyn TtsProvider> = Arc::new(DelayedTts { delay_ms: 0 });
+    let utterance = Utterance {
+        text: "soil?".into(),
+        utterance_id: 12,
+        confidence: Some(0.95),
+        stt_latency: None,
+        source: UtteranceSource::default(),
+        endpointing_latency: None,
+        inference_metrics: None,
+        committed_at: None,
+    };
+    let ledger = Arc::new(parking_lot::Mutex::new(AudioLedger::default()));
+    let drain = tokio::spawn(async move { while audio_rx.recv().await.is_some() {} });
+
+    let snap = process_utterance(
+        &utterance,
+        audio_tx,
+        event_tx,
+        processors,
+        Arc::new(vec![]),
+        tts,
+        None,
+        None,
+        None,
+        CancellationToken::new(),
+        None,
+        None,
+        Arc::clone(&ledger),
+        Arc::new(AtomicBool::new(false)),
+        None,
+        None,
+        None,
+    )
+    .await;
+    let _ = drain.await;
+
+    let guard = ledger.lock();
+    assert_eq!(
+        guard.entries.len(),
+        2,
+        "ledger must contain exactly 1 entry per fragment (no 0-ms final_caption duplicates)"
+    );
+    assert_eq!(guard.entries[0].duration_ms, 100);
+    assert_eq!(guard.entries[1].duration_ms, 100);
+
+    // Mid-way through fragment 2 (150 ms out of 200 ms): fragment 1 must appear
+    // once (not twice), separated from partial fragment 2 by a space.
+    let heard = guard.text_at_offset(150).expect("heard prefix");
+    assert!(
+        full.starts_with(&heard),
+        "retained text must be a clean prefix of the full reply; got {heard:?}"
+    );
+    assert_eq!(
+        heard.matches(f1).count(),
+        1,
+        "fragment 1 must not be duplicated in retained text"
+    );
+    assert!(
+        heard.len() < full.len(),
+        "partial playback must truncate the unplayed tail; got {heard:?}"
+    );
+
+    // `tts.chars` must also reflect the true character count (not 2x).
+    let tts_span = snap.component_by_kind("tts").expect("tts span");
+    let expected_chars = (f1.chars().count() + f2.chars().count()) as u64;
+    assert_eq!(tts_span.extras["chars"].as_u64(), Some(expected_chars));
+}

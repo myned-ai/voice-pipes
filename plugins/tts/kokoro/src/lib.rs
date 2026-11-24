@@ -384,6 +384,18 @@ impl KokoroTts {
 
 #[async_trait]
 impl TtsProvider for KokoroTts {
+    /// Synthesize a tiny throwaway phrase to load the ONNX voice model and
+    /// phonemizer into memory on session connect instead of on Turn 1.
+    /// Result is discarded and does not record turn metrics.
+    #[instrument(skip_all, fields(provider = "kokoro"))]
+    async fn warm_up(&self) -> Result<(), TtsError> {
+        let (voice, language, speed) = self.resolve_params(None);
+        let _ = self
+            .synthesize_inner("Hello.", &voice, &language, speed)
+            .await?;
+        Ok(())
+    }
+
     #[instrument(skip_all, fields(provider = "kokoro", text_len = text.len()))]
     async fn synthesize(&self, text: &str) -> Result<AudioFrame, TtsError> {
         let t0 = std::time::Instant::now();

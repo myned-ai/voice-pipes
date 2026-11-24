@@ -544,3 +544,31 @@ async fn concurrent_synthesize_streams_are_serialized_and_cancel_fast() {
     assert_eq!(max_active.load(Ordering::SeqCst), 1);
     assert_eq!(hits.load(Ordering::SeqCst), 2);
 }
+
+#[tokio::test]
+async fn warm_up_posts_to_tts_and_drains_wav_without_recording_turn_metrics() {
+    let body = wav(&speech(0.1));
+    let (endpoint, hits) = mock_sidecar(vec![body]).await;
+
+    let tts = provider_for(&endpoint, &[]);
+    tts.warm_up().await.expect("warm_up should succeed");
+
+    assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 1);
+    let comp = tts.as_component().expect("component");
+    assert_eq!(
+        comp.telemetry().processed_total,
+        0,
+        "warm_up must not inflate turn synthesis request counts"
+    );
+}
+
+#[tokio::test]
+async fn warm_up_fails_on_empty_audio_stream() {
+    let (endpoint, _) = mock_sidecar(vec![wav(&[])]).await;
+    let tts = provider_for(&endpoint, &[]);
+    let err = tts
+        .warm_up()
+        .await
+        .expect_err("empty WAV stream must fail warm_up");
+    assert!(matches!(err, TtsError::InferenceFailed(_)), "{err:?}");
+}

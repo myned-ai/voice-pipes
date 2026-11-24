@@ -531,6 +531,23 @@ impl SttProvider for NemotronStt {
         Some(self.pool.size())
     }
 
+    /// One decode of silence so ONNX Runtime's lazy start-up and weight paging
+    /// are paid at worker start instead of on the first user utterance.
+    async fn warm_up(&self) -> Result<(), SttError> {
+        let silence = AudioFrame {
+            samples: vec![0i16; streaming::SAMPLE_RATE],
+            sample_rate: u32::try_from(streaming::SAMPLE_RATE).unwrap_or(16_000),
+            channels: 1,
+        };
+        self.transcribe(&silence).await.map(|_| ())
+    }
+
+    /// Holds a pool set while it warms, so once at worker start (and via
+    /// `keep_warm_interval_s`), not per session against a caller's first turn.
+    fn warm_up_scope(&self) -> voice_pipes_sdk::stt::WarmUpScope {
+        voice_pipes_sdk::stt::WarmUpScope::PerProcess
+    }
+
     fn expected_sample_rate(&self) -> u32 {
         16_000
     }

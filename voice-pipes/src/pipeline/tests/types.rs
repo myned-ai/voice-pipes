@@ -125,3 +125,33 @@ fn text_at_offset_with_lexicon_replacement_matches_display_word_boundary() {
     let heard = ledger.text_at_offset(350).unwrap();
     assert_eq!(heard, "I love **SQL**");
 }
+
+#[test]
+fn text_at_offset_inserts_space_between_trimmed_fragments() {
+    let mut ledger = AudioLedger::default();
+    let f1 = "For most bonsai, a well-draining, airy soil mix is best to prevent root rot.";
+    let f2 = "You can mix akadama, pumice, and lava rock for good drainage.";
+    push_frag(&mut ledger, f1, 5000, None);
+    push_frag(&mut ledger, f2, 4000, None);
+
+    let full = format!("{f1} {f2}");
+    let heard = ledger
+        .text_at_offset(7000)
+        .expect("partial second fragment");
+    assert!(
+        full.starts_with(&heard),
+        "heard text must be an exact prefix of the full reply; got {heard:?}"
+    );
+    assert!(
+        heard.starts_with(f1),
+        "first fragment should be included in full"
+    );
+    assert!(
+        heard.len() > f1.len() && heard.len() < full.len(),
+        "second fragment should be partially included; got {heard:?}"
+    );
+    assert!(
+        !heard.contains("rot.You"),
+        "adjacent trimmed fragments must be separated by a space; got {heard:?}"
+    );
+}

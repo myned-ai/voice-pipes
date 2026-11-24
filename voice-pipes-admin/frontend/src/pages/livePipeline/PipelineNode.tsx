@@ -59,19 +59,19 @@ export function CustomPipelineNode({ data }: NodeProps<PipelineNodeData>) {
   // ── Refined precision theme (feature flag: live_graph_redesign) ─────────
   if (data.refinedDesign) {
     const accentByType: Record<string, string> = {
-      input: '#10b981',
-      output: '#f59e0b',
-      llm: '#6366f1',
-      realtime: '#6366f1',
-      stt: '#0ea5e9',
-      tts: '#8b5cf6',
-      turn_detector: '#14b8a6',
-      vad: '#64748b',
-      resample: '#64748b',
-      post: '#ec4899',
-      core: '#64748b',
+      input: isDark ? '#34d399' : '#059669',
+      output: isDark ? '#fbbf24' : '#d97706',
+      llm: isDark ? '#818cf8' : '#4f46e5',
+      realtime: isDark ? '#818cf8' : '#4f46e5',
+      stt: isDark ? '#38bdf8' : '#0284c7',
+      tts: isDark ? '#a78bfa' : '#7c3aed',
+      turn_detector: isDark ? '#2dd4bf' : '#0d9488',
+      vad: isDark ? '#94a3b8' : '#475569',
+      resample: isDark ? '#94a3b8' : '#475569',
+      post: isDark ? '#f472b6' : '#db2777',
+      core: isDark ? '#94a3b8' : '#475569',
     };
-    const accent = accentByType[data.componentType] ?? '#64748b';
+    const accent = accentByType[data.componentType] ?? (isDark ? '#94a3b8' : '#475569');
     const roleLabel = isInputNode
       ? 'INPUT'
       : isOutputNode
@@ -80,12 +80,14 @@ export function CustomPipelineNode({ data }: NodeProps<PipelineNodeData>) {
           ? 'AI'
           : null;
 
-    const surface = isDark ? '#0f172a' : '#ffffff';
-    const borderCol = isDark ? '#1e293b' : '#e2e8f0';
-    const sectionBg = isDark ? '#0b1120' : '#f8fafc';
-    const titleCol = isDark ? '#f1f5f9' : '#0f172a';
-    const mutedCol = isDark ? '#94a3b8' : '#64748b';
-    const dividerCol = isDark ? '#1e293b' : '#e2e8f0';
+    const surface = isDark ? '#131c31' : '#ffffff';
+    const borderCol = isDark ? '#293548' : '#cbd5e1';
+    const sectionBg = isDark ? '#0c1322' : '#f1f5f9';
+    const titleCol = isDark ? '#f8fafc' : '#0f172a';
+    const labelCol = isDark ? '#cbd5e1' : '#334155';
+    const mutedCol = isDark ? '#a8b8ce' : '#475569';
+    const dividerCol = isDark ? '#243044' : '#cbd5e1';
+    const underlineCol = isDark ? 'rgba(148, 163, 184, 0.45)' : 'rgba(51, 65, 85, 0.4)';
 
     return (
       <div
@@ -203,7 +205,7 @@ export function CustomPipelineNode({ data }: NodeProps<PipelineNodeData>) {
                   padding: '2px 7px',
                   borderRadius: '5px',
                   background: sectionBg,
-                  color: mutedCol,
+                  color: labelCol,
                   border: `1px solid ${dividerCol}`,
                 }}
               >
@@ -219,7 +221,7 @@ export function CustomPipelineNode({ data }: NodeProps<PipelineNodeData>) {
                   padding: '2px 7px',
                   borderRadius: '5px',
                   background: sectionBg,
-                  color: mutedCol,
+                  color: labelCol,
                   border: `1px solid ${dividerCol}`,
                 }}
               >
@@ -272,9 +274,9 @@ export function CustomPipelineNode({ data }: NodeProps<PipelineNodeData>) {
                   <span
                     title={param.description}
                     style={{
-                      color: mutedCol,
+                      color: labelCol,
                       cursor: 'help',
-                      borderBottom: '1px dotted currentColor',
+                      borderBottom: `1px dotted ${underlineCol}`,
                       display: 'flex',
                       alignItems: 'center',
                       gap: '4px',
@@ -282,12 +284,12 @@ export function CustomPipelineNode({ data }: NodeProps<PipelineNodeData>) {
                     }}
                   >
                     {param.label}
-                    {param.mutable && (
+                    {param.mutable && onParamUpdate && (
                       <span
                         title="Can be changed at runtime without restarting the worker"
                         style={{ display: 'inline-flex', alignItems: 'center' }}
                       >
-                        <Edit2 size={9} style={{ opacity: 0.65 }} />
+                        <Edit2 size={10} style={{ opacity: 0.75 }} />
                       </span>
                     )}
                   </span>
@@ -334,7 +336,7 @@ export function CustomPipelineNode({ data }: NodeProps<PipelineNodeData>) {
                   gap: '12px',
                 }}
               >
-                <span style={{ color: mutedCol }}>{label.replace(/_/g, ' ')}</span>
+                <span style={{ color: labelCol }}>{label.replace(/_/g, ' ')}</span>
                 <span
                   style={{
                     color: titleCol,
@@ -393,7 +395,7 @@ export function CustomPipelineNode({ data }: NodeProps<PipelineNodeData>) {
                   gap: '12px',
                 }}
               >
-                <span style={{ color: mutedCol }}>{key.replace(/_/g, ' ')}</span>
+                <span style={{ color: labelCol }}>{key.replace(/_/g, ' ')}</span>
                 <span
                   style={{
                     color: titleCol,
@@ -575,7 +577,7 @@ export function CustomPipelineNode({ data }: NodeProps<PipelineNodeData>) {
                   }}
                 >
                   {param.label}
-                  {param.mutable && (
+                  {param.mutable && onParamUpdate && (
                     <span title="Can be changed at runtime without restarting the worker" style={{ display: 'inline-flex', alignItems: 'center' }}>
                       <Edit2 size={9} style={{ opacity: 0.6 }} />
                     </span>
