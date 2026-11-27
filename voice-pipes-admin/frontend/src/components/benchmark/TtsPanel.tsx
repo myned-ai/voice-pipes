@@ -80,7 +80,19 @@ export default function TtsPanel({ summary, isDark }: Props) {
       <div className="grid grid-cols-2 gap-y-2 gap-x-10">
         <Row label="P50 TTFB" value={fmtMs(summary.p50_tts_ttfb_ms)} isDark={isDark} />
         <Row label="P90 TTFB" value={fmtMs(summary.p90_tts_ttfb_ms)} isDark={isDark} />
+        {summary.p95_tts_ttfb_ms != null && (
+          <Row label="P95 TTFB" value={fmtMs(summary.p95_tts_ttfb_ms)} isDark={isDark} />
+        )}
         <Row label="P99 TTFB" value={fmtMs(summary.p99_tts_ttfb_ms)} isDark={isDark} />
+        {summary.p50_tts_audible_ttfb_ms != null && (
+          <Row label="P50 Audible" value={fmtMs(summary.p50_tts_audible_ttfb_ms)} isDark={isDark} />
+        )}
+        {summary.p95_tts_audible_ttfb_ms != null && (
+          <Row label="P95 Audible" value={fmtMs(summary.p95_tts_audible_ttfb_ms)} isDark={isDark} />
+        )}
+        {summary.avg_tts_leading_silence_ms != null && (
+          <Row label="Lead silence" value={fmtMs(summary.avg_tts_leading_silence_ms)} isDark={isDark} />
+        )}
         <Row label="Avg synth" value={fmtMs(summary.avg_tts_synthesis_ms)} isDark={isDark} />
         <Row label="RTF" value={fmtRtf(summary.avg_tts_rtf)} isDark={isDark} />
         <Row label="Audio dur" value={fmtSeconds(summary.avg_tts_audio_duration_s)} isDark={isDark} />

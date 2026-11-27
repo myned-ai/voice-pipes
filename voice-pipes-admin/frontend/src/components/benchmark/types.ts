@@ -268,8 +268,10 @@ export interface BargeInResult {
   interrupted?: boolean;
   trigger?: string | null;
   barge_in_rtt_ms?: number | null;
+  tts_overrun_ms?: number | null;
   recovery_ms?: number | null;
   follow_up_completed?: boolean;
+  expected_no_interrupt?: boolean;
 }
 
 export type SyntheticStopReason =
@@ -287,6 +289,8 @@ export interface SyntheticTurn {
   latency_ms?: number | null;
   ttft_ms?: number | null;
   ttfb_ms?: number | null;
+  leading_silence_ms?: number | null;
+  audible_ttfb_ms?: number | null;
   llm_response_text?: string | null;
   barge_in?: boolean;
 }
@@ -308,6 +312,8 @@ export interface TtsEntryResult {
   bucket: TtsLengthBucket;
   class: TtsContentClass;
   ttfb_ms?: number | null;
+  leading_silence_ms?: number | null;
+  audible_ttfb_ms?: number | null;
   synthesis_ms?: number | null;
   audio_duration_ms?: number | null;
   sample_rate?: number | null;
@@ -338,6 +344,7 @@ export interface VariantSummary {
   avg_e2e_latency_ms: number | null;
   p50_e2e_latency_ms: number | null;
   p90_e2e_latency_ms: number | null;
+  p95_e2e_latency_ms?: number | null;
   p99_e2e_latency_ms: number | null;
   avg_ttft_ms: number | null;
   avg_ttfb_ms: number | null;
@@ -349,7 +356,13 @@ export interface VariantSummary {
   avg_tts_ttfb_ms?: number | null;
   p50_tts_ttfb_ms?: number | null;
   p90_tts_ttfb_ms?: number | null;
+  p95_tts_ttfb_ms?: number | null;
   p99_tts_ttfb_ms?: number | null;
+  avg_tts_leading_silence_ms?: number | null;
+  avg_tts_audible_ttfb_ms?: number | null;
+  p50_tts_audible_ttfb_ms?: number | null;
+  p95_tts_audible_ttfb_ms?: number | null;
+  p99_tts_audible_ttfb_ms?: number | null;
   avg_tts_synthesis_ms?: number | null;
   avg_tts_audio_duration_s?: number | null;
   avg_tts_rtf?: number | null;
@@ -368,8 +381,12 @@ export interface VariantSummary {
   barge_in_scenarios?: number | null;
   /** Fraction (0.0 – 1.0) of barge-in scenarios where the pipeline interrupted. */
   barge_in_success_rate?: number | null;
+  /** Fraction (0.0 – 1.0) of negative/backchannel scenarios that falsely interrupted. */
+  barge_in_false_trigger_rate?: number | null;
   p50_barge_in_rtt_ms?: number | null;
   p95_barge_in_rtt_ms?: number | null;
+  p50_tts_overrun_ms?: number | null;
+  p95_tts_overrun_ms?: number | null;
   p50_recovery_ms?: number | null;
   p95_recovery_ms?: number | null;
 }
@@ -403,5 +420,7 @@ export interface PipelineConfigSummary {
 export interface ExperimentResults {
   experiment_id: string;
   completed_at: string;
+  /** Audio injection speed used during the run (`0.0` = burst, `1.0` = realtime). */
+  injection_speed?: number | null;
   variant_results: VariantResults[];
 }

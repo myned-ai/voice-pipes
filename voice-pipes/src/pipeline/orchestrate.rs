@@ -208,11 +208,16 @@ pub async fn process_utterance(
     let bridge_handle;
     let tts_handle;
 
-    // Bridge -> snapshot channel carrying `(canonical_ttft, perceived_ttft)`.
+    // Bridge -> snapshot channel carrying `(canonical_ttft, perceived_ttft, has_provider_first_token)`.
     let (ttft_tx, ttft_rx) =
-        tokio::sync::oneshot::channel::<(std::time::Duration, std::time::Duration)>();
-    let (llm_done_tx, llm_done_rx) =
-        tokio::sync::oneshot::channel::<(std::time::Duration, u32, Option<u32>)>();
+        tokio::sync::oneshot::channel::<(std::time::Duration, std::time::Duration, bool)>();
+    let (llm_done_tx, llm_done_rx) = tokio::sync::oneshot::channel::<(
+        std::time::Duration,
+        u32,
+        Option<u32>,
+        Option<u32>,
+        Option<u32>,
+    )>();
     // Notify the audio forwarding loop when the first LLM fragment is sent to TTS.
     let (first_frag_tx, first_frag_rx) = tokio::sync::oneshot::channel::<std::time::Instant>();
     // Channel to carry the full accumulated LLM text to the EOU sentinel
@@ -378,6 +383,8 @@ pub async fn process_utterance(
             let mut first_frag_tx = Some(first_frag_tx);
             let mut accumulated_text_tx = Some(accumulated_text_tx);
             let mut real_token_count: Option<u32> = None;
+            let mut real_input_tokens: Option<u32> = None;
+            let mut real_cached_tokens: Option<u32> = None;
             loop {
                 tokio::select! {
                     biased;
@@ -385,10 +392,11 @@ pub async fn process_utterance(
                     frag = frag_rx.recv() => if let Some(f) = frag {
                         if let Some(tx) = ttft_tx.take() {
                             let perceived = bridge_start.elapsed();
+                            let has_provider_first_token = f.first_token_ms.is_some();
                             let canonical = f
                                 .first_token_ms
                                 .map_or(perceived, |ms| std::time::Duration::from_secs_f64(ms / 1000.0));
-                            let _ = tx.send((canonical, perceived));
+                            let _ = tx.send((canonical, perceived, has_provider_first_token));
                             if let Some(ref tx) = bridge_pe_tx {
                                 let _ = tx.send(PipelineEvent::LlmFirstToken {
                                     utterance_id,
@@ -403,6 +411,12 @@ pub async fn process_utterance(
                         }
                         if f.token_count.is_some() {
                             real_token_count = f.token_count;
+                        }
+                        if f.input_tokens.is_some() {
+                            real_input_tokens = f.input_tokens;
+                        }
+                        if f.cached_tokens.is_some() {
+                            real_cached_tokens = f.cached_tokens;
                         }
                         accumulated.push_str(&f.text);
                         // The response text is complete at the final
@@ -439,7 +453,13 @@ pub async fn process_utterance(
             }
             let llm_generation = llm_start.elapsed();
             let token_estimate = accumulated.split_whitespace().count() as u32;
-            let _ = llm_done_tx.send((llm_generation, token_estimate, real_token_count));
+            let _ = llm_done_tx.send((
+                llm_generation,
+                token_estimate,
+                real_token_count,
+                real_input_tokens,
+                real_cached_tokens,
+            ));
             if let Some(ref a) = audit_bridge {
                 let dual = voice_pipes_sdk::sanitize_dual_track(&accumulated, &sanitize_cfg_bridge);
                 a.record(crate::audit::AuditEvent::LlmOutput {
@@ -520,6 +540,7 @@ pub async fn process_utterance(
     let mut tts_total_samples: u64 = 0;
     let mut tts_observed_rate: Option<u32> = None;
     let mut tts_observed_channels: u16 = 1;
+    let mut leading_silence = super::extras::LeadingSilenceTracker::default();
     // Cold-start: snapshot before the first synthesis, swap atomically once
     // we observe a real audio chunk.  We keep a local copy so the metric we
     // report reflects "this turn was the cold one", not "the provider is
@@ -585,6 +606,7 @@ pub async fn process_utterance(
                     // derive audio-duration / RTF after the loop.
                     if !c.samples.is_empty() {
                         tts_total_samples += c.samples.len() as u64;
+                        leading_silence.push(&c.samples, c.sample_rate, c.channels);
                         if tts_observed_rate.is_none() && c.sample_rate > 0 {
                             tts_observed_rate = Some(c.sample_rate);
                         }
@@ -713,10 +735,11 @@ pub async fn process_utterance(
     }
 
     // Collect LLM generation metrics from the bridge.
-    let (llm_generation, llm_token_estimate, llm_token_count) = match llm_done_rx.await.ok() {
-        Some((d, est, count)) => (Some(d), Some(est), count),
-        None => (None, None, None),
-    };
+    let (llm_generation, llm_token_estimate, llm_token_count, llm_input_tokens, llm_cached_tokens) =
+        match llm_done_rx.await.ok() {
+            Some((d, est, count, inp, cached)) => (Some(d), Some(est), count, inp, cached),
+            None => (None, None, None, None, None),
+        };
 
     // ── Derive TTS-side aggregates ─────────────────────────
     let tts_audio_duration = match (tts_total_samples, tts_observed_rate) {
@@ -767,9 +790,9 @@ pub async fn process_utterance(
     }
 
     let ttft = ttft_rx.await.ok();
-    let (ttft_canonical, ttft_perceived) = match ttft {
-        Some((c, p)) => (Some(c), Some(p)),
-        None => (None, None),
+    let (ttft_canonical, ttft_perceived, ttft_has_provider_first_token) = match ttft {
+        Some((c, p, has_provider)) => (Some(c), Some(p), has_provider),
+        None => (None, None, false),
     };
     let process_total = commit_start.elapsed();
 
@@ -838,6 +861,15 @@ pub async fn process_utterance(
     // LLM span.
     let mut llm_span = recorder.begin("llm", "llm");
     llm_span.set_provider(llm_provider_name.clone());
+    let text_aggregation_ms = (llm_ran && ttft_has_provider_first_token)
+        .then(|| {
+            first_frag_instant.zip(ttft_canonical).map(|(f, c)| {
+                f.saturating_duration_since(process_start)
+                    .saturating_sub(c)
+                    .as_millis() as u64
+            })
+        })
+        .flatten();
     llm_span.extras_typed(&LlmExtras {
         ttft_ms: llm_ran
             .then_some(ttft_canonical)
@@ -849,11 +881,14 @@ pub async fn process_utterance(
             .map(|d| d.as_millis() as u64),
         token_estimate: llm_ran.then_some(llm_token_estimate).flatten(),
         token_count: llm_ran.then_some(llm_token_count).flatten(),
+        input_tokens: llm_ran.then_some(llm_input_tokens).flatten(),
+        cached_tokens: llm_ran.then_some(llm_cached_tokens).flatten(),
         llm_perceived_ttft_ms: llm_ran
             .then_some(ttft_perceived)
             .flatten()
             .map(|d| d.as_millis() as u64),
         llm_wait_ms,
+        text_aggregation_ms,
         stage_skipped_reason: llm_skip_reason,
         speculative_rollbacks: spec_rollbacks,
         speculative_tokens_generated: spec_tokens_generated,
@@ -879,10 +914,20 @@ pub async fn process_utterance(
     if let Some(err) = tts_error.as_ref() {
         tts_span.set_error(err.clone());
     }
+    let tts_ttfb_ms = (!tts_skipped)
+        .then(|| tts_ttfb.map(|d| d.as_millis() as u64))
+        .flatten();
+    let tts_leading_silence_ms = (!tts_skipped)
+        .then(|| leading_silence.leading_silence_ms())
+        .flatten();
+    let tts_audible_ttfb_ms = match (tts_ttfb_ms, tts_leading_silence_ms) {
+        (Some(t), Some(lead)) => Some(t.saturating_add(lead)),
+        _ => None,
+    };
     tts_span.extras_typed(&TtsExtras {
-        ttfb_ms: (!tts_skipped)
-            .then(|| tts_ttfb.map(|d| d.as_millis() as u64))
-            .flatten(),
+        ttfb_ms: tts_ttfb_ms,
+        tts_leading_silence_ms,
+        tts_audible_ttfb_ms,
         tts_wait_ms,
         output_wait_ms,
         commit_to_first_audio_ms,

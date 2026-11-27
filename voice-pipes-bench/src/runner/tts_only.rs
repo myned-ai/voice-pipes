@@ -258,6 +258,85 @@ fn is_silent(m: &voice_pipes::transport::TtsOnlyMetrics) -> bool {
     }
 }
 
+/// Measure leading silence (ms before the first audible speech frame) from a
+/// persisted WAV on disk using the pure-Rust acoustic verifier. Returns `None`
+/// when the file does not exist or cannot be decoded.
+fn measure_wav_leading_silence_ms(path: &str) -> Option<u64> {
+    let p = std::path::Path::new(path);
+    if !p.is_file() {
+        return None;
+    }
+    let frame = voice_pipes::audio::wav_reader::read_wav(p).ok()?;
+    let ch = usize::from(frame.channels.max(1));
+    let mut mono = Vec::with_capacity(frame.samples.len() / ch);
+    for chunk in frame.samples.chunks(ch) {
+        let sum: f32 = chunk.iter().map(|&s| f32::from(s) / 32768.0).sum();
+        mono.push(sum / (chunk.len() as f32));
+    }
+    let metrics = crate::audio_verify::acoustic::analyze_acoustics(&mono, frame.sample_rate);
+    if metrics.active_speech_ratio <= 0.0 {
+        return None;
+    }
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "leading_silence_ms is non-negative and bounded by clip duration"
+    )]
+    Some(metrics.leading_silence_ms.max(0.0).round() as u64)
+}
+
+/// Build per-entry results (including measured leading silence and audible TTFB)
+/// so the UI and summary aggregator can operate on raw per-entry samples.
+fn build_tts_entry_results(
+    entries: &[TtsCorpusEntry],
+    outcomes: &[TtsOnlyEntryOutcome],
+) -> Vec<TtsEntryResult> {
+    entries
+        .iter()
+        .zip(outcomes.iter())
+        .map(|(entry, outcome)| {
+            let metrics = outcome.metrics.as_ref();
+            let audio_path = outcome.audio_ref.as_ref().map(|a| a.path.clone());
+            let audio_available = audio_path
+                .as_deref()
+                .is_some_and(|p| std::path::Path::new(p).is_file());
+            let ttfb_ms = metrics.and_then(|m| m.ttfb_ms);
+            let leading_silence_ms = audio_path
+                .as_deref()
+                .and_then(measure_wav_leading_silence_ms);
+            let audible_ttfb_ms = match (ttfb_ms, leading_silence_ms) {
+                (Some(t), Some(lead)) => Some(t.saturating_add(lead)),
+                _ => None,
+            };
+            TtsEntryResult {
+                entry_id: entry.id.clone(),
+                text: entry.text.clone(),
+                bucket: entry.bucket,
+                class: entry.class,
+                ttfb_ms,
+                leading_silence_ms,
+                audible_ttfb_ms,
+                synthesis_ms: metrics.and_then(|m| m.synthesis_ms),
+                audio_duration_ms: metrics.and_then(|m| m.audio_duration_ms),
+                sample_rate: metrics.and_then(|m| m.sample_rate),
+                chars: metrics.and_then(|m| m.chars),
+                rtf: metrics.and_then(|m| m.rtf.map(f64::from)),
+                cold_start: metrics.is_some_and(|m| m.cold_start),
+                provider: metrics.and_then(|m| m.provider.clone()),
+                audio_path,
+                audio_available,
+                error: outcome.error.clone(),
+                peak_amplitude: metrics.and_then(|m| m.peak_amplitude),
+                speech_ratio: metrics.and_then(|m| m.speech_ratio.map(f64::from)),
+                silent: metrics.is_some_and(is_silent),
+                transcript: outcome.score.as_ref().map(|s| s.transcript.clone()),
+                wer: outcome.score.as_ref().map(|s| s.wer),
+                cer: outcome.score.as_ref().map(|s| s.cer),
+            }
+        })
+        .collect()
+}
+
 /// Reduce per-entry TTS-only outcomes into a [`ScenarioResult`].
 pub(super) fn aggregate_tts_only_outcomes(
     scenario: &TestScenario,
@@ -340,6 +419,18 @@ pub(super) fn aggregate_tts_only_outcomes(
         Some((sum / tts_chars_total.len() as u64) as u32)
     };
 
+    // Build per-entry results first so scenario-level leading silence and
+    // audible TTFB averages share the exact per-entry measurements.
+    let entry_results = build_tts_entry_results(entries, outcomes);
+    let leading_silences: Vec<f64> = entry_results
+        .iter()
+        .filter_map(|e| e.leading_silence_ms.map(|v| v as f64))
+        .collect();
+    let audible_ttfbs: Vec<f64> = entry_results
+        .iter()
+        .filter_map(|e| e.audible_ttfb_ms.map(|v| v as f64))
+        .collect();
+
     let metrics = ScenarioMetrics {
         e2e_latency_ms: avg(&tts_synth_all),
         ttft_ms: None,
@@ -351,6 +442,8 @@ pub(super) fn aggregate_tts_only_outcomes(
         llm_generation_ms: None,
         llm_tokens: None,
         tts_ttfb_ms: avg(&tts_ttfbs),
+        tts_leading_silence_ms: avg(&leading_silences),
+        tts_audible_ttfb_ms: avg(&audible_ttfbs),
         tts_synthesis_ms: avg(&tts_synth_all),
         tts_audio_duration_s: avg(&tts_audio_durs),
         tts_sample_rate: tts_sample_rate_last,
@@ -391,43 +484,6 @@ pub(super) fn aggregate_tts_only_outcomes(
         )),
         (false, false) => None,
     };
-
-    // Build per-entry results so the UI can render the table + play
-    // each clip individually.
-    let entry_results: Vec<TtsEntryResult> = entries
-        .iter()
-        .zip(outcomes.iter())
-        .map(|(entry, outcome)| {
-            let metrics = outcome.metrics.as_ref();
-            let audio_path = outcome.audio_ref.as_ref().map(|a| a.path.clone());
-            let audio_available = audio_path
-                .as_deref()
-                .is_some_and(|p| std::path::Path::new(p).is_file());
-            TtsEntryResult {
-                entry_id: entry.id.clone(),
-                text: entry.text.clone(),
-                bucket: entry.bucket,
-                class: entry.class,
-                ttfb_ms: metrics.and_then(|m| m.ttfb_ms),
-                synthesis_ms: metrics.and_then(|m| m.synthesis_ms),
-                audio_duration_ms: metrics.and_then(|m| m.audio_duration_ms),
-                sample_rate: metrics.and_then(|m| m.sample_rate),
-                chars: metrics.and_then(|m| m.chars),
-                rtf: metrics.and_then(|m| m.rtf.map(f64::from)),
-                cold_start: metrics.is_some_and(|m| m.cold_start),
-                provider: metrics.and_then(|m| m.provider.clone()),
-                audio_path,
-                audio_available,
-                error: outcome.error.clone(),
-                peak_amplitude: metrics.and_then(|m| m.peak_amplitude),
-                speech_ratio: metrics.and_then(|m| m.speech_ratio.map(f64::from)),
-                silent: metrics.is_some_and(is_silent),
-                transcript: outcome.score.as_ref().map(|s| s.transcript.clone()),
-                wer: outcome.score.as_ref().map(|s| s.wer),
-                cer: outcome.score.as_ref().map(|s| s.cer),
-            }
-        })
-        .collect();
 
     // Fold WER/CER from the round-trip scorer (when configured) into
     // the single ScenarioScoring slot. We average across all scored

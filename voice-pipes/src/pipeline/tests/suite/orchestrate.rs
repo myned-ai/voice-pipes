@@ -1033,3 +1033,168 @@ async fn audio_ledger_does_not_duplicate_final_caption_metadata_chunks() {
     let expected_chars = (f1.chars().count() + f2.chars().count()) as u64;
     assert_eq!(tts_span.extras["chars"].as_u64(), Some(expected_chars));
 }
+
+#[test]
+fn leading_silence_tracker_detects_onset_after_digital_silence() {
+    let mut tracker = crate::pipeline::extras::LeadingSilenceTracker::default();
+    // 120 ms of silence @ 16 kHz = 1920 zero samples.
+    tracker.push(&vec![0i16; 1920], 16_000, 1);
+    assert_eq!(tracker.leading_silence_ms(), None);
+
+    // Follow with 40 ms of audible tone (~ -12 dBFS).
+    let tone: Vec<i16> = (0..640)
+        .map(|i| ((i as f64 * 0.2).sin() * 8000.0) as i16)
+        .collect();
+    tracker.push(&tone, 16_000, 1);
+    assert_eq!(tracker.leading_silence_ms(), Some(120));
+
+    // Subsequent chunks do not overwrite the locked onset.
+    tracker.push(&vec![0i16; 1600], 16_000, 1);
+    assert_eq!(tracker.leading_silence_ms(), Some(120));
+}
+
+/// Fake LLM that buffers tokens for `buffer_ms` after `first_token_ms` before
+/// emitting its first speakable sentence fragment.
+struct AggregatingLlm {
+    first_token_ms: f64,
+    buffer_ms: u64,
+}
+
+#[async_trait]
+impl TextProcessor for AggregatingLlm {
+    fn name(&self) -> &'static str {
+        "aggregating-llm"
+    }
+    async fn process(&self, input: &str) -> Result<String, TextProcessorError> {
+        Ok(input.to_string())
+    }
+    async fn process_stream(
+        &self,
+        _input: &str,
+        tx: mpsc::Sender<TextFragment>,
+        _cancel: CancellationToken,
+    ) -> Result<(), TextProcessorError> {
+        tokio::time::sleep(std::time::Duration::from_millis(
+            self.first_token_ms as u64 + self.buffer_ms,
+        ))
+        .await;
+        let _ = tx
+            .send(
+                TextFragment::new("Hello there.")
+                    .with_is_end_of_response(true)
+                    .with_first_token_ms(Some(self.first_token_ms))
+                    .with_token_count(Some(4))
+                    .with_input_tokens(Some(120))
+                    .with_cached_tokens(Some(80)),
+            )
+            .await;
+        Ok(())
+    }
+}
+
+/// Fake TTS that emits `leading_silence_ms` of digital zeros before audible PCM.
+struct PaddedSilenceTts {
+    leading_silence_ms: usize,
+}
+
+#[async_trait]
+impl TtsProvider for PaddedSilenceTts {
+    fn name(&self) -> &'static str {
+        "padded-silence-tts"
+    }
+    fn sample_rate(&self) -> u32 {
+        16_000
+    }
+    async fn synthesize(
+        &self,
+        _text: &str,
+    ) -> Result<voice_pipes_sdk::AudioFrame, voice_pipes_sdk::TtsError> {
+        let silent_samples = self.leading_silence_ms * 16;
+        let mut samples = vec![0i16; silent_samples];
+        samples.extend((0..1600).map(|i| ((i as f64 * 0.2).sin() * 8000.0) as i16));
+        Ok(voice_pipes_sdk::AudioFrame {
+            samples,
+            sample_rate: 16_000,
+            channels: 1,
+        })
+    }
+    async fn synthesize_stream(
+        &self,
+        _req: voice_pipes_sdk::SynthesisRequest<'_>,
+        tx: mpsc::Sender<voice_pipes_sdk::AudioFrame>,
+        _cancel: CancellationToken,
+    ) -> Result<(), voice_pipes_sdk::TtsError> {
+        let frame = self.synthesize("").await?;
+        let _ = tx.send(frame).await;
+        Ok(())
+    }
+}
+
+#[tokio::test]
+async fn orchestrate_records_leading_silence_audible_ttfb_and_text_aggregation() {
+    let (audio_tx, mut audio_rx) = mpsc::channel(32);
+    let (event_tx, _flag) = test_event_channel();
+    let processors: Arc<Vec<Box<dyn TextProcessor>>> = Arc::new(vec![Box::new(AggregatingLlm {
+        first_token_ms: 20.0,
+        buffer_ms: 80,
+    })]);
+    let tts: Arc<dyn TtsProvider> = Arc::new(PaddedSilenceTts {
+        leading_silence_ms: 120,
+    });
+    let utterance = Utterance {
+        text: "hi".into(),
+        utterance_id: 42,
+        confidence: Some(0.99),
+        stt_latency: None,
+        source: UtteranceSource::default(),
+        endpointing_latency: None,
+        inference_metrics: None,
+        committed_at: None,
+    };
+    let ledger = Arc::new(parking_lot::Mutex::new(AudioLedger::default()));
+    let drain = tokio::spawn(async move { while audio_rx.recv().await.is_some() {} });
+
+    let snap = process_utterance(
+        &utterance,
+        audio_tx,
+        event_tx,
+        processors,
+        Arc::new(vec![]),
+        tts,
+        None,
+        None,
+        None,
+        CancellationToken::new(),
+        None,
+        None,
+        ledger,
+        Arc::new(AtomicBool::new(false)),
+        None,
+        None,
+        None,
+    )
+    .await;
+    let _ = drain.await;
+
+    let llm_span = snap.component_by_kind("llm").expect("llm span");
+    let agg_ms = llm_span.extras["text_aggregation_ms"]
+        .as_u64()
+        .expect("text_aggregation_ms must be recorded");
+    assert!(
+        agg_ms >= 50,
+        "expected text_aggregation_ms >= 50ms for 80ms buffering, got {agg_ms}"
+    );
+    assert_eq!(llm_span.extras["input_tokens"].as_u64(), Some(120));
+    assert_eq!(llm_span.extras["cached_tokens"].as_u64(), Some(80));
+
+    let tts_span = snap.component_by_kind("tts").expect("tts span");
+    let ttfb = tts_span.extras["ttfb_ms"].as_u64().expect("ttfb_ms");
+    let lead = tts_span.extras["tts_leading_silence_ms"]
+        .as_u64()
+        .expect("tts_leading_silence_ms");
+    let audible = tts_span.extras["tts_audible_ttfb_ms"]
+        .as_u64()
+        .expect("tts_audible_ttfb_ms");
+    assert_eq!(lead, 120);
+    assert_eq!(audible, ttfb + 120);
+}

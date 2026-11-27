@@ -33,12 +33,18 @@ pub(super) async fn run_barge_in_scenario(
 
     let mut session_ids = Vec::new();
     let mut turn_results: Vec<TurnResult> = Vec::new();
+    let expected_no_interrupt = scenario
+        .expected
+        .as_ref()
+        .is_some_and(|e| e.must_not_interrupt);
     let mut barge_in_result = BargeInResult {
         interrupted: false,
         trigger: None,
         barge_in_rtt_ms: None,
+        tts_overrun_ms: None,
         recovery_ms: None,
         follow_up_completed: false,
+        expected_no_interrupt,
     };
     let mut last_error: Option<String> = None;
     let mut latency_samples: Vec<f64> = Vec::new();
@@ -49,6 +55,7 @@ pub(super) async fn run_barge_in_scenario(
                 session_ids.push(sid);
             }
             barge_in_result = s.barge_in;
+            barge_in_result.expected_no_interrupt = expected_no_interrupt;
             if let Some(ms) = s.initial_turn.e2e_latency_ms {
                 latency_samples.push(ms);
             }
@@ -254,8 +261,10 @@ pub(super) async fn run_barge_in_session(
             .interrupted
             .then(|| trigger_for_mode(&interrupt.mode).to_string()),
         barge_in_rtt_ms: post.barge_in_rtt_ms,
+        tts_overrun_ms: post.tts_overrun_ms,
         recovery_ms: post.recovery_ms,
         follow_up_completed: false,
+        expected_no_interrupt: false,
     };
 
     // Optional follow-up turn.
@@ -316,7 +325,7 @@ where
                 "source": path.display().to_string(),
                 "scenario_id": scenario_id,
                 "experiment_id": experiment_id,
-                "speed": config.inject_speed,
+                "speed": if config.inject_speed == 0.0 { 1.0 } else { config.inject_speed },
             }
         }),
     };
@@ -599,6 +608,7 @@ pub(super) fn trigger_for_mode(mode: &InterruptMode) -> &'static str {
 pub(super) struct PostInterruptOutcome {
     interrupted: bool,
     barge_in_rtt_ms: Option<u64>,
+    tts_overrun_ms: Option<u64>,
     recovery_ms: Option<u64>,
     utterance_id: Option<u32>,
 }
@@ -639,6 +649,7 @@ where
 {
     let mut out = VoiceBargeOutcome::default();
     let mut interrupted_at: Option<Instant> = None;
+    let mut overrun_bytes: u64 = 0;
     let mut response_parts: Vec<String> = Vec::new();
     let deadline = Instant::now() + config.scenario_timeout;
     let mut last_content = Instant::now();
@@ -790,9 +801,13 @@ where
                     _ => {}
                 }
             }
-            Ok(Some(Ok(Message::Binary(_)))) => {
+            Ok(Some(Ok(Message::Binary(bin)))) => {
                 // Agent audio (answer or residue) -- content, extends the
-                // quiescence window.
+                // quiescence window. Frames received before the interrupt takes
+                // effect count as post-interrupt TTS overrun (16 kHz mono i16 = 32 B/ms).
+                if !out.post.interrupted {
+                    overrun_bytes += bin.len() as u64;
+                }
                 last_content = Instant::now();
             }
             // Err: quiet for settle_timeout (or scenario deadline).
@@ -801,6 +816,9 @@ where
         }
     }
 
+    if out.post.interrupted {
+        out.post.tts_overrun_ms = Some(overrun_bytes / 32);
+    }
     if !response_parts.is_empty() {
         out.response_text = Some(response_parts.join(""));
     }
@@ -820,6 +838,7 @@ where
 {
     let mut out = PostInterruptOutcome::default();
     let mut interrupted_at: Option<Instant> = None;
+    let mut overrun_bytes: u64 = 0;
     let deadline = Instant::now() + config.settle_timeout;
 
     while Instant::now() < deadline {
@@ -882,17 +901,37 @@ where
                                 out.recovery_ms =
                                     Some(Instant::now().duration_since(t0).as_millis() as u64);
                             }
+                            if out.interrupted {
+                                out.tts_overrun_ms = Some(overrun_bytes / 32);
+                            }
                             return out;
                         }
                     }
-                    "closing" => return out,
+                    "closing" => {
+                        if out.interrupted {
+                            out.tts_overrun_ms = Some(overrun_bytes / 32);
+                        }
+                        return out;
+                    }
                     _ => {}
                 }
             }
-            Ok(Some(Ok(Message::Close(_)) | Err(_)) | None) | Err(_) => return out,
-            // Stale audio after cancel, or ping/pong -- ignore.
+            Ok(Some(Ok(Message::Binary(bin)))) => {
+                // Assistant PCM frames still arriving after interrupt fired
+                // (16 kHz mono i16 PCM = 32 bytes/ms).
+                overrun_bytes += bin.len() as u64;
+            }
+            Ok(Some(Ok(Message::Close(_)) | Err(_)) | None) | Err(_) => {
+                if out.interrupted {
+                    out.tts_overrun_ms = Some(overrun_bytes / 32);
+                }
+                return out;
+            }
             Ok(Some(Ok(_))) => {}
         }
+    }
+    if out.interrupted {
+        out.tts_overrun_ms = Some(overrun_bytes / 32);
     }
     out
 }
@@ -906,6 +945,12 @@ pub(super) fn score_barge_in(
 ) {
     if expected.must_interrupt && !barge.interrupted {
         failures.push("must_interrupt: no interruption observed".into());
+    }
+    if expected.must_not_interrupt && barge.interrupted {
+        failures.push(format!(
+            "must_not_interrupt: false barge-in triggered (trigger={:?})",
+            barge.trigger
+        ));
     }
     if let Some(want) = expected.interruption_trigger {
         let observed = barge.trigger.as_deref().unwrap_or("");
@@ -926,6 +971,11 @@ pub(super) fn score_barge_in(
     {
         failures.push(format!("max_barge_in_rtt_ms: got {actual}ms, cap {cap}ms"));
     }
+    if let (Some(cap), Some(actual)) = (expected.max_tts_overrun_ms, barge.tts_overrun_ms)
+        && actual > cap
+    {
+        failures.push(format!("max_tts_overrun_ms: got {actual}ms, cap {cap}ms"));
+    }
     if let (Some(cap), Some(actual)) = (expected.max_recovery_ms, barge.recovery_ms)
         && actual > cap
     {
@@ -933,6 +983,19 @@ pub(super) fn score_barge_in(
     }
     if expected.follow_up_must_complete && !barge.follow_up_completed {
         failures.push("follow_up_must_complete: follow-up turn did not complete".into());
+    }
+    for forbidden in &expected.follow_up_must_not_mention {
+        let needle = forbidden.to_lowercase();
+        let leaked = turns.iter().any(|t| {
+            t.response_text
+                .as_deref()
+                .is_some_and(|r| r.to_lowercase().contains(&needle))
+        });
+        if leaked {
+            failures.push(format!(
+                "follow_up_must_not_mention: forbidden substring {forbidden:?} appeared in post-interrupt reply"
+            ));
+        }
     }
     // Same semantics as the synthetic-caller check: each substring must
     // appear in at least one agent transcript (case-insensitive). This is

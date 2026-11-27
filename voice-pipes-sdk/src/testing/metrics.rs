@@ -486,11 +486,7 @@ mod tests {
         let run = |tx: mpsc::Sender<TextFragment>, _cancel: CancellationToken| async move {
             tx.send(TextFragment {
                 text: String::new(),
-                spoken_text: None,
-                is_end_of_response: false,
-                hints: None,
-                first_token_ms: None,
-                token_count: None,
+                ..TextFragment::default()
             })
             .await
             .unwrap();
@@ -499,22 +495,17 @@ mod tests {
 
             tx.send(TextFragment {
                 text: "Hello".into(),
-                spoken_text: None,
-                is_end_of_response: false,
-                hints: None,
                 first_token_ms: Some(40.0),
-                token_count: None,
+                ..TextFragment::default()
             })
             .await
             .unwrap();
 
             tx.send(TextFragment {
                 text: " world".into(),
-                spoken_text: None,
                 is_end_of_response: true,
-                hints: None,
-                first_token_ms: None,
                 token_count: Some(2),
+                ..TextFragment::default()
             })
             .await
             .unwrap();
@@ -531,11 +522,8 @@ mod tests {
         let run = |tx: mpsc::Sender<TextFragment>, _cancel: CancellationToken| async move {
             tx.send(TextFragment {
                 text: String::new(),
-                spoken_text: None,
-                is_end_of_response: false,
-                hints: None,
                 first_token_ms: Some(0.1),
-                token_count: None,
+                ..TextFragment::default()
             })
             .await
             .unwrap();
@@ -551,11 +539,10 @@ mod tests {
         let run = |tx: mpsc::Sender<TextFragment>, _cancel: CancellationToken| async move {
             tx.send(TextFragment {
                 text: "Hello".into(),
-                spoken_text: None,
                 is_end_of_response: true,
-                hints: None,
                 first_token_ms: Some(2.0),
                 token_count: Some(1),
+                ..TextFragment::default()
             })
             .await
             .unwrap();

@@ -17,6 +17,7 @@
     reason = "the runner is split into files that share one import list through `use super::*` by design"
 )]
 
+pub mod audio_perturb;
 pub mod audio_verify;
 pub mod runner;
 pub mod scoring;

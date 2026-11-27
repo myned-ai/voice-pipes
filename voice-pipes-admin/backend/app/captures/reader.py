@@ -213,10 +213,15 @@ def project_snapshot_metrics(snap: dict | None) -> dict:
         "ttft_ms": None,
         "llm_perceived_ttft_ms": None,
         "llm_wait_ms": None,
+        "text_aggregation_ms": None,
+        "input_tokens": None,
+        "cached_tokens": None,
         "llm_stage_skipped_reason": None,
         "generation_ms": None,
         "ttfb_ms": None,
         "tts_internal_ttfb_ms": None,
+        "tts_leading_silence_ms": None,
+        "tts_audible_ttfb_ms": None,
         "tts_wait_ms": None,
         "output_wait_ms": None,
         "commit_to_first_audio_ms": None,
@@ -296,6 +301,9 @@ def project_snapshot_metrics(snap: dict | None) -> dict:
         out["ttft_ms"] = _num(ex.get("ttft_ms"))
         out["llm_perceived_ttft_ms"] = _num(ex.get("llm_perceived_ttft_ms"))
         out["llm_wait_ms"] = _num(ex.get("llm_wait_ms"))
+        out["text_aggregation_ms"] = _num(ex.get("text_aggregation_ms"))
+        out["input_tokens"] = _num(ex.get("input_tokens"))
+        out["cached_tokens"] = _num(ex.get("cached_tokens"))
         llm_skip = ex.get("stage_skipped_reason")
         if isinstance(llm_skip, str) and llm_skip:
             out["llm_stage_skipped_reason"] = llm_skip
@@ -309,6 +317,8 @@ def project_snapshot_metrics(snap: dict | None) -> dict:
         ex = tts.get("extras") or {}
         out["ttfb_ms"] = _num(ex.get("ttfb_ms"))
         out["tts_internal_ttfb_ms"] = _num(ex.get("tts_internal_ttfb_ms"))
+        out["tts_leading_silence_ms"] = _num(ex.get("tts_leading_silence_ms"))
+        out["tts_audible_ttfb_ms"] = _num(ex.get("tts_audible_ttfb_ms"))
         out["tts_wait_ms"] = _num(ex.get("tts_wait_ms"))
         out["output_wait_ms"] = _num(ex.get("output_wait_ms"))
         out["commit_to_first_audio_ms"] = _num(ex.get("commit_to_first_audio_ms"))
@@ -662,6 +672,13 @@ def _compute_session_metrics(utterances: list[dict], all_events: list[dict]) -> 
     def _avg(vals: list[float]) -> float | None:
         return (sum(vals) / len(vals)) if vals else None
 
+    def _p95(vals: list[float]) -> int | None:
+        if len(vals) < 4:
+            return None
+        s = sorted(vals)
+        idx = min(len(s) - 1, round(0.95 * (len(s) - 1)))
+        return round(s[idx])
+
     def _round(v: float | None) -> int | None:
         return round(v) if v is not None else None
 
@@ -678,14 +695,19 @@ def _compute_session_metrics(utterances: list[dict], all_events: list[dict]) -> 
     # of truth); lifecycle/barge-in fields stay on the summary (injected from
     # pipeline events). See project_snapshot_metrics.
     proj = {id(u): project_snapshot_metrics(u.get("metric_snapshot")) for u in valid}
-    ttft_vals = [v for v in (proj[id(u)]["ttft_ms"] for u in valid) if isinstance(v, (int, float))]
-    ttfb_vals = [v for v in (proj[id(u)]["ttfb_ms"] for u in valid) if isinstance(v, (int, float))]
-    endpt_vals = [v for v in (proj[id(u)]["endpointing_ms"] for u in valid) if isinstance(v, (int, float))]
+    # VPO-Metrics §3.1: agent-initiated turns have no user-utterance anchor and
+    # must be excluded from user-perceived critical-path latency aggregates.
+    user_valid = [u for u in valid if proj[id(u)].get("initiator") != "agent"]
+    ttft_vals = [v for v in (proj[id(u)]["ttft_ms"] for u in user_valid) if isinstance(v, (int, float))]
+    ttfb_vals = [v for v in (proj[id(u)]["ttfb_ms"] for u in user_valid) if isinstance(v, (int, float))]
+    lead_sil_vals = [v for v in (proj[id(u)]["tts_leading_silence_ms"] for u in user_valid) if isinstance(v, (int, float))]
+    audible_ttfb_vals = [v for v in (proj[id(u)]["tts_audible_ttfb_ms"] for u in user_valid) if isinstance(v, (int, float))]
+    endpt_vals = [v for v in (proj[id(u)]["endpointing_ms"] for u in user_valid) if isinstance(v, (int, float))]
     # S2S provider endpointing: kept apart
     # from the cascade `endpointing_ms` average — different mechanism
     # (provider VAD/transcription lag vs vp's own VAD silence wait).
     provider_endpt_vals = [
-        v for v in (proj[id(u)]["provider_endpointing_ms"] for u in valid)
+        v for v in (proj[id(u)]["provider_endpointing_ms"] for u in user_valid)
         if isinstance(v, (int, float))
     ]
     rtt_vals = [v for v in (_summary_field(u, "barge_in_rtt_ms") for u in valid) if isinstance(v, (int, float))]
@@ -765,8 +787,14 @@ def _compute_session_metrics(utterances: list[dict], all_events: list[dict]) -> 
         "terminatedTurns": terminated,
         "totalTurns": len(utterances),
         "avgTtftMs": _round(_avg(ttft_vals)),
+        "p95TtftMs": _p95(ttft_vals),
         "avgTtfbMs": _round(_avg(ttfb_vals)),
+        "p95TtfbMs": _p95(ttfb_vals),
+        "avgLeadingSilenceMs": _round(_avg(lead_sil_vals)),
+        "avgAudibleTtfbMs": _round(_avg(audible_ttfb_vals)),
+        "p95AudibleTtfbMs": _p95(audible_ttfb_vals),
         "avgEndpointingMs": _round(_avg(endpt_vals)),
+        "p95EndpointingMs": _p95(endpt_vals),
         "avgProviderEndpointingMs": _round(_avg(provider_endpt_vals)),
         "avgBargeInRttMs": _round(_avg(rtt_vals)),
         "serverBargeIns": server_barge_ins,

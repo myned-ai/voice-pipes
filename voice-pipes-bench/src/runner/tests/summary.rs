@@ -241,8 +241,10 @@ fn summary_aggregates_conversation_and_barge_in() {
                 interrupted: true,
                 trigger: Some("client_cancel".into()),
                 barge_in_rtt_ms: Some(120),
+                tts_overrun_ms: Some(64),
                 recovery_ms: Some(300),
                 follow_up_completed: true,
+                expected_no_interrupt: false,
             }),
             synthetic_caller: None,
             gym: None,
@@ -263,8 +265,34 @@ fn summary_aggregates_conversation_and_barge_in() {
                 interrupted: false,
                 trigger: None,
                 barge_in_rtt_ms: None,
+                tts_overrun_ms: None,
                 recovery_ms: None,
                 follow_up_completed: false,
+                expected_no_interrupt: false,
+            }),
+            synthetic_caller: None,
+            gym: None,
+        },
+        ScenarioResult {
+            scenario_id: "backchannel1".into(),
+            scenario_name: "backchannel1".into(),
+            session_ids: vec![],
+            status: ScenarioRunStatus::Failed,
+            metrics: ScenarioMetrics::default(),
+            latency_samples: vec![],
+            scoring: None,
+            error_message: None,
+            repetitions_failed: None,
+            tts_entries: None,
+            turns: None,
+            barge_in: Some(BargeInResult {
+                interrupted: true,
+                trigger: Some("server_vad".into()),
+                barge_in_rtt_ms: Some(90),
+                tts_overrun_ms: Some(32),
+                recovery_ms: Some(150),
+                follow_up_completed: false,
+                expected_no_interrupt: true,
             }),
             synthetic_caller: None,
             gym: None,
@@ -275,9 +303,11 @@ fn summary_aggregates_conversation_and_barge_in() {
     assert_eq!(summary.conversation_scenarios, Some(1));
     assert_eq!(summary.avg_turns_completed, Some(2.0));
     assert_eq!(summary.avg_turn_latency_ms, Some(150.0));
-    assert_eq!(summary.barge_in_scenarios, Some(2));
+    assert_eq!(summary.barge_in_scenarios, Some(3));
     assert_eq!(summary.barge_in_success_rate, Some(0.5));
+    assert_eq!(summary.barge_in_false_trigger_rate, Some(1.0));
     assert_eq!(summary.p50_barge_in_rtt_ms, Some(120));
+    assert_eq!(summary.p50_tts_overrun_ms, Some(64));
     assert_eq!(summary.p50_recovery_ms, Some(300));
 }
 
@@ -295,4 +325,68 @@ fn score_populates_wer_and_cer_from_golden_transcript() {
     assert!(scored.expectations_met);
     assert_eq!(scored.wer, Some(0.5));
     assert!(scored.cer.is_some_and(|c| c > 0.0 && c < 0.2));
+}
+
+#[test]
+fn summary_uses_raw_tts_entries_for_p95_audible_ttfb_and_cold_warm() {
+    let make_entry = |id: &str, ttfb: u64, lead: u64, synth: u64, cold: bool| TtsEntryResult {
+        entry_id: id.into(),
+        text: "sample".into(),
+        bucket: TtsLengthBucket::Short,
+        class: TtsContentClass::Plain,
+        ttfb_ms: Some(ttfb),
+        leading_silence_ms: Some(lead),
+        audible_ttfb_ms: Some(ttfb + lead),
+        synthesis_ms: Some(synth),
+        audio_duration_ms: Some(1000),
+        sample_rate: Some(24_000),
+        chars: Some(6),
+        rtf: Some(0.2),
+        cold_start: cold,
+        provider: Some("piper".into()),
+        audio_path: None,
+        audio_available: false,
+        error: None,
+        peak_amplitude: Some(4000),
+        speech_ratio: Some(0.5),
+        silent: false,
+        transcript: None,
+        wer: None,
+        cer: None,
+    };
+
+    let scenarios = vec![ScenarioResult {
+        scenario_id: "tts-corpus".into(),
+        scenario_name: "tts-corpus".into(),
+        session_ids: vec![],
+        status: ScenarioRunStatus::Passed,
+        metrics: ScenarioMetrics {
+            tts_ttfb_ms: Some(200.0), // scenario mean hides 500ms spike
+            tts_synthesis_ms: Some(400.0),
+            tts_cold_start: true,
+            ..ScenarioMetrics::default()
+        },
+        latency_samples: vec![100.0, 120.0, 150.0, 500.0],
+        scoring: None,
+        error_message: None,
+        repetitions_failed: None,
+        tts_entries: Some(vec![
+            make_entry("e1", 500, 100, 900, true),
+            make_entry("e2", 100, 20, 200, false),
+            make_entry("e3", 120, 30, 220, false),
+            make_entry("e4", 150, 50, 240, false),
+        ]),
+        turns: None,
+        barge_in: None,
+        synthetic_caller: None,
+        gym: None,
+    }];
+
+    let summary = compute_summary(&scenarios);
+    assert_eq!(summary.p95_e2e_latency_ms, Some(500));
+    assert_eq!(summary.p95_tts_ttfb_ms, Some(500));
+    assert_eq!(summary.p95_tts_audible_ttfb_ms, Some(600));
+    assert_eq!(summary.avg_tts_leading_silence_ms, Some(50.0));
+    assert_eq!(summary.cold_tts_synthesis_ms, Some(900.0));
+    assert_eq!(summary.warm_tts_synthesis_ms, Some(220.0));
 }

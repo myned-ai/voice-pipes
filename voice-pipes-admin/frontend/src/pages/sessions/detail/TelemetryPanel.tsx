@@ -13,11 +13,16 @@ import {
 import { CollapsibleSection } from '../../../components/CollapsibleSection';
 import { MetricsGuide } from '../../../components/MetricsGuide';
 
-const MetricRow = ({ label, value, unit, isDark }: { label: string, value: string | number | null, unit?: string, isDark: boolean }) => (
+const MetricRow = ({ label, value, unit, sub, isDark }: { label: string, value: string | number | null, unit?: string, sub?: string | null, isDark: boolean }) => (
   <div className={`flex justify-between items-center text-sm py-1.5 border-b last:border-0 ${isDark ? 'border-slate-800' : 'border-gray-100'}`}>
     <span className={isDark ? 'text-slate-400' : 'text-gray-500'}>{label}</span>
     <span className={`font-mono font-bold ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>
       {value ?? '-'} {unit && value != null && <span className={`text-xs font-normal ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>{unit}</span>}
+      {sub && value != null && (
+        <span className={`ml-1.5 text-[10px] font-normal ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
+          {sub}
+        </span>
+      )}
     </span>
   </div>
 );
@@ -183,7 +188,7 @@ const PER_TURN_METRICS: ReadonlyArray<{
     unit: 'ms',
     color: 'violet',
     target: 400,
-    description: 'TTS time-to-first-byte — wait from first LLM token to first audio frame. Lower = audio starts sooner.',
+    description: 'Commit-to-first-audio (TTFB) — wait from utterance commit to first audio frame emitted (or TTS-only when descriptor budget applies). Lower = audio starts sooner.',
   },
   {
     key: 'rtf',
@@ -308,14 +313,15 @@ const PerTurnDistribution = ({ utterances, isDark, isRealtime, budgets }: { utte
   const rows = isRealtime
     ? PER_TURN_METRICS_REALTIME.filter(m => m.key !== 'rt_endpointing' || series.rt_endpointing.some(v => v != null))
     : PER_TURN_METRICS;
-  // Stat helper: min/median/max, used for the per-row summary line so
+  // Stat helper: min/median/p95/max, used for the per-row summary line so
   // the user sees concrete numbers without hovering each bar.
   const stats = (vs: (number | null)[], fmt: (v: number) => string) => {
     const xs = vs.filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
     if (xs.length === 0) return null;
     const sorted = [...xs].sort((a, b) => a - b);
     const median = sorted[Math.floor(sorted.length / 2)];
-    return { min: sorted[0], median, max: sorted[sorted.length - 1], n: xs.length, fmt };
+    const p95 = sorted[Math.min(sorted.length - 1, Math.round(0.95 * (sorted.length - 1)))];
+    return { min: sorted[0], median, p95, max: sorted[sorted.length - 1], n: xs.length, fmt };
   };
   const labelMuted = isDark ? 'text-slate-500' : 'text-gray-400';
   const labelStrong = isDark ? 'text-slate-300' : 'text-gray-700';
@@ -391,7 +397,10 @@ const PerTurnDistribution = ({ utterances, isDark, isRealtime, budgets }: { utte
                 showValueLabels={showValueLabels}
               />
             </div>
-            <span className={`text-[10px] w-40 shrink-0 font-mono text-right ${labelMuted}`}>
+            <span
+              className={`text-[10px] w-40 shrink-0 font-mono text-right ${labelMuted}`}
+              title={s ? `min ${fmt(s.min)} · p50 ${fmt(s.median)} · p95 ${fmt(s.p95)} · max ${fmt(s.max)} ${m.unit} (n=${s.n})` : undefined}
+            >
               {s ? (
                 <>
                   {fmt(s.min)} · <span className={labelStrong}>{fmt(s.median)}</span> · {fmt(s.max)} {m.unit}
@@ -480,7 +489,7 @@ const AggregatedMetricsPanel = ({ utterances, events, eventsTotal, sessionMetric
             // computed locally from per-turn snapshots since the classic
             // aggregator never sees them.
             <>
-              <MetricRow isDark={isDark} label="Time to First Byte (TTFB)" value={metrics.avgTtfbMs} unit="ms" />
+              <MetricRow isDark={isDark} label="Time to First Byte (TTFB)" value={metrics.avgTtfbMs} unit="ms" sub={metrics.p95TtfbMs != null ? `p95 ${metrics.p95TtfbMs}` : null} />
               {/* The provider's endpointing lag (S2S `endpointing_ms`) —
                   shown once the worker emits it. */}
               {metrics.avgProviderEndpointingMs != null && (
@@ -490,9 +499,12 @@ const AggregatedMetricsPanel = ({ utterances, events, eventsTotal, sessionMetric
             </>
           ) : (
             <>
-              <MetricRow isDark={isDark} label="Time to First Token (TTFT)" value={metrics.avgTtftMs} unit="ms" />
-              <MetricRow isDark={isDark} label="Time to First Byte (TTFB)" value={metrics.avgTtfbMs} unit="ms" />
-              <MetricRow isDark={isDark} label="Endpointing (VAD Silence)" value={metrics.avgEndpointingMs} unit="ms" />
+              <MetricRow isDark={isDark} label="Time to First Token (TTFT)" value={metrics.avgTtftMs} unit="ms" sub={metrics.p95TtftMs != null ? `p95 ${metrics.p95TtftMs}` : null} />
+              <MetricRow isDark={isDark} label="Time to First Byte (TTFB)" value={metrics.avgTtfbMs} unit="ms" sub={metrics.p95TtfbMs != null ? `p95 ${metrics.p95TtfbMs}` : null} />
+              {metrics.avgLeadingSilenceMs != null && metrics.avgLeadingSilenceMs > 0 && (
+                <MetricRow isDark={isDark} label="TTS Leading Silence" value={metrics.avgLeadingSilenceMs} unit="ms" sub={metrics.avgAudibleTtfbMs != null ? `audible ${metrics.avgAudibleTtfbMs}` : null} />
+              )}
+              <MetricRow isDark={isDark} label="Endpointing (VAD Silence)" value={metrics.avgEndpointingMs} unit="ms" sub={metrics.p95EndpointingMs != null ? `p95 ${metrics.p95EndpointingMs}` : null} />
               <MetricRow isDark={isDark} label="Barge-In RTT" value={metrics.avgBargeInRttMs} unit="ms" />
             </>
           )}

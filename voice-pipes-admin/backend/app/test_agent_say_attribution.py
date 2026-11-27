@@ -442,6 +442,45 @@ class TestAgentSayAttribution(unittest.TestCase):
         self.assertEqual(cp["llm_ttft_ms"], 0.0)
         self.assertNotIn("stages_disagree_ms", cp)
 
+    def test_session_metrics_excludes_agent_turns_and_computes_p95_and_leading_silence(self):
+        def _utt(uid: int, ttft: int, ttfb: int, lead: int, initiator: str = "user") -> dict:
+            return {
+                "utterance_id": uid,
+                "summary": {},
+                "metric_snapshot": {
+                    "utterance_id": uid,
+                    "initiator": initiator,
+                    "total_ms": ttfb + 500,
+                    "components": [
+                        {"kind": "llm", "extras": {"ttft_ms": ttft}},
+                        {
+                            "kind": "tts",
+                            "extras": {
+                                "ttfb_ms": ttfb,
+                                "tts_leading_silence_ms": lead,
+                                "tts_audible_ttfb_ms": ttfb + lead,
+                            },
+                        },
+                    ],
+                },
+            }
+
+        utts = [
+            _utt(1, 100, 200, 40),
+            _utt(2, 120, 220, 60),
+            _utt(3, 140, 240, 80),
+            _utt(4, 500, 800, 100),
+            # Agent-initiated turn with huge values must be excluded from user averages/p95.
+            _utt(10001, 9000, 9000, 9000, initiator="agent"),
+        ]
+        m = _reader._compute_session_metrics(utts, [])
+        self.assertEqual(m["avgTtftMs"], round((100 + 120 + 140 + 500) / 4))
+        self.assertEqual(m["p95TtftMs"], 500)
+        self.assertEqual(m["p95TtfbMs"], 800)
+        self.assertEqual(m["avgLeadingSilenceMs"], 70)
+        self.assertEqual(m["avgAudibleTtfbMs"], round((240 + 280 + 320 + 900) / 4))
+        self.assertEqual(m["p95AudibleTtfbMs"], 900)
+
 
 if __name__ == "__main__":
     unittest.main()

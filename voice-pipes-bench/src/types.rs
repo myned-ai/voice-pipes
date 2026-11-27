@@ -437,6 +437,10 @@ pub struct ScenarioExpected {
     /// `Interrupted` event must be observed.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub must_interrupt: bool,
+    /// For `BargeIn` negative/backchannel scenarios: the short audio/noise
+    /// must NOT trigger a barge-in (`interrupted == false`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub must_not_interrupt: bool,
     /// For `BargeIn` scenarios: the observed interruption trigger must
     /// match this label.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -445,6 +449,10 @@ pub struct ScenarioExpected {
     /// firing the interrupt to receiving `Interrupted`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_barge_in_rtt_ms: Option<u64>,
+    /// For `BargeIn` scenarios: maximum acceptable assistant audio overrun
+    /// (ms of PCM audio still received after the interrupt fired).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_tts_overrun_ms: Option<u64>,
     /// For `BargeIn` scenarios: maximum time from `Interrupted` until
     /// the pipeline returns to `Listening`.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -453,6 +461,11 @@ pub struct ScenarioExpected {
     /// reach `TurnCompleted`.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub follow_up_must_complete: bool,
+    /// For `BargeIn` scenarios: substrings (case-insensitive) that must NOT
+    /// appear in the post-interrupt follow-up reply (verifies playback-accurate
+    /// context truncation).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub follow_up_must_not_mention: Vec<String>,
 
     // ── Synthetic-caller additions ──────────────
     /// For `SyntheticCaller` scenarios: the conversation must reach at
@@ -490,6 +503,10 @@ pub enum ExpectedTrigger {
 pub struct ExperimentResults {
     pub experiment_id: String,
     pub completed_at: DateTime<Utc>,
+    /// Audio injection speed used during the run (`0.0` = burst, `1.0` = realtime).
+    /// Streaming/conversational scenarios require `1.0` for comparable latency numbers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub injection_speed: Option<f32>,
     pub variant_results: Vec<VariantResults>,
 }
 
@@ -555,6 +572,8 @@ pub struct VariantSummary {
     pub avg_e2e_latency_ms: Option<f64>,
     pub p50_e2e_latency_ms: Option<u64>,
     pub p90_e2e_latency_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub p95_e2e_latency_ms: Option<u64>,
     pub p99_e2e_latency_ms: Option<u64>,
     pub avg_ttft_ms: Option<f64>,
     pub avg_ttfb_ms: Option<f64>,
@@ -574,8 +593,22 @@ pub struct VariantSummary {
     pub p50_tts_ttfb_ms: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub p90_tts_ttfb_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub p95_tts_ttfb_ms: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub p99_tts_ttfb_ms: Option<u64>,
+    /// Mean leading silence inside synthesized TTS clips before the first audible sample (ms).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub avg_tts_leading_silence_ms: Option<f64>,
+    /// Mean perceived TTS Time-to-First-Audio (`ttfb_ms + leading_silence_ms`), accounting for leading silence before speech onset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub avg_tts_audible_ttfb_ms: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub p50_tts_audible_ttfb_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub p95_tts_audible_ttfb_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub p99_tts_audible_ttfb_ms: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub avg_tts_synthesis_ms: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -613,16 +646,26 @@ pub struct VariantSummary {
     /// Number of barge-in scenarios in this variant.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub barge_in_scenarios: Option<u32>,
-    /// Fraction of barge-in scenarios where the pipeline interrupted as
+    /// Fraction of positive barge-in scenarios where the pipeline interrupted as
     /// expected (`interrupted == true`). Range 0.0..=1.0.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub barge_in_success_rate: Option<f64>,
+    /// Fraction of negative/backchannel barge-in scenarios (`must_not_interrupt`)
+    /// that falsely triggered an interruption. Range 0.0..=1.0 (lower is better).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub barge_in_false_trigger_rate: Option<f64>,
     /// p50 of `BargeInResult.barge_in_rtt_ms` across barge-in scenarios.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub p50_barge_in_rtt_ms: Option<u64>,
     /// p95 of `BargeInResult.barge_in_rtt_ms` across barge-in scenarios.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub p95_barge_in_rtt_ms: Option<u64>,
+    /// p50 of `BargeInResult.tts_overrun_ms` across barge-in scenarios.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub p50_tts_overrun_ms: Option<u64>,
+    /// p95 of `BargeInResult.tts_overrun_ms` across barge-in scenarios.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub p95_tts_overrun_ms: Option<u64>,
     /// p50 of `BargeInResult.recovery_ms` across barge-in scenarios.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub p50_recovery_ms: Option<u64>,
@@ -724,6 +767,10 @@ pub struct BargeInResult {
     /// Time from firing the interrupt to receiving `Interrupted`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub barge_in_rtt_ms: Option<u64>,
+    /// Duration (ms) of assistant PCM audio still received after the interrupt
+    /// was fired (stop-latency / buffer-flush overrun).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tts_overrun_ms: Option<u64>,
     /// Time from `Interrupted` until the pipeline returned to
     /// `Listening`.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -732,6 +779,10 @@ pub struct BargeInResult {
     /// `TurnCompleted`.
     #[serde(default)]
     pub follow_up_completed: bool,
+    /// True when this scenario expected NO interruption (`must_not_interrupt`),
+    /// used to separate false-trigger rate from positive barge-in success rate.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub expected_no_interrupt: bool,
 }
 
 /// Per-entry result for a single `TtsCorpusEntry` within a
@@ -746,6 +797,12 @@ pub struct TtsEntryResult {
     pub class: TtsContentClass,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ttfb_ms: Option<u64>,
+    /// Leading silence inside the synthesized WAV before the first audible sample (ms).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub leading_silence_ms: Option<u64>,
+    /// Perceived TTS Time-to-First-Audio: `ttfb_ms + leading_silence_ms`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audible_ttfb_ms: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub synthesis_ms: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -819,6 +876,10 @@ pub struct ScenarioMetrics {
     pub llm_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tts_ttfb_ms: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tts_leading_silence_ms: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tts_audible_ttfb_ms: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tts_synthesis_ms: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

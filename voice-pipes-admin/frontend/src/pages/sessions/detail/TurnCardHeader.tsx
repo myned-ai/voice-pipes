@@ -343,14 +343,24 @@ export function TurnCardHeader({ utt, displayState, turnStatus, summary, orchTur
 
         {summary?.ttfb_ms != null && (() => {
           const anchor = summary.ttfb_anchor_source ? describeAnchorSource(summary.ttfb_anchor_source) : null;
+          const leadSil = summary.tts_leading_silence_ms;
+          const audible = summary.tts_audible_ttfb_ms;
           const tip = [
             'Time to First Byte (audio): end-of-speech anchor → first audio byte',
+            leadSil != null && leadSil > 0
+              ? `+${Math.round(leadSil)}ms leading silence${audible != null ? ` → ${Math.round(audible)}ms audible` : ''}`
+              : null,
             anchor ? `anchor: ${anchor.label} (${anchor.detail})` : null,
             summary.first_text_ms != null ? `first transcript delta at ${Math.round(summary.first_text_ms)} ms` : null,
           ].filter(Boolean).join(' · ');
           return (
             <span className="flex items-center gap-1" title={tip}>
               TTFB {Math.round(summary.ttfb_ms)}ms
+              {leadSil != null && leadSil >= 50 && (
+                <span className={`hidden md:inline text-[10px] ${leadSil >= 100 ? (isDark ? 'text-amber-400/80' : 'text-amber-600') : 'opacity-70'}`}>
+                  (+{Math.round(leadSil)}ms sil)
+                </span>
+              )}
             </span>
           );
         })()}

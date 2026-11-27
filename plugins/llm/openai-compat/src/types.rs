@@ -153,16 +153,21 @@ pub struct FunctionCallDelta {
 
 // ── Shared types ────────────────────────────────────────────
 
+/// Prompt token cache breakdown reported by OpenAI-compatible APIs.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+pub struct PromptTokensDetails {
+    #[serde(default)]
+    pub cached_tokens: Option<u32>,
+}
+
 /// Token usage statistics.
 #[derive(Debug, Clone, Deserialize, Serialize)]
-#[expect(
-    clippy::struct_field_names,
-    reason = "the OpenAI usage object's own field names"
-)]
 pub struct Usage {
     pub prompt_tokens: u32,
     pub completion_tokens: u32,
     pub total_tokens: u32,
+    #[serde(default)]
+    pub prompt_tokens_details: Option<PromptTokensDetails>,
 }
 
 // ── Error response ──────────────────────────────────────────

@@ -413,6 +413,13 @@ impl OpenAiCompatProcessor {
                 TextFragment::new(final_text)
                     .with_is_end_of_response(true)
                     .with_token_count(turn.usage.as_ref().map(|u| u.completion_tokens))
+                    .with_input_tokens(turn.usage.as_ref().map(|u| u.prompt_tokens))
+                    .with_cached_tokens(
+                        turn.usage
+                            .as_ref()
+                            .and_then(|u| u.prompt_tokens_details.as_ref())
+                            .and_then(|d| d.cached_tokens),
+                    )
                     // A response that never reached a sentence boundary has
                     // its first tokens here: the TTFT goes with them.
                     .with_first_token_ms(turn.pending_first_token_ms.take()),

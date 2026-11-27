@@ -40,9 +40,12 @@ this page is the short version.
 | `ttft_ms` | `ms` | `provider` | `prompt_submitted` → `first_token`<br>*(contained in `llm_wait_ms`)* | Provider request dispatch to first non-empty generated token |
 | `generation_ms` | `ms` | `provider` | `first_token` → `last_token` | Time from first generated token to stream completion |
 | `token_count` | `count` | `provider` | `first_token` → `last_token` | Total output tokens generated |
+| `input_tokens` | `count` | `provider` | `prompt_submitted` → `last_token` | Authoritative prompt/input token count reported by the LLM provider |
+| `cached_tokens` | `count` | `provider` | `prompt_submitted` → `last_token` | Prompt tokens served from the provider's prefix/KV cache, when reported |
 | `token_estimate` | `count` | `provider` | `first_token` → `last_token` | Estimated output token count when exact count unavailable |
 | `llm_perceived_ttft_ms` | `ms` | `engine` | `turn_commit` → `first_token`<br>*(contained in `llm_wait_ms`)* | Turn commit to first LLM token, including scheduling and task queue wait |
 | `llm_wait_ms` | `ms` | `engine` | `turn_commit` → `first_text_fragment` | Engine-measured contiguous wait from turn commit to first text fragment handed to TTS |
+| `text_aggregation_ms` | `ms` | `engine` | `first_token` → `first_text_fragment`<br>*(contained in `llm_wait_ms`)* | Time spent buffering streaming LLM tokens into the first speakable sentence/clause fragment |
 | `stage_skipped_reason` | `raw` | `engine` | `turn_commit` → `turn_commit` | Why the LLM stage did not run (e.g. agent_say or speculative_accept) |
 | `speculative_rollbacks` | `count` | `engine` | `turn_commit` → `turn_end` | Count of speculative prediction rollbacks during turn |
 | `speculative_tokens_generated` | `count` | `engine` | `turn_commit` → `turn_end` | Total tokens speculatively generated ahead of time |
@@ -54,6 +57,8 @@ this page is the short version.
 | Key | Unit | Owner | Anchors | Meaning / Includes |
 |---|---|---|---|---|
 | `ttfb_ms` | `ms` | `provider` | `first_text_fragment` → `first_audio_chunk`<br>*(contained in `tts_wait_ms`)* | First text fragment received by TTS to first raw audio chunk produced |
+| `tts_leading_silence_ms` | `ms` | `engine` | `first_audio_chunk` → `first_audible_sample` | Leading silence inside the synthesized PCM stream before the first audible 10 ms frame (>= -42 dBFS) |
+| `tts_audible_ttfb_ms` | `ms` | `engine` | `first_text_fragment` → `first_audible_sample` | Perceived TTS time-to-first-audio (ttfb_ms + tts_leading_silence_ms), accounting for leading silence before speech onset |
 | `tts_wait_ms` | `ms` | `engine` | `first_text_fragment` → `first_audio_chunk` | Engine-measured contiguous TTS stage wait to first raw audio chunk |
 | `output_wait_ms` | `ms` | `engine` | `first_audio_chunk` → `first_sent_audio` | Engine-measured contiguous output stage wait from first audio chunk to first emitted audio frame |
 | `commit_to_first_audio_ms` | `ms` | `engine` | `turn_commit` → `first_sent_audio` | Engine-measured total post-commit wait (llm_wait_ms + tts_wait_ms + output_wait_ms) |

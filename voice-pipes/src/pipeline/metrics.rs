@@ -492,6 +492,16 @@ impl ComponentMetricDescriptor {
                     .anchors("first_token", "last_token")
                     .owner("provider")
                     .includes("Total output tokens generated"),
+                MetricFieldDescriptor::new("input_tokens", "Input tokens", Count)
+                    .diagnostic()
+                    .anchors("prompt_submitted", "last_token")
+                    .owner("provider")
+                    .includes("Authoritative prompt/input token count reported by the LLM provider"),
+                MetricFieldDescriptor::new("cached_tokens", "Cached tokens", Count)
+                    .diagnostic()
+                    .anchors("prompt_submitted", "last_token")
+                    .owner("provider")
+                    .includes("Prompt tokens served from the provider's prefix/KV cache, when reported"),
                 MetricFieldDescriptor::new("token_estimate", "Token estimate", Count)
                     .diagnostic()
                     .anchors("first_token", "last_token")
@@ -512,6 +522,12 @@ impl ComponentMetricDescriptor {
                     .anchors("turn_commit", "first_text_fragment")
                     .owner("engine")
                     .includes("Engine-measured contiguous wait from turn commit to first text fragment handed to TTS"),
+                MetricFieldDescriptor::new("text_aggregation_ms", "Text aggregation (token -> frag)", Ms)
+                    .diagnostic()
+                    .anchors("first_token", "first_text_fragment")
+                    .owner("engine")
+                    .contained_in("llm_wait_ms")
+                    .includes("Time spent buffering streaming LLM tokens into the first speakable sentence/clause fragment"),
                 MetricFieldDescriptor::new("stage_skipped_reason", "Stage skipped reason", Raw)
                     .diagnostic()
                     .anchors("turn_commit", "turn_commit")
@@ -570,6 +586,16 @@ impl ComponentMetricDescriptor {
                     .owner("provider")
                     .contained_in("tts_wait_ms")
                     .includes("First text fragment received by TTS to first raw audio chunk produced"),
+                MetricFieldDescriptor::new("tts_leading_silence_ms", "TTS leading silence", Ms)
+                    .diagnostic()
+                    .anchors("first_audio_chunk", "first_audible_sample")
+                    .owner("engine")
+                    .includes("Leading silence inside the synthesized PCM stream before the first audible 10 ms frame (>= -42 dBFS)"),
+                MetricFieldDescriptor::new("tts_audible_ttfb_ms", "TTS audible TTFB", Ms)
+                    .diagnostic()
+                    .anchors("first_text_fragment", "first_audible_sample")
+                    .owner("engine")
+                    .includes("Perceived TTS time-to-first-audio (ttfb_ms + tts_leading_silence_ms), accounting for leading silence before speech onset"),
                 MetricFieldDescriptor::new("tts_wait_ms", "TTS stage wait (frag -> audio)", Ms)
                     .diagnostic()
                     .anchors("first_text_fragment", "first_audio_chunk")

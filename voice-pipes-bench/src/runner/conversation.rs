@@ -225,7 +225,7 @@ where
                     "source": path.display().to_string(),
                     "scenario_id": scenario_id,
                     "experiment_id": experiment_id,
-                    "speed": config.inject_speed,
+                    "speed": if config.inject_speed == 0.0 { 1.0 } else { config.inject_speed },
                 }
             });
             sink.send(Message::Text(msg.to_string().into()))

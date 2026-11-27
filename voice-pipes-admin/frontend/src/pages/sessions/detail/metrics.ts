@@ -9,8 +9,14 @@ export interface AggregatedSessionMetrics {
   totalTurns: number;
   
   avgTtftMs: number | null;
+  p95TtftMs?: number | null;
   avgTtfbMs: number | null;
+  p95TtfbMs?: number | null;
+  avgLeadingSilenceMs?: number | null;
+  avgAudibleTtfbMs?: number | null;
+  p95AudibleTtfbMs?: number | null;
   avgEndpointingMs: number | null;
+  p95EndpointingMs?: number | null;
   avgBargeInRttMs: number | null;
   
   serverBargeIns: number;
@@ -46,13 +52,23 @@ export interface AggregatedSessionMetrics {
  */
 export function computeSessionMetrics(utterances: Utterance[], events: SessionEvent[]): AggregatedSessionMetrics {
   const validUtterances = utterances.filter(u => !u.summary?.terminated);
-  
-  const ttftVals = validUtterances.map(u => u.summary?.ttft_ms).filter((v): v is number => typeof v === 'number');
-  const ttfbVals = validUtterances.map(u => u.summary?.ttfb_ms).filter((v): v is number => typeof v === 'number');
-  const endptVals = validUtterances.map(u => u.summary?.endpointing_ms).filter((v): v is number => typeof v === 'number');
+  // VPO-Metrics §3.1: exclude agent-initiated turns from user-latency aggregates.
+  const userUtterances = validUtterances.filter(u => u.metric_snapshot?.initiator !== 'agent');
+
+  const ttftVals = userUtterances.map(u => u.summary?.ttft_ms).filter((v): v is number => typeof v === 'number');
+  const ttfbVals = userUtterances.map(u => u.summary?.ttfb_ms).filter((v): v is number => typeof v === 'number');
+  const leadSilVals = userUtterances.map(u => u.summary?.tts_leading_silence_ms).filter((v): v is number => typeof v === 'number');
+  const audibleTtfbVals = userUtterances.map(u => u.summary?.tts_audible_ttfb_ms).filter((v): v is number => typeof v === 'number');
+  const endptVals = userUtterances.map(u => u.summary?.endpointing_ms).filter((v): v is number => typeof v === 'number');
   const rttVals = validUtterances.map(u => u.summary?.barge_in_rtt_ms).filter((v): v is number => typeof v === 'number');
-  
+
   const avg = (arr: number[]) => arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
+  const p95 = (arr: number[]): number | null => {
+    if (arr.length < 4) return null;
+    const sorted = [...arr].sort((a, b) => a - b);
+    const idx = Math.min(sorted.length - 1, Math.round(0.95 * (sorted.length - 1)));
+    return Math.round(sorted[idx]);
+  };
 
   // Interruptions
   const serverBargeIns = validUtterances.filter(u => u.summary?.interrupted && u.summary?.interrupt_trigger === 'server_vad').length;
@@ -131,10 +147,16 @@ export function computeSessionMetrics(utterances: Utterance[], events: SessionEv
     terminatedTurns: utterances.filter(u => u.summary?.terminated).length,
     totalTurns: utterances.length,
     
-    avgTtftMs: avg(ttftVals) ? Math.round(avg(ttftVals)!) : null,
-    avgTtfbMs: avg(ttfbVals) ? Math.round(avg(ttfbVals)!) : null,
-    avgEndpointingMs: avg(endptVals) ? Math.round(avg(endptVals)!) : null,
-    avgBargeInRttMs: avg(rttVals) ? Math.round(avg(rttVals)!) : null,
+    avgTtftMs: avg(ttftVals) != null ? Math.round(avg(ttftVals)!) : null,
+    p95TtftMs: p95(ttftVals),
+    avgTtfbMs: avg(ttfbVals) != null ? Math.round(avg(ttfbVals)!) : null,
+    p95TtfbMs: p95(ttfbVals),
+    avgLeadingSilenceMs: avg(leadSilVals) != null ? Math.round(avg(leadSilVals)!) : null,
+    avgAudibleTtfbMs: avg(audibleTtfbVals) != null ? Math.round(avg(audibleTtfbVals)!) : null,
+    p95AudibleTtfbMs: p95(audibleTtfbVals),
+    avgEndpointingMs: avg(endptVals) != null ? Math.round(avg(endptVals)!) : null,
+    p95EndpointingMs: p95(endptVals),
+    avgBargeInRttMs: avg(rttVals) != null ? Math.round(avg(rttVals)!) : null,
     
     serverBargeIns,
     clientBargeIns,

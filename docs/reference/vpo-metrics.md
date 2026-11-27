@@ -246,8 +246,11 @@ The STT span's `latency_ms` (and `extras["processing_ms"]`) carries the authorit
 |---|---|---|
 | `ttft_ms` | ms | Time to first token, from LLM receiving the transcript to its first output token. |
 | `llm_wait_ms` | ms | Engine-measured contiguous LLM stage wait (`utterance.committed_at` to first LLM text fragment). |
+| `text_aggregation_ms` | ms | Time spent buffering streaming LLM tokens into the first speakable text fragment handed to TTS (`first_token` → `first_text_fragment`, `contained_in: "llm_wait_ms"`). Omitted (`null`) when the provider does not report `first_token_ms`. |
 | `generation_ms` | ms | Token generation duration (first to last token). |
 | `token_count` | count | Output tokens generated (authoritative when provided). |
+| `input_tokens` | count | Prompt/input tokens consumed by the LLM request (authoritative when provided). |
+| `cached_tokens` | count | Prompt tokens served from the provider's prefix/KV cache (when provided). |
 | `token_estimate` | count | Estimated tokens when an exact count is unavailable. |
 | `llm_perceived_ttft_ms` | ms | TTFT including scheduling/queueing overhead, as the pipeline experienced it. |
 | `stage_skipped_reason` | raw | Why the LLM stage did not run (`"agent_say"` or `"speculative_accept"`). |
@@ -264,6 +267,8 @@ The STT span's `latency_ms` (and `extras["processing_ms"]`) carries the authorit
 | Key | Unit | Definition |
 |---|---|---|
 | `ttfb_ms` | ms | Time to first audio byte, from synthesis request (first text fragment in) to first TTS audio emitted (`contained_in: "tts_wait_ms"`). |
+| `tts_leading_silence_ms` | ms | Leading digital silence inside the synthesized PCM stream before the first audible 10 ms frame (`RMS ≥ −42 dBFS`, scanned up to 2000 ms). Omitted (`null`) if no audible onset is detected or TTS was skipped. |
+| `tts_audible_ttfb_ms` | ms | Perceived TTS time-to-first-audio (`ttfb_ms + tts_leading_silence_ms`), measuring first *audible* speech rather than first non-empty PCM packet so silence-padded streams cannot appear artificially fast. |
 | `tts_internal_ttfb_ms` | ms | Pre-pacer provider startup and first audio chunk generation before engine queueing (`contained_in: "tts_wait_ms"`). |
 | `tts_wait_ms` | ms | Engine-measured contiguous TTS stage wait (first LLM text fragment to first raw TTS audio chunk). |
 | `output_wait_ms` | ms | Engine-measured contiguous output stage wait (first raw TTS audio chunk to first emitted audio frame after post-processing/pacing). |
@@ -375,6 +380,10 @@ MUST NOT be reported if a required input of the stated provenance is missing.
 approximated from server timestamps. Barge-in RTT is the one KPI that legitimately crosses the
 client/server boundary; it MUST use the protocol's explicit clock-correlation (ping/pong RTT),
 never a raw subtraction of client epoch from server monotonic time.
+
+> **Terminology note (avoiding cross-benchmark acronym collisions).**
+> - **VPO `TTFA`** (`audio_receive − speech_end`, client-measured) is a **full-turn** metric covering endpointing, STT, LLM, TTS, and network delivery. External TTS-only benchmarks often use the acronym "TTFA" for **TTS-stage audio-onset latency** (`synthesis_start → first_audible_sample`); in VPO that stage-level quantity is **`tts_audible_ttfb_ms`** (`ttfb_ms + tts_leading_silence_ms`).
+> - **VPO `ttft_ms`** is **LLM** time-to-first-token (`prompt_submitted → first_token`), whereas some streaming ASR benchmarks use "TTFT" for STT time-to-first-partial-transcript. Always compare metrics by their declared start/end anchors, not by acronym alone.
 
 ---
 
@@ -499,11 +508,13 @@ in [`vpo-semconv.yaml`](vpo-semconv.yaml) for direct integration and external ad
 STT:        processing_ms, endpointing_ms, stt_audio_duration_ms, stt_rtfx,
             stt_algorithmic_delay_ms, stt_effective_latency_ms,
             stt_inference_count, stt_streaming_window_ms
-LLM:        ttft_ms, llm_wait_ms, generation_ms, token_count, token_estimate,
-            llm_perceived_ttft_ms, stage_skipped_reason, speculative_rollbacks,
+LLM:        ttft_ms, llm_wait_ms, text_aggregation_ms, generation_ms, token_count,
+            input_tokens, cached_tokens, token_estimate, llm_perceived_ttft_ms,
+            stage_skipped_reason, speculative_rollbacks,
             speculative_tokens_generated, speculative_tokens_accepted,
             speculative_efficiency
-TTS:        ttfb_ms, tts_internal_ttfb_ms, tts_wait_ms, output_wait_ms,
+TTS:        ttfb_ms, tts_leading_silence_ms, tts_audible_ttfb_ms,
+            tts_internal_ttfb_ms, tts_wait_ms, output_wait_ms,
             commit_to_first_audio_ms, synthesis_ms, audio_duration_ms, rtf, rtfx,
             chars, sample_rate, stage_skipped_reason
 Realtime:   ttfb_ms, provider_endpointing_ms, first_text_ms, ttfb_anchor_source,

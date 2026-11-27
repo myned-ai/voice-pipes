@@ -453,6 +453,7 @@ pub async fn run_experiment(
     let results = ExperimentResults {
         experiment_id: experiment_id.to_string(),
         completed_at: Utc::now(),
+        injection_speed: Some(config.inject_speed),
         variant_results: all_variant_results.clone(),
     };
     store.save_results(&results).await?;
@@ -761,6 +762,8 @@ async fn run_scenario(
         llm_generation_ms: avg(&llm_generations),
         llm_tokens: avg_llm_tokens,
         tts_ttfb_ms: avg(&tts_ttfbs),
+        tts_leading_silence_ms: None,
+        tts_audible_ttfb_ms: None,
         tts_synthesis_ms: avg(&tts_synth_all),
         tts_audio_duration_s: avg(&tts_audio_durs),
         tts_sample_rate: tts_sample_rate_last,

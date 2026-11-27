@@ -232,4 +232,36 @@ describe('computeSessionMetrics — turn counts', () => {
     expect(m.clientBargeIns).toBe(1);
     expect(m.playbackBargeIns).toBe(1);
   });
+
+  it('excludes agent-initiated turns from latency aggregates and computes p95 + leading silence', () => {
+    const mk = (id: number, ttft: number, ttfb: number, lead: number, initiator?: 'user' | 'agent'): Utterance => ({
+      utterance_id: id,
+      summary: {
+        ttft_ms: ttft,
+        ttfb_ms: ttfb,
+        tts_leading_silence_ms: lead,
+        tts_audible_ttfb_ms: ttfb + lead,
+      },
+      metric_snapshot: {
+        utterance_id: id,
+        total_ms: ttfb + 500,
+        interrupted: false,
+        initiator,
+        components: [],
+      },
+    });
+    const m = computeSessionMetrics([
+      mk(1, 100, 200, 40),
+      mk(2, 120, 220, 60),
+      mk(3, 140, 240, 80),
+      mk(4, 500, 800, 100),
+      mk(10001, 9000, 9000, 9000, 'agent'),
+    ], []);
+    expect(m.avgTtftMs).toBe(215);
+    expect(m.p95TtftMs).toBe(500);
+    expect(m.p95TtfbMs).toBe(800);
+    expect(m.avgLeadingSilenceMs).toBe(70);
+    expect(m.avgAudibleTtfbMs).toBe(435);
+    expect(m.p95AudibleTtfbMs).toBe(900);
+  });
 });

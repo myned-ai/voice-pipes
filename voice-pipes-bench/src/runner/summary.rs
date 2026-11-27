@@ -112,10 +112,7 @@ pub(super) fn compute_summary(scenarios: &[ScenarioResult]) -> VariantSummary {
         .iter()
         .filter_map(|s| s.metrics.llm_generation_ms)
         .collect();
-    let tts_ttfbs: Vec<f64> = scenarios
-        .iter()
-        .filter_map(|s| s.metrics.tts_ttfb_ms)
-        .collect();
+    let tts_samples = collect_tts_samples(scenarios);
     let tts_synths: Vec<f64> = scenarios
         .iter()
         .filter_map(|s| s.metrics.tts_synthesis_ms)
@@ -130,10 +127,6 @@ pub(super) fn compute_summary(scenarios: &[ScenarioResult]) -> VariantSummary {
         .filter_map(|s| s.metrics.tts_chars_per_second)
         .collect();
 
-    // TTS TTFB percentiles (separate sorted view).
-    let mut tts_ttfb_sorted: Vec<u64> = tts_ttfbs.iter().map(|v| *v as u64).collect();
-    tts_ttfb_sorted.sort_unstable();
-
     // TTS failure rate: scenarios that recorded a tts_error / total scenarios.
     let tts_fail_count = scenarios
         .iter()
@@ -144,21 +137,6 @@ pub(super) fn compute_summary(scenarios: &[ScenarioResult]) -> VariantSummary {
     } else {
         Some(tts_fail_count as f64 / scenarios.len() as f64)
     };
-
-    // Cold vs warm split is per-rep granularity, but we only have scenario-
-    // level aggregates here.  Approximate: scenarios with `tts_cold_start =
-    // true` had at least one cold rep contribute to their `tts_synthesis_ms`,
-    // so use those as cold means and the rest as warm means.
-    let cold_scenarios: Vec<f64> = scenarios
-        .iter()
-        .filter(|s| s.metrics.tts_cold_start)
-        .filter_map(|s| s.metrics.tts_synthesis_ms)
-        .collect();
-    let warm_scenarios: Vec<f64> = scenarios
-        .iter()
-        .filter(|s| !s.metrics.tts_cold_start)
-        .filter_map(|s| s.metrics.tts_synthesis_ms)
-        .collect();
 
     // tokens_per_second: for each scenario with both llm_tokens and llm_generation_ms,
     // compute tok/s and average across scenarios.
@@ -208,17 +186,36 @@ pub(super) fn compute_summary(scenarios: &[ScenarioResult]) -> VariantSummary {
     } else {
         Some(barge_results.len() as u32)
     };
-    let barge_in_success_rate = if barge_results.is_empty() {
+    let pos_barge: Vec<&&BargeInResult> = barge_results
+        .iter()
+        .filter(|b| !b.expected_no_interrupt)
+        .collect();
+    let neg_barge: Vec<&&BargeInResult> = barge_results
+        .iter()
+        .filter(|b| b.expected_no_interrupt)
+        .collect();
+    let barge_in_success_rate = if pos_barge.is_empty() {
         None
     } else {
-        let ok = barge_results.iter().filter(|b| b.interrupted).count();
-        Some(ok as f64 / barge_results.len() as f64)
+        let ok = pos_barge.iter().filter(|b| b.interrupted).count();
+        Some(ok as f64 / pos_barge.len() as f64)
+    };
+    let barge_in_false_trigger_rate = if neg_barge.is_empty() {
+        None
+    } else {
+        let false_pos = neg_barge.iter().filter(|b| b.interrupted).count();
+        Some(false_pos as f64 / neg_barge.len() as f64)
     };
     let mut barge_rtts: Vec<u64> = barge_results
         .iter()
         .filter_map(|b| b.barge_in_rtt_ms)
         .collect();
     barge_rtts.sort_unstable();
+    let mut barge_overruns: Vec<u64> = barge_results
+        .iter()
+        .filter_map(|b| b.tts_overrun_ms)
+        .collect();
+    barge_overruns.sort_unstable();
     let mut barge_recovs: Vec<u64> = barge_results.iter().filter_map(|b| b.recovery_ms).collect();
     barge_recovs.sort_unstable();
 
@@ -229,6 +226,7 @@ pub(super) fn compute_summary(scenarios: &[ScenarioResult]) -> VariantSummary {
         avg_e2e_latency_ms: avg(&latencies),
         p50_e2e_latency_ms: percentile(&lat_sorted, 50.0),
         p90_e2e_latency_ms: percentile(&lat_sorted, 90.0),
+        p95_e2e_latency_ms: percentile(&lat_sorted, 95.0),
         p99_e2e_latency_ms: percentile(&lat_sorted, 99.0),
         avg_ttft_ms: avg(&ttfts),
         avg_ttfb_ms: avg(&ttfbs),
@@ -237,27 +235,115 @@ pub(super) fn compute_summary(scenarios: &[ScenarioResult]) -> VariantSummary {
         total_cost_estimate: None,
         avg_stt_latency_ms: avg(&stt_lats),
         avg_llm_generation_ms: avg(&llm_gens),
-        avg_tts_ttfb_ms: avg(&tts_ttfbs),
-        p50_tts_ttfb_ms: percentile(&tts_ttfb_sorted, 50.0),
-        p90_tts_ttfb_ms: percentile(&tts_ttfb_sorted, 90.0),
-        p99_tts_ttfb_ms: percentile(&tts_ttfb_sorted, 99.0),
+        avg_tts_ttfb_ms: avg(&tts_samples.ttfbs),
+        p50_tts_ttfb_ms: percentile(&tts_samples.ttfb_sorted, 50.0),
+        p90_tts_ttfb_ms: percentile(&tts_samples.ttfb_sorted, 90.0),
+        p95_tts_ttfb_ms: percentile(&tts_samples.ttfb_sorted, 95.0),
+        p99_tts_ttfb_ms: percentile(&tts_samples.ttfb_sorted, 99.0),
+        avg_tts_leading_silence_ms: avg(&tts_samples.leading_silences),
+        avg_tts_audible_ttfb_ms: avg(&tts_samples.audible_ttfbs),
+        p50_tts_audible_ttfb_ms: percentile(&tts_samples.audible_ttfb_sorted, 50.0),
+        p95_tts_audible_ttfb_ms: percentile(&tts_samples.audible_ttfb_sorted, 95.0),
+        p99_tts_audible_ttfb_ms: percentile(&tts_samples.audible_ttfb_sorted, 99.0),
         avg_tts_synthesis_ms: avg(&tts_synths),
         avg_tts_audio_duration_s: avg(&tts_audio_durs),
         avg_tts_rtf: avg(&tts_rtfs),
         avg_tts_chars_per_second: avg(&tts_cps),
         tts_failure_rate,
-        cold_tts_synthesis_ms: avg(&cold_scenarios),
-        warm_tts_synthesis_ms: avg(&warm_scenarios),
+        cold_tts_synthesis_ms: avg(&tts_samples.cold_synths),
+        warm_tts_synthesis_ms: avg(&tts_samples.warm_synths),
         avg_tokens_per_second: avg(&tps_values),
         conversation_scenarios,
         avg_turns_completed,
         avg_turn_latency_ms,
         barge_in_scenarios,
         barge_in_success_rate,
+        barge_in_false_trigger_rate,
         p50_barge_in_rtt_ms: percentile(&barge_rtts, 50.0),
         p95_barge_in_rtt_ms: percentile(&barge_rtts, 95.0),
+        p50_tts_overrun_ms: percentile(&barge_overruns, 50.0),
+        p95_tts_overrun_ms: percentile(&barge_overruns, 95.0),
         p50_recovery_ms: percentile(&barge_recovs, 50.0),
         p95_recovery_ms: percentile(&barge_recovs, 95.0),
+    }
+}
+
+struct TtsSummarySamples {
+    ttfbs: Vec<f64>,
+    ttfb_sorted: Vec<u64>,
+    leading_silences: Vec<f64>,
+    audible_ttfbs: Vec<f64>,
+    audible_ttfb_sorted: Vec<u64>,
+    cold_synths: Vec<f64>,
+    warm_synths: Vec<f64>,
+}
+
+/// Collect raw per-entry TTS samples when `tts_entries` are present so
+/// percentiles (`p50/p90/p95/p99`) and cold/warm splits reflect individual
+/// utterances instead of smoothed scenario means. Falls back to scenario-level
+/// metrics for non-corpus scenarios and legacy results.
+fn collect_tts_samples(scenarios: &[ScenarioResult]) -> TtsSummarySamples {
+    let mut ttfbs = Vec::new();
+    let mut leading_silences = Vec::new();
+    let mut audible_ttfbs = Vec::new();
+    let mut cold_synths = Vec::new();
+    let mut warm_synths = Vec::new();
+
+    for s in scenarios {
+        if let Some(entries) = s.tts_entries.as_deref()
+            && !entries.is_empty()
+        {
+            for e in entries {
+                if let Some(v) = e.ttfb_ms {
+                    ttfbs.push(v as f64);
+                }
+                if let Some(v) = e.leading_silence_ms {
+                    leading_silences.push(v as f64);
+                }
+                if let Some(v) = e.audible_ttfb_ms {
+                    audible_ttfbs.push(v as f64);
+                }
+                if let Some(v) = e.synthesis_ms {
+                    if e.cold_start {
+                        cold_synths.push(v as f64);
+                    } else {
+                        warm_synths.push(v as f64);
+                    }
+                }
+            }
+            continue;
+        }
+        if let Some(v) = s.metrics.tts_ttfb_ms {
+            ttfbs.push(v);
+        }
+        if let Some(v) = s.metrics.tts_leading_silence_ms {
+            leading_silences.push(v);
+        }
+        if let Some(v) = s.metrics.tts_audible_ttfb_ms {
+            audible_ttfbs.push(v);
+        }
+        if let Some(v) = s.metrics.tts_synthesis_ms {
+            if s.metrics.tts_cold_start {
+                cold_synths.push(v);
+            } else {
+                warm_synths.push(v);
+            }
+        }
+    }
+
+    let mut ttfb_sorted: Vec<u64> = ttfbs.iter().map(|v| *v as u64).collect();
+    ttfb_sorted.sort_unstable();
+    let mut audible_ttfb_sorted: Vec<u64> = audible_ttfbs.iter().map(|v| *v as u64).collect();
+    audible_ttfb_sorted.sort_unstable();
+
+    TtsSummarySamples {
+        ttfbs,
+        ttfb_sorted,
+        leading_silences,
+        audible_ttfbs,
+        audible_ttfb_sorted,
+        cold_synths,
+        warm_synths,
     }
 }
 

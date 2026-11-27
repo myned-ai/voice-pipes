@@ -19,27 +19,10 @@ pub struct PronunciationReport {
     pub inserted_words: Vec<String>,
 }
 
-/// Normalize text for fair pronunciation scoring (strip punctuation, lowercase, collapse spaces).
+/// Normalize text for fair pronunciation scoring (delegates to the shared
+/// deterministic WER normalizer in [`crate::scoring::normalize_text_for_wer`]).
 pub fn normalize_for_alignment(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut last_space = true;
-    for ch in text.chars() {
-        let mapped = match ch {
-            '\u{2018}' | '\u{2019}' | '\'' => '\'',
-            c if c.is_alphanumeric() => c.to_ascii_lowercase(),
-            _ => ' ',
-        };
-        if mapped == ' ' {
-            if !last_space {
-                out.push(' ');
-                last_space = true;
-            }
-        } else {
-            out.push(mapped);
-            last_space = false;
-        }
-    }
-    out.trim().to_string()
+    crate::scoring::normalize_text_for_wer(text)
 }
 
 /// Compute normalized `WER`, `CER`, word recall, and exact missing/substituted/inserted words.

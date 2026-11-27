@@ -123,6 +123,8 @@ export const TurnCard = ({ utt, sessionId, llmTiming, ttsTiming, sttTiming, orch
           totalMs={summary?.total_ms ?? orchTurn?.total_ms}
           llmGenerationMs={summary?.generation_ms ?? llmTiming?.generate_ms}
           ttsTtfbMs={summary?.tts_internal_ttfb_ms}
+          ttsLeadingSilenceMs={summary?.tts_leading_silence_ms}
+          textAggregationMs={summary?.text_aggregation_ms}
           endpointingMs={endpointingMs}
           llmOutputTokens={llmTiming?.output_tokens}
           llmCacheResetMs={llmTiming?.cache_reset_ms}
@@ -356,7 +358,14 @@ export const TurnCard = ({ utt, sessionId, llmTiming, ttsTiming, sttTiming, orch
             <span className={`font-mono font-semibold ${isDark ? 'text-amber-400/80' : 'text-amber-600'}`}>{llmTiming.tokens_per_sec.toFixed(1)} tok/s</span>
           )}
           {llmTiming?.prompt_tokens != null && (
-            <span>{llmTiming.prompt_tokens}↑ {llmTiming.output_tokens ?? 0}↓ tok</span>
+            <span>
+              {llmTiming.prompt_tokens}↑ {llmTiming.output_tokens ?? 0}↓ tok
+              {summary?.cached_tokens != null && summary.cached_tokens > 0 && (
+                <span className="ml-1 opacity-75" title="Prompt tokens served from provider prefix/KV cache">
+                  ({summary.cached_tokens} cached)
+                </span>
+              )}
+            </span>
           )}
           {llmTiming?.first_sentence_chars != null && (
             <span>1st sent: {llmTiming.first_sentence_chars} ch</span>
@@ -389,6 +398,19 @@ export const TurnCard = ({ utt, sessionId, llmTiming, ttsTiming, sttTiming, orch
           {summary?.synthesis_ms != null && (
             <span title="Total TTS synthesis: first text fragment → last audio chunk (pre-pacer)">
               TTS {Math.round(summary.synthesis_ms)}ms
+            </span>
+          )}
+          {summary?.text_aggregation_ms != null && summary.text_aggregation_ms > 5 && (
+            <span title="Sentence/clause aggregation wait: first LLM token → first text fragment handed to TTS">
+              agg {Math.round(summary.text_aggregation_ms)}ms
+            </span>
+          )}
+          {summary?.tts_leading_silence_ms != null && summary.tts_leading_silence_ms >= 20 && (
+            <span
+              className={summary.tts_leading_silence_ms >= 100 ? (isDark ? 'text-amber-400/90' : 'text-amber-600') : undefined}
+              title={`Leading silence inside TTS stream before first audible 10 ms frame (>= -42 dBFS)${summary.tts_audible_ttfb_ms != null ? ` · audible TTFB ${Math.round(summary.tts_audible_ttfb_ms)}ms` : ''}`}
+            >
+              lead sil {Math.round(summary.tts_leading_silence_ms)}ms
             </span>
           )}
           {s2sEndpointingMs != null && (

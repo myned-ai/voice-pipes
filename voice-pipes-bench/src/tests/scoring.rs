@@ -23,6 +23,20 @@ fn wer_case_insensitive() {
 }
 
 #[test]
+fn wer_strips_punctuation_and_normalizes_contractions_and_digits() {
+    assert_eq!(compute_wer("Hello, world!", "hello world"), 0.0);
+    assert_eq!(
+        compute_wer("I don't know; it's fine.", "I do not know it is fine"),
+        0.0
+    );
+    assert_eq!(
+        compute_wer("Your order is 4 8 2.", "your order is four eight two"),
+        0.0
+    );
+    assert_eq!(compute_wer("Hello there", "uh hello um there"), 0.0);
+}
+
+#[test]
 fn wer_empty_ref_with_hyp_is_one() {
     assert_eq!(compute_wer("", "anything"), 1.0);
     assert_eq!(compute_wer("", ""), 0.0);

@@ -169,6 +169,34 @@
         "owner": "provider"
       },
       {
+        "key": "input_tokens",
+        "label": "Input tokens",
+        "unit": "count",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "prompt_submitted",
+        "end_anchor": "last_token",
+        "includes": "Authoritative prompt/input token count reported by the LLM provider",
+        "owner": "provider"
+      },
+      {
+        "key": "cached_tokens",
+        "label": "Cached tokens",
+        "unit": "count",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "prompt_submitted",
+        "end_anchor": "last_token",
+        "includes": "Prompt tokens served from the provider's prefix/KV cache, when reported",
+        "owner": "provider"
+      },
+      {
         "key": "token_estimate",
         "label": "Token estimate",
         "unit": "count",
@@ -210,6 +238,21 @@
         "end_anchor": "first_text_fragment",
         "includes": "Engine-measured contiguous wait from turn commit to first text fragment handed to TTS",
         "owner": "engine"
+      },
+      {
+        "key": "text_aggregation_ms",
+        "label": "Text aggregation (token -> frag)",
+        "unit": "ms",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "first_token",
+        "end_anchor": "first_text_fragment",
+        "includes": "Time spent buffering streaming LLM tokens into the first speakable sentence/clause fragment",
+        "owner": "engine",
+        "contained_in": "llm_wait_ms"
       },
       {
         "key": "stage_skipped_reason",
@@ -304,6 +347,34 @@
         "includes": "First text fragment received by TTS to first raw audio chunk produced",
         "owner": "provider",
         "contained_in": "tts_wait_ms"
+      },
+      {
+        "key": "tts_leading_silence_ms",
+        "label": "TTS leading silence",
+        "unit": "ms",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "first_audio_chunk",
+        "end_anchor": "first_audible_sample",
+        "includes": "Leading silence inside the synthesized PCM stream before the first audible 10 ms frame (>= -42 dBFS)",
+        "owner": "engine"
+      },
+      {
+        "key": "tts_audible_ttfb_ms",
+        "label": "TTS audible TTFB",
+        "unit": "ms",
+        "health": {
+          "role": "diagnostic",
+          "direction": "lower_is_better",
+          "on_critical_path": false
+        },
+        "start_anchor": "first_text_fragment",
+        "end_anchor": "first_audible_sample",
+        "includes": "Perceived TTS time-to-first-audio (ttfb_ms + tts_leading_silence_ms), accounting for leading silence before speech onset",
+        "owner": "engine"
       },
       {
         "key": "tts_wait_ms",

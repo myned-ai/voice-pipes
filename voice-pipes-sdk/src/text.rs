@@ -145,9 +145,14 @@ pub struct TextFragment {
     pub is_end_of_response: bool,
     /// Optional per-fragment TTS parameter overrides.
     pub hints: Option<SynthesisHints>,
-    /// Real token count reported by the LLM backend. Set on the final
+    /// Real output token count reported by the LLM backend. Set on the final
     /// fragment; `None` on intermediate fragments.
     pub token_count: Option<u32>,
+    /// Authoritative prompt/input token count reported by the LLM backend.
+    /// Set on the final fragment when usage is available.
+    pub input_tokens: Option<u32>,
+    /// Prompt tokens served from the provider's KV/prefix cache, when reported.
+    pub cached_tokens: Option<u32>,
     /// Provider-measured time-to-first-token in milliseconds. Set on the
     /// first fragment that carries tokens; `None` on follow-up fragments and
     /// on providers that don't track TTFT.
@@ -177,6 +182,8 @@ impl TextFragment {
         with_is_end_of_response => is_end_of_response: bool,
         with_hints => hints: Option<SynthesisHints>,
         with_token_count => token_count: Option<u32>,
+        with_input_tokens => input_tokens: Option<u32>,
+        with_cached_tokens => cached_tokens: Option<u32>,
         with_first_token_ms => first_token_ms: Option<f64>,
         with_spoken_text => spoken_text: Option<String>,
     }

@@ -18,6 +18,13 @@ interface PipelineTimelineProps {
    *  sample. Distinct from the perceived `ttfbMs`; used to draw the TTS-startup
    *  sub-segment. Optional — when absent the TTS bar renders as a single block. */
   ttsTtfbMs?: number;
+  /** Leading silence (ms) inside the synthesized TTS PCM stream before the
+   *  first audible 10 ms frame (>= -42 dBFS). When >= 20 ms, drawn as a subtle
+   *  hatched sliver at the start of the TTS audio block. */
+  ttsLeadingSilenceMs?: number;
+  /** Time (ms) spent buffering streaming LLM tokens into the first speakable
+   *  text fragment handed to TTS (`first_token -> first_text_fragment`). */
+  textAggregationMs?: number;
   /** VAD silence window after last speech — used to split STT bar */
   endpointingMs?: number;
   /** llmTiming.output_tokens — for token tick marks */
@@ -68,7 +75,7 @@ export const GridLines = ({ gridLines, isDark, pct }: { gridLines: number[]; isD
 export const PipelineTimeline = ({
   sttMs, llmMs, ttsMs,
   ttftMs, ttfbMs, totalMs,
-  llmGenerationMs, ttsTtfbMs,
+  llmGenerationMs, ttsTtfbMs, ttsLeadingSilenceMs, textAggregationMs,
   endpointingMs,
   llmOutputTokens,
   llmCacheResetMs, llmPromptIngestMs, llmFirstTokenWithinGenMs,
@@ -518,6 +525,26 @@ export const PipelineTimeline = ({
                   {(pct(ttsEnd) - pct(ttsStart)) > 12 ? `${Math.round(ttsEnd - ttsStart)}ms` : ''}
                 </div>
               )}
+              {/* Leading silence sliver inside TTS stream before first audible
+                  frame (>= -42 dBFS), so silence-padded TTS models are visible. */}
+              {ttsLeadingSilenceMs != null && ttsLeadingSilenceMs >= 20 && ttfbMs != null && (() => {
+                const silEnd = Math.min(ttfbMs + ttsLeadingSilenceMs, ttsEnd);
+                const w = pct(silEnd) - pct(ttfbMs);
+                if (w <= 0.3) return null;
+                return (
+                  <div
+                    className="absolute top-0 h-full pointer-events-none"
+                    style={{
+                      left: `${pct(ttfbMs)}%`,
+                      width: `${w}%`,
+                      backgroundImage: isDark
+                        ? 'repeating-linear-gradient(45deg, rgba(15,23,42,0.55) 0, rgba(15,23,42,0.55) 3px, rgba(251,191,36,0.35) 3px, rgba(251,191,36,0.35) 6px)'
+                        : 'repeating-linear-gradient(45deg, rgba(255,255,255,0.55) 0, rgba(255,255,255,0.55) 3px, rgba(245,158,11,0.3) 3px, rgba(245,158,11,0.3) 6px)',
+                    }}
+                    title={`TTS leading silence: ${Math.round(ttsLeadingSilenceMs)}ms before first audible sample (audible TTFB ≈ ${Math.round(ttfbMs + ttsLeadingSilenceMs)}ms)${textAggregationMs != null && textAggregationMs > 5 ? ` · LLM text aggregation ${Math.round(textAggregationMs)}ms` : ''}`}
+                  />
+                );
+              })()}
               {/* Ghost the synthesized-but-unheard TTS tail (right of the
                   barge-in point) so undelivered audio is visually distinct. */}
               {bargeInMs != null && pct(ttsEnd) - pct(bargeInMs) > 0.5 && (

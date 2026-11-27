@@ -48,6 +48,18 @@ export interface TurnSummary {
   /** TTS pipeline-internal (pre-pacer) TTFB: first LLM fragment → first audio
    *  sample. Distinct from `ttfb_ms`; drives the timeline's TTS-startup segment. */
   tts_internal_ttfb_ms?: number;
+  /** Leading silence (ms) inside the synthesized TTS PCM stream before the
+   *  first audible 10 ms frame (>= -42 dBFS). */
+  tts_leading_silence_ms?: number;
+  /** Perceived TTS Time-to-First-Audio (ms): `ttfb_ms + tts_leading_silence_ms`. */
+  tts_audible_ttfb_ms?: number;
+  /** Time (ms) spent buffering streaming LLM tokens into the first speakable
+   *  text fragment handed to TTS (`first_token -> first_text_fragment`). */
+  text_aggregation_ms?: number;
+  /** Authoritative prompt/input token count reported by the LLM provider. */
+  input_tokens?: number;
+  /** Prompt tokens served from the provider's prefix/KV cache, when reported. */
+  cached_tokens?: number;
   /** End-to-end turn duration (canonical). */
   total_ms?: number;
   /** STT processing latency (canonical). */
@@ -477,8 +489,14 @@ export interface SessionMetrics {
   terminatedTurns: number;
   totalTurns: number;
   avgTtftMs: number | null;
+  p95TtftMs?: number | null;
   avgTtfbMs: number | null;
+  p95TtfbMs?: number | null;
+  avgLeadingSilenceMs?: number | null;
+  avgAudibleTtfbMs?: number | null;
+  p95AudibleTtfbMs?: number | null;
   avgEndpointingMs: number | null;
+  p95EndpointingMs?: number | null;
   avgBargeInRttMs: number | null;
   serverBargeIns: number;
   clientBargeIns: number;

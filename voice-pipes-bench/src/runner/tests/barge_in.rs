@@ -11,8 +11,10 @@ fn make_barge(
         interrupted,
         trigger: trigger.map(std::string::ToString::to_string),
         barge_in_rtt_ms: rtt,
+        tts_overrun_ms: None,
         recovery_ms: recovery,
         follow_up_completed,
+        expected_no_interrupt: false,
     }
 }
 
@@ -144,6 +146,32 @@ fn score_barge_in_passes_when_within_budget() {
     let mut failures = Vec::new();
     score_barge_in(&exp, &barge, &[], &mut failures);
     assert!(failures.is_empty(), "got failures: {failures:?}");
+}
+
+#[test]
+fn score_barge_in_flags_false_trigger_overrun_and_leaked_context() {
+    let exp = ScenarioExpected {
+        must_not_interrupt: true,
+        max_tts_overrun_ms: Some(100),
+        follow_up_must_not_mention: vec!["unheard secret".to_string()],
+        ..Default::default()
+    };
+    let mut barge = make_barge(true, Some("server_vad"), Some(40), Some(80), true);
+    barge.tts_overrun_ms = Some(250);
+    barge.expected_no_interrupt = true;
+    let turns = [turn_with_response(
+        "follow-up",
+        Some("As I said, the Unheard Secret is 42."),
+    )];
+    let mut failures = Vec::new();
+    score_barge_in(&exp, &barge, &turns, &mut failures);
+    assert!(failures.iter().any(|f| f.contains("must_not_interrupt")));
+    assert!(failures.iter().any(|f| f.contains("max_tts_overrun_ms")));
+    assert!(
+        failures
+            .iter()
+            .any(|f| f.contains("follow_up_must_not_mention"))
+    );
 }
 
 #[test]
