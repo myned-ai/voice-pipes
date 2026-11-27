@@ -105,7 +105,7 @@ fn gemma_preset(g: &Gemma) -> WizardChoice {
         WizardField::fixed("api_key", ""),
         WizardField::fixed(
             "system_prompt",
-            "You are a friendly voice assistant. Keep responses to one or two short sentences.",
+            "You are a friendly voice assistant. Keep responses to one or two short sentences. If your previous message ends with [interrupted by user], the user cut you off—do not continue or restart what you were saying unless asked; respond naturally to what they just said.",
         ),
         WizardField::fixed_literal("max_tokens", "1024"),
         WizardField::fixed_literal("temperature", "1.0"),

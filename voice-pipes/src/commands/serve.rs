@@ -1122,6 +1122,42 @@ async fn deregister(state: &WorkerState, internal_auth: &api::auth::SurfaceAuth)
     }
 }
 
+/// Spawn the periodic capture-retention sweeper off the startup path when
+/// audit capture retention is enabled.
+fn spawn_capture_retention_sweeper(state: &WorkerState) {
+    let audit = &state.config.pipeline.audit;
+    if audit.enabled
+        && audit.retention_days > 0
+        && let Some(dir) = audit.captures_dir.clone()
+    {
+        let days = audit.retention_days;
+        tokio::spawn(async move {
+            loop {
+                let sweep_dir = dir.clone();
+                let _ = tokio::task::spawn_blocking(move || {
+                    let report = crate::audit::retention::sweep_expired_captures(&sweep_dir, days);
+                    if report.removed > 0 || !report.errors.is_empty() {
+                        info!(
+                            dir = %sweep_dir.display(),
+                            retention_days = days,
+                            removed = report.removed,
+                            kept = report.kept,
+                            bytes_freed = report.bytes_freed,
+                            errors = report.errors.len(),
+                            "capture retention sweep"
+                        );
+                    }
+                    for (name, err) in &report.errors {
+                        warn!(session = %name, error = %err, "capture retention: could not remove");
+                    }
+                })
+                .await;
+                tokio::time::sleep(crate::audit::retention::SWEEP_INTERVAL).await;
+            }
+        });
+    }
+}
+
 pub async fn run_serve(
     pipeline_config: PipelineConfig,
     worker_config_path: Option<PathBuf>,
@@ -1129,45 +1165,7 @@ pub async fn run_serve(
     // 1) Worker bootstrap.
     let state = build_worker_state(pipeline_config, worker_config_path)?;
     register_param_stores(&state).await;
-
-    // Bounded retention for session captures. Off the startup path
-    // (a large captures/ dir may take a while to walk) and repeated
-    // periodically, so a worker that stays up for weeks keeps pruning;
-    // the report is logged when a sweep removed something.
-    {
-        let audit = &state.config.pipeline.audit;
-        if audit.enabled
-            && audit.retention_days > 0
-            && let Some(dir) = audit.captures_dir.clone()
-        {
-            let days = audit.retention_days;
-            tokio::spawn(async move {
-                loop {
-                    let sweep_dir = dir.clone();
-                    let _ = tokio::task::spawn_blocking(move || {
-                        let report =
-                            crate::audit::retention::sweep_expired_captures(&sweep_dir, days);
-                        if report.removed > 0 || !report.errors.is_empty() {
-                            info!(
-                                dir = %sweep_dir.display(),
-                                retention_days = days,
-                                removed = report.removed,
-                                kept = report.kept,
-                                bytes_freed = report.bytes_freed,
-                                errors = report.errors.len(),
-                                "capture retention sweep"
-                            );
-                        }
-                        for (name, err) in &report.errors {
-                            warn!(session = %name, error = %err, "capture retention: could not remove");
-                        }
-                    })
-                    .await;
-                    tokio::time::sleep(crate::audit::retention::SWEEP_INTERVAL).await;
-                }
-            });
-        }
-    }
+    spawn_capture_retention_sweeper(&state);
 
     // Runtime auth. The debug API is machine-to-machine (the
     // orchestrator proxies to it), so it enforces the *internal*
@@ -1177,7 +1175,10 @@ pub async fn run_serve(
     let auth_cfg = state.config.auth.clone().unwrap_or_default();
     let internal_auth =
         api::auth::SurfaceAuth::resolve(&auth_cfg.internal_token_env, "worker debug API");
-    let client_auth = api::auth::SurfaceAuth::resolve(&auth_cfg.client_token_env, "WS transport");
+    let client_auth = api::auth::SurfaceAuth::resolve(
+        &auth_cfg.client_token_env,
+        api::auth::WS_TRANSPORT_SURFACE,
+    );
     internal_auth.enforce_required(auth_cfg.required)?;
     if state.config.transport.as_ref().is_some_and(|t| t.enabled) {
         client_auth.enforce_required(auth_cfg.required)?;

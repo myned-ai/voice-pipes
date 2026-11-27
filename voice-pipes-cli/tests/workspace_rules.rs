@@ -30,6 +30,7 @@ const PROVIDER_PREFIXES: &[&str] = &[
     "voice-pipes-turn-",
     "voice-pipes-s2s-",
     "voice-pipes-filter-",
+    "voice-pipes-transport-",
 ];
 
 fn root() -> PathBuf {
@@ -1802,6 +1803,8 @@ const PUBLIC_API: &[(&str, &[&str])] = &[
     ),
     // The bench runs VAP directly in its turn-detection bake-off.
     ("voice-pipes-turn-vap", &["VapTurnDetector"]),
+    // Standalone `pocket-tts-server` binary (behind `--features server`) uses this module.
+    ("voice-pipes-tts-pocket-candle", &["mod server_support"]),
     // Providers and configs the crates' own integration tests build.
     ("voice-pipes-tts-kokoro", &["KokoroTts"]),
     (
@@ -2664,6 +2667,7 @@ const CONFORMANCE_HELPERS: &[&str] = &[
     "assert_vad_metrics_conformance",
     "assert_filter_metrics_conformance",
     "assert_s2s_metrics_conformance",
+    "assert_transport_metrics_conformance",
     "two_utterances_on_one_stream",
     "back_to_back_utterances_stay_apart",
 ];

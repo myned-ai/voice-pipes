@@ -503,6 +503,7 @@ pub(super) fn idle_settings(timeout_ms: u64, max_prompts: u32) -> crate::config:
         idle_timeout_ms: Some(timeout_ms),
         idle_max_prompts: max_prompts,
         idle_message: "Are you still there?".into(),
+        greeting: None,
     }
 }
 

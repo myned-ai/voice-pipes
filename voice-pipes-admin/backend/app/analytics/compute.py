@@ -28,6 +28,7 @@ from ..core.config import (
 from ..issues import record_issue
 from ..pricing import llm_cost_usd, monthly_cap_for, stt_cost_usd, tts_cost_usd
 from ..report.analysis import _detect_anomalies, _extract_provider_identity, _flatten_turn, _iso_to_ts, resolve_grading
+from ..report.turns import has_explicit_tts_cold_start
 from . import rollup
 
 _log = logging.getLogger("voice_pipes.analytics")
@@ -263,7 +264,17 @@ def _session_anomaly_contribution(
         return {"total": 0, "by_kind": {}, "session": None}
     providers = _extract_provider_identity(sess_utts, meta)
     first_utt_id = sess_utts[0].get("utterance_id")
-    flat = [_flatten_turn(u, meta.get("started_at"), first_utt_id, providers) for u in sess_utts]
+    tts_cold_explicit = has_explicit_tts_cold_start(sess_utts)
+    flat = [
+        _flatten_turn(
+            u,
+            meta.get("started_at"),
+            first_utt_id,
+            providers,
+            tts_cold_start_explicit=tts_cold_explicit,
+        )
+        for u in sess_utts
+    ]
     # Through the shared resolver, so the dashboard counts anomalies against
     # the same targets the session's own report does -- the operator's, and the
     # budgets its components declared, which this used to leave out.

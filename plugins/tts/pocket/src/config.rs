@@ -24,6 +24,12 @@ pub(crate) const DEFAULT_SILENT_START_MS: u64 = 2_000;
 pub(crate) const DEFAULT_SILENT_START_PEAK: i16 = 500;
 /// Default number of re-synthesis attempts after a silent start.
 pub(crate) const DEFAULT_SILENT_START_RETRIES: u32 = 2;
+/// Default maximum concurrent `/tts` synthesis requests per worker.
+///
+/// Allows multiple active sessions on one worker to synthesize in parallel
+/// instead of serializing behind a single global lock; set `max_concurrent = 1`
+/// to force strict serialization against a single-threaded sidecar.
+pub(crate) const DEFAULT_MAX_CONCURRENT: usize = 4;
 
 /// Silent-start guard settings (crate docs). `None` = disabled.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,6 +57,8 @@ pub(crate) struct PocketHttpConfig {
     /// per-turn *hint* (which can come from an LLM tool result or a
     /// client-side tool) may not, unless `allow_voice_urls = true`.
     pub(crate) allow_voice_urls: bool,
+    /// Maximum concurrent in-flight `/tts` requests across sessions on this worker.
+    pub(crate) max_concurrent: usize,
 }
 
 /// A voice value the sidecar would treat as something to download.
@@ -65,6 +73,7 @@ pub(crate) struct PocketOptions {
     silent_start_peak: i16,
     silent_start_retries: u32,
     allow_voice_urls: bool,
+    max_concurrent: usize,
 }
 
 impl PocketOptions {
@@ -79,6 +88,7 @@ impl PocketOptions {
         let silent_start_retries =
             o.u32_in("silent_start_retries", 0..=10, DEFAULT_SILENT_START_RETRIES);
         let allow_voice_urls = o.bool("allow_voice_urls", false);
+        let max_concurrent = o.usize_in("max_concurrent", 1..=64, DEFAULT_MAX_CONCURRENT);
         o.finish()?;
         Ok(Self {
             timeout_ms,
@@ -86,6 +96,7 @@ impl PocketOptions {
             silent_start_peak,
             silent_start_retries,
             allow_voice_urls,
+            max_concurrent,
         })
     }
 }
@@ -98,6 +109,7 @@ impl PocketHttpConfig {
             silent_start_peak,
             silent_start_retries,
             allow_voice_urls,
+            max_concurrent,
         } = PocketOptions::read(cfg).map_err(voice_pipes_sdk::options::refused)?;
         let endpoint = cfg
             .endpoint
@@ -122,6 +134,7 @@ impl PocketHttpConfig {
             request_timeout: Duration::from_millis(timeout_ms),
             silent_start,
             allow_voice_urls,
+            max_concurrent,
         })
     }
 

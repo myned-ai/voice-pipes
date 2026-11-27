@@ -735,8 +735,13 @@ def _detect_anomalies(
         excluded = (t.get("tool_context") or {}).get("excluded_wait_ms")
         if gap is not None and isinstance(excluded, (int, float)):
             gap -= max(0.0, float(excluded))
+        # A turn terminated mid-flight never emitted TurnMetricsReady, so its
+        # `critical_path.total_ms` (`timed`) is incomplete (missing endpointing
+        # and/or TTS TTFB). Comparing full `e2e_perceived_ms` against a partial
+        # server total would falsely charge that unmeasured time to STT.
         if (
             not t.get("e2e_estimated")
+            and not t.get("terminated")
             and t.get("initiator") != "agent"
             and gap is not None
             and gap > targets["unanswered_wait_ms"]

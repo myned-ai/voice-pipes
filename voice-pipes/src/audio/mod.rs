@@ -1,6 +1,7 @@
 //! Audio primitives -- frames, I/O, resampling, and WAV codecs.
 
 pub mod frame;
+pub mod g711;
 pub mod input_meter;
 #[cfg(feature = "audio-device")]
 pub mod io;

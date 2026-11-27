@@ -195,9 +195,18 @@ impl OpenAiCompatProcessor {
             );
             messages.extend(history.iter().cloned());
         };
+        let just_interrupted = input_role == "user"
+            && messages.last().is_some_and(|m| {
+                m.role == "assistant" && m.content.contains(crate::INTERRUPTED_MARKER)
+            });
+        let content = if just_interrupted {
+            format!("(interrupted you mid-sentence) {input}")
+        } else {
+            input.to_string()
+        };
         messages.push(ChatMessage {
             role: input_role.into(),
-            content: input.to_string(),
+            content,
         });
         Self::enforce_role_alternation(&mut messages);
 

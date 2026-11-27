@@ -11,7 +11,7 @@ from ..report.analysis import (
     _flatten_turn,
     _health_model,
 )
-from ..report.turns import tool_ack_ms, tool_roundtrip_ms
+from ..report.turns import has_explicit_tts_cold_start, tool_ack_ms, tool_roundtrip_ms
 
 # Report schema version. Bump on any breaking change to the JSON shape so
 # consumers (custom dashboards, customer integrations) can guard against drift.
@@ -177,7 +177,17 @@ def _build_report_for_llm(
     if utt_ids:
         first_utt_id = min(utt_ids)
 
-    flat_turns = [_flatten_turn(u, started_at, first_utt_id, providers) for u in utterances]
+    tts_cold_explicit = has_explicit_tts_cold_start(utterances)
+    flat_turns = [
+        _flatten_turn(
+            u,
+            started_at,
+            first_utt_id,
+            providers,
+            tts_cold_start_explicit=tts_cold_explicit,
+        )
+        for u in utterances
+    ]
     _apply_tool_context(flat_turns, utterances, client_tool_calls)
     aggregates = _component_aggregates(flat_turns, events, client_tool_calls)
     anomalies = _detect_anomalies(flat_turns, targets, client_tool_calls, providers=providers)

@@ -152,6 +152,62 @@ Heavy variants (Pocket-TTS sidecar, Piper voice models, full worker spawn) are i
 | Corpus smoke | 2 | `voice-pipes-bench/tests/tts_benchmark_smoke.rs` |
 | Frontend (`TtsPanel` + `VariantCard`) | 7 | `voice-pipes-admin/frontend/src/components/benchmark/__tests__/TtsPanel.test.tsx` |
 
+### 1.10 Automated Audio Quality & Golden-Reference Verifier (`voice-pipes-bench::audio_verify`, `voice-pipes verify-audio`)
+
+Eliminates manual listening checks by grading synthesized `.wav` files across three deterministic, pure-Rust layers (zero external dependencies beyond `rustfft`):
+
+1. **Layer 1 — Acoustic, Noise & Crackle Sanity (`acoustic.rs`)**:
+   - Measures duration, active speech ratio, leading silence, RMS/peak (dBFS), clipping %, DC offset, wideband speech-band energy (`80–4000 Hz`), high-frequency noise (`> 6 kHz`), spectral flatness (Wiener entropy), segmental SNR (dB), and Harmonics-to-Noise Ratio (HNR, dB).
+   - **Digital Crackle / Click / Pop Detector**: Flags 2nd-derivative waveform impulses exceeding both local RMS and absolute step thresholds, and attributes hits within ±2 ms of **80 ms** (Mimi frame) or **50 ms** (pacer) boundaries as streaming seam glitches (`boundary_crackle_count`).
+2. **Voice Intonation & Dynamics (`prosody.rs`)**:
+   - Pure-Rust **YIN** $F_0$ pitch tracker (`median_f0_hz`, `f0_std_semitones`, `f0_range_semitones`, `jitter_pct`) and RMS envelope dynamics (`dynamic_range_db`, `crest_factor_db`, `shimmer_pct`, `syllable_rate_hz`).
+3. **Layer 2 — Pronunciation Alignment (`alignment.rs`)** & **Layer 3 — Golden-Reference Comparison (`mel_dtw.rs`, `golden.rs`)**:
+   - Punctuation-normalized round-trip STT WER/CER + exact Levenshtein backtrace (`missing_words`, `substituted_words`, `inserted_words`).
+   - 80-bin Log-Mel filterbank + Sakoe-Chiba banded DTW alignment comparing candidate audio against a pre-approved golden `.wav` (`mel_cosine_similarity`, `mcd_db`, `ltas_cosine_similarity`, `duration_ratio`, `f0_rmse_semitones`, `rms_envelope_correlation`).
+
+#### CLI Usage (`voice-pipes verify-audio`)
+
+```sh
+# 1. Single-file acoustic + crackle + prosody check
+voice-pipes verify-audio --audio target/pocket_candle_alba.wav
+
+# 2. Full 3-layer check (golden WAV + round-trip STT pronunciation) with JSON export
+voice-pipes verify-audio \
+  --audio target/pocket_candle_alba.wav \
+  --golden tests/golden/pocket_alba_hello.wav \
+  --expected-text "Hello! Welcome to Voice Pipes running natively in pure Rust." \
+  --stt-config config/stt-moonshine.toml \
+  --json-out target/verify_report.json
+
+# 3. Approve a verified candidate as a golden baseline (refuses if any gate fails)
+voice-pipes verify-audio \
+  --audio target/pocket_candle_alba.wav \
+  --approve-to tests/golden/pocket_alba_hello.wav
+
+# 4. Batch-verify a golden suite manifest (golden.toml)
+voice-pipes verify-audio --suite tests/golden/golden.toml
+```
+
+#### `golden.toml` Manifest Format
+
+```toml
+name = "pocket-tts-regression"
+
+[thresholds]
+max_wer = 0.15
+max_mcd_db = 9.0
+min_mel_cosine = 0.85
+
+[[case]]
+id = "alba_en_hello"
+audio_path = "cand/alba_hello.wav"
+golden_path = "refs/alba_hello.wav"
+golden_sha256 = "<64-char-sha256>"
+expected_text = "Hello! Welcome to Voice Pipes running natively in pure Rust."
+voice = "alba"
+language = "en-US"
+```
+
 ---
 
 ## 2  Manual testing — the fast path

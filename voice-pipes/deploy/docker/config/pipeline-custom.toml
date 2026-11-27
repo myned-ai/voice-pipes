@@ -3,16 +3,15 @@
 [pipeline]
 name = "custom-classic"
 
+[agent]
+greeting = "Hi! How can I help you today?"
+
 [pipeline.audit]
 enabled = true
 
-[[audio_filter]]
-provider = "deepfilter"
-attenuation_limit_db = 30.0
-
 [stt]
-provider = "parakeet-tdt"
-model_dir = "models/parakeet-tdt"
+provider = "moonshine"
+model_dir = "models/moonshine"
 
 [[text_processor]]
 type = "openai-compat"
@@ -26,12 +25,9 @@ top_p = 0.95
 extra_body = { chat_template_kwargs = { enable_thinking = false } }
 
 [tts]
-provider = "openai"
-endpoint = "http://vibevoice:8091/v1"
-model_name = "VibeVoice-Realtime-0.5B"
-voice = "en-Carter_man"
-api_key = "local"
-sentence_chunking = false
+provider = "pocket-candle"
+model_dir = "models/pocket-tts"
+voice = "alba"
 
 [vad]
 mode = "auto"
@@ -39,16 +35,16 @@ model = "models/silero_vad.onnx"
 
 [turn_detection]
 mode = "smart"
-silence_timeout_ms = 600
+silence_timeout_ms = 1500
 smart_model_path = "models/smart-turn-v3.2-cpu.onnx"
 smart_threshold = 0.5
 smart_window_secs = 8
-smart_min_audio_ms = 500
+smart_min_audio_ms = 250
 
 [barge_in]
 enabled = true
-min_chunks = 5
-speech_threshold = 2000.0
+min_chunks = 3
+speech_threshold = 1200.0
 
 [output]
 sample_rate = 16000
@@ -68,6 +64,13 @@ port = 8800
 [auth]
 required = true
 
+[transport.media_streams.twilio]
+auth_token = "edc8b67f70a937273e7ab57d296c9d7e"
+public_webhook_url = "https://hello-license-roberts-lightweight.trycloudflare.com/telephony/twilio/voice"
+stream_ws_url = "wss://hello-license-roberts-lightweight.trycloudflare.com/telephony/twilio/ws"
+token_ttl_secs = 30
+require_auth = true
+
 # Client-side tools: executed by the connected client (Playground / SDK),
 # which reports back via `client_tool_result`.
 [[client_tool]]
@@ -78,6 +81,7 @@ speak_on_result = false
 type = "object"
 properties = { screen = { type = "string", description = "Target screen name." } }
 required = ["screen"]
+
 
 [[client_tool]]
 name = "play_media"

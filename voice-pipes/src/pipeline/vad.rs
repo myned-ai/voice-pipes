@@ -75,6 +75,12 @@ pub async fn vad_filter_task_with_filter(
 
     const CHUNK_MS: u32 = 20;
     const MIN_ONSET_CHUNKS: usize = 3;
+    // Minimum chunk RMS (i16 scale, ~-54.7 dBFS) required to confirm speech
+    // onset. Prevents neural VADs (e.g. Silero LSTM) from opening false
+    // utterances on -65 dBFS mic self-noise while remaining >25 dB below even
+    // a soft whisper. Once speech is active, quiet intra-word consonants are
+    // not gated.
+    const MIN_ONSET_RMS_I16: f64 = 60.0;
 
     // At least one chunk: a zero would drop the audio the onset confirmation
     // has not yet accounted for.
@@ -154,7 +160,8 @@ pub async fn vad_filter_task_with_filter(
 
             // ── Onset confirmation ──────────────────────────
             if !speech_active {
-                if is_speech {
+                let above_noise_floor = chunk_rms_i16(&chunk_data) >= MIN_ONSET_RMS_I16;
+                if is_speech && above_noise_floor {
                     last_speech_at = Some(std::time::Instant::now());
                     onset_buf.push_back(chunk_data.clone());
                     onset_speech_count += 1;
@@ -271,5 +278,27 @@ pub async fn vad_filter_task_with_filter(
         let _ = filtered_tx
             .send(vad_chunk(Vec::new(), sample_rate, true, last_speech_at))
             .await;
+    }
+}
+
+fn chunk_rms_i16(samples: &[i16]) -> f64 {
+    if samples.is_empty() {
+        return 0.0;
+    }
+    let sum_sq: f64 = samples.iter().map(|&s| f64::from(s) * f64::from(s)).sum();
+    (sum_sq / (samples.len() as f64)).sqrt()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::chunk_rms_i16;
+
+    #[test]
+    fn chunk_rms_distinguishes_mic_noise_floor_from_speech() {
+        assert_eq!(chunk_rms_i16(&[]), 0.0);
+        // -65.8 dBFS mic self-noise (~17 i16 amplitude) is well below the 60.0 onset floor.
+        assert!(chunk_rms_i16(&[17i16; 320]) < 60.0);
+        // Soft speech (-35 dBFS, ~580 i16) is well above the 60.0 onset floor.
+        assert!(chunk_rms_i16(&[580i16; 320]) > 60.0);
     }
 }

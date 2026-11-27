@@ -418,6 +418,7 @@ impl WsSession {
                 // `ConnectionHealthMonitor::rtt_ms()` once pongs arrive.
                 rtt_ms: None,
                 auth_identity: None,
+                external_id: None,
             },
             closed: std::sync::atomic::AtomicBool::new(false),
             outbound_seq: AtomicU32::new(0),
@@ -431,6 +432,13 @@ impl WsSession {
     #[must_use]
     pub fn with_tenant(mut self, tenant_id: Option<voice_pipes_sdk::TenantId>) -> Self {
         self.metadata.tenant_id = tenant_id;
+        self
+    }
+
+    /// Set an optional sanitized external correlation identifier for this session.
+    #[must_use]
+    pub fn with_external_id(mut self, external_id: Option<String>) -> Self {
+        self.metadata.external_id = external_id;
         self
     }
 }

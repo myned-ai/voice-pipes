@@ -121,7 +121,7 @@ url = { workspace = true, optional = true }
 tracing-opentelemetry = { workspace = true, optional = true }
 opentelemetry = { workspace = true, optional = true }
 opentelemetry_sdk = { workspace = true, features = ["rt-tokio"], optional = true }
-opentelemetry-otlp = { workspace = true, features = ["tonic"], optional = true }
+opentelemetry-otlp = { workspace = true, features = ["tonic", "http-proto", "reqwest-rustls"], optional = true }
 
 # ── Optional: gRPC (tonic / prost) ──────────────────────────
 tonic = { workspace = true, optional = true }

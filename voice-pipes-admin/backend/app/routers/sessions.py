@@ -6,7 +6,12 @@ import httpx
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
 
-from ..captures.reader import _read_capture_artifacts, _read_session_metadata, is_empty_turn
+from ..captures.reader import (
+    _read_capture_artifacts,
+    _read_session_metadata,
+    is_empty_turn,
+    project_snapshot_metrics,
+)
 from ..core import auth as _auth
 from ..core.config import ORCHESTRATOR_URL, orch_client
 from ..core.upstream import upstream_error, upstream_path
@@ -21,6 +26,7 @@ from ..report.analysis import (
     resolve_turn_ttft,
 )
 from ..report.render import _build_report_for_llm, _render_report_markdown
+from ..report.turns import has_explicit_tts_cold_start
 
 router = APIRouter()
 log = logging.getLogger("admin.sessions")
@@ -238,7 +244,10 @@ def _local_session_detail(
             continue
         summary.setdefault("stt_mode", stt_mode)
         # Cold-turn TTFT fallback: shared with turns._flatten_turn (P1.7).
-        if summary.get("ttft_ms") is None:
+        # Never fabricate TTFT for turns that skipped the LLM (`agent_say`,
+        # `speculative_accept`).
+        proj_snap = project_snapshot_metrics(utt.get("metric_snapshot"))
+        if summary.get("ttft_ms") is None and proj_snap.get("llm_stage_skipped_reason") is None:
             resolved_ttft, est = resolve_turn_ttft(
                 summary.get("ttft_ms"),
                 utt.get("llm_detail"),
@@ -267,8 +276,15 @@ def _local_session_detail(
             if isinstance(u.get("utterance_id"), int)
         ]
         first_utt_id = min(utt_ids) if utt_ids else None
+        tts_cold_explicit = has_explicit_tts_cold_start(verdict_utts)
         flat = [
-            _flatten_turn(u, result["metadata"].get("started_at"), first_utt_id, providers)
+            _flatten_turn(
+                u,
+                result["metadata"].get("started_at"),
+                first_utt_id,
+                providers,
+                tts_cold_start_explicit=tts_cold_explicit,
+            )
             for u in verdict_utts
         ]
         tool_calls = result.get("client_tool_calls") or []

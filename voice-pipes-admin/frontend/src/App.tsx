@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import type { ComponentType } from "react";
-import { BrowserRouter as Router, Routes, Route, NavLink, Navigate, useLocation } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Link, NavLink, Navigate, useLocation } from "react-router-dom";
 import { Mic, History, Activity, Menu, Gamepad2, Sun, Moon, BarChart3, FlaskConical, ClipboardList, X } from "lucide-react";
 import type { LucideProps } from "lucide-react";
 import LivePipeline from "./pages/LivePipeline";
@@ -186,10 +186,14 @@ function AppShell({
           >
             <Menu size={20} />
           </button>
-          <span className="text-base font-bold flex items-center gap-2 whitespace-nowrap">
+          <Link
+            to="/"
+            className="text-base font-bold flex items-center gap-2 whitespace-nowrap hover:opacity-80 transition-opacity"
+            title="Go to Dashboard"
+          >
             <Mic size={18} className="text-indigo-400 shrink-0" />
             Voice-Pipes
-          </span>
+          </Link>
         </div>
         <button
           type="button"
@@ -224,14 +228,19 @@ function AppShell({
             }`}
           >
             <div className="flex items-center justify-between">
-              <div className="flex flex-col">
+              <Link
+                to="/"
+                onClick={closeMobileDrawer}
+                className="flex flex-col hover:opacity-80 transition-opacity"
+                title="Go to Dashboard"
+              >
                 <span className="text-lg font-bold flex items-center gap-2">
                   <Mic size={20} className="text-indigo-400 shrink-0" /> Voice-Pipes
                 </span>
                 <span className="text-[10px] text-slate-500 uppercase tracking-[0.1em] font-bold ml-7">
                   Admin Console
                 </span>
-              </div>
+              </Link>
               <button
                 type="button"
                 onClick={closeMobileDrawer}
@@ -265,12 +274,16 @@ function AppShell({
         {/* Header area with Logo and Hamburger */}
         <div className={`flex items-center ${isSidebarOpen ? 'justify-between' : 'justify-center'} h-10`}>
           {isSidebarOpen && (
-            <div className="flex flex-col">
+            <Link
+              to="/"
+              className="flex flex-col hover:opacity-80 transition-opacity"
+              title="Go to Dashboard"
+            >
               <h1 className="text-lg font-bold flex items-center gap-2 whitespace-nowrap overflow-hidden">
                 <Mic size={20} className="text-indigo-400 shrink-0" /> Voice-Pipes
               </h1>
               <span className="text-[10px] text-slate-500 uppercase tracking-[0.1em] font-bold ml-7 whitespace-nowrap">Admin Console</span>
-            </div>
+            </Link>
           )}
           <button 
             onClick={() => setSidebarPref(!isSidebarOpen)}

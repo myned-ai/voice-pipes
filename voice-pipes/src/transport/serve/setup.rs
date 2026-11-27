@@ -88,6 +88,7 @@ pub(super) async fn bootstrap_session(
     // ── Audio pacer ─────────────────────────────────────────
     let pacer_config = match session.metadata().transport_type {
         TransportType::WebSocket => PacerConfig::websocket(),
+        TransportType::MediaStream => PacerConfig::telephony(),
         TransportType::WebTransport | TransportType::Direct => PacerConfig::independent_streams(),
     };
     let paced_rx = spawn_pacer(pacer_config, out_rx, Arc::clone(&suppress_audio));
@@ -1062,8 +1063,15 @@ pub(super) fn setup_audio_pipeline(
     let user_speaking = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
 
     let stt_handle = if session_mode.accepts_audio() {
-        // VAD filter (utterance segmentation).
-        let silence_ms = state.config.silence_timeout_ms();
+        // VAD filter (utterance segmentation). Respect `[vad] min_silence_ms`
+        // when explicitly configured (e.g. 350 ms for semantic turn detectors
+        // like Smart Turn), falling back to `[turn_detection] silence_timeout_ms`.
+        let silence_ms = state
+            .config
+            .vad
+            .as_ref()
+            .and_then(|v| v.min_silence_ms.map(u64::from))
+            .unwrap_or_else(|| state.config.silence_timeout_ms());
         let pre_roll_ms = state
             .config
             .vad

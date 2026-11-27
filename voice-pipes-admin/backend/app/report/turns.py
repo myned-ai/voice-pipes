@@ -228,7 +228,11 @@ def critical_path_latency(turn: dict) -> dict:
         llm_stage = (
             llm_wait_raw
             if llm_wait_raw is not None and (llm_wait_raw > 0 or not _llm_has_work(llm))
-            else (_usable_ttft_ms(llm) or _estimated_llm_wait_ms(llm, tts) or 0.0)
+            else (
+                0.0
+                if llm.get("stage_skipped_reason")
+                else (_usable_ttft_ms(llm) or _estimated_llm_wait_ms(llm, tts) or 0.0)
+            )
         )
         tts_stage = (
             tts_wait_raw
@@ -324,7 +328,22 @@ def critical_path_latency(turn: dict) -> dict:
     return out
 
 
-def _flatten_turn(utt: dict, t0_iso: str | None, first_utt_id, providers: dict) -> dict:
+def has_explicit_tts_cold_start(utterances: list[dict]) -> bool:
+    """Return True if any turn's snapshot explicitly recorded TTS cold_start."""
+    return any(
+        project_snapshot_metrics(u.get("metric_snapshot")).get("tts_cold_start") is True
+        for u in utterances
+    )
+
+
+def _flatten_turn(
+    utt: dict,
+    t0_iso: str | None,
+    first_utt_id,
+    providers: dict,
+    *,
+    tts_cold_start_explicit: bool = False,
+) -> dict:
     """Flatten one utterance into the LLM-friendly per-turn row.
 
     `utt` is the merged dict produced by `_read_capture_artifacts` —
@@ -384,7 +403,7 @@ def _flatten_turn(utt: dict, t0_iso: str | None, first_utt_id, providers: dict) 
             else proj["provider_endpointing_ms"]
         ),
         "chars": len(stt_text) if stt_text else None,
-        "cold_start": is_first_turn or None,
+        "cold_start": (is_first_turn and proj.get("initiator") != "agent") or None,
         # RTFx (audio/wall) — the overlap signal the critical-path-latency model
         # uses to decide how much of processing_ms is on the critical path.
         "rtfx": proj.get("stt_rtfx"),
@@ -403,14 +422,19 @@ def _flatten_turn(utt: dict, t0_iso: str | None, first_utt_id, providers: dict) 
         )
 
     # ── LLM block: shared TTFT resolution (P1.7).
-    ttft, ttft_estimated = resolve_turn_ttft(
-        proj["ttft_ms"], llm_detail, generation_ms=proj["generation_ms"]
-    )
-    gen_ms = (
-        proj["generation_ms"]
-        if proj["generation_ms"] is not None and proj["generation_ms"] > 0
-        else llm_norm.get("generate_ms")
-    )
+    llm_skipped = proj.get("llm_stage_skipped_reason") is not None
+    if llm_skipped:
+        ttft, ttft_estimated = None, False
+        gen_ms = None
+    else:
+        ttft, ttft_estimated = resolve_turn_ttft(
+            proj["ttft_ms"], llm_detail, generation_ms=proj["generation_ms"]
+        )
+        gen_ms = (
+            proj["generation_ms"]
+            if proj["generation_ms"] is not None and proj["generation_ms"] > 0
+            else llm_norm.get("generate_ms")
+        )
 
     llm_block: dict = {
         "ttft_ms": ttft,
@@ -420,32 +444,48 @@ def _flatten_turn(utt: dict, t0_iso: str | None, first_utt_id, providers: dict) 
         # request-start → first-token breakdown from `llm_detail` (both include
         # connect on hosted providers; `first_token_ms` is NOT `TTFT - connect`).
         "connect_ms": (
-            llm_norm.get("connect_ms")
-            if llm_norm.get("connect_ms") is not None
-            else llm_detail.get("connect_ms")
+            None
+            if llm_skipped
+            else (
+                llm_norm.get("connect_ms")
+                if llm_norm.get("connect_ms") is not None
+                else llm_detail.get("connect_ms")
+            )
         ),
         "first_token_ms": (
-            llm_norm.get("first_token_ms")
-            if llm_norm.get("first_token_ms") is not None
-            else llm_detail.get("first_token_ms")
+            None
+            if llm_skipped
+            else (
+                llm_norm.get("first_token_ms")
+                if llm_norm.get("first_token_ms") is not None
+                else llm_detail.get("first_token_ms")
+            )
         ),
         "generation_ms": gen_ms,
-        "prompt_tokens": llm_norm.get("prompt_tokens"),
-        "completion_tokens": llm_norm.get("output_tokens"),
+        "prompt_tokens": None if llm_skipped else llm_norm.get("prompt_tokens"),
+        "completion_tokens": None if llm_skipped else llm_norm.get("output_tokens"),
         "tokens_per_sec": (
-            proj.get("tokens_per_sec")
-            if proj.get("tokens_per_sec") is not None
-            else llm_norm.get("tokens_per_sec")
+            None
+            if llm_skipped
+            else (
+                proj.get("tokens_per_sec")
+                if proj.get("tokens_per_sec") is not None
+                else llm_norm.get("tokens_per_sec")
+            )
         ),
         "decode_ms": (
-            proj.get("decode_ms")
-            if proj.get("decode_ms") is not None
-            else llm_norm.get("decode_ms")
+            None
+            if llm_skipped
+            else (
+                proj.get("decode_ms")
+                if proj.get("decode_ms") is not None
+                else llm_norm.get("decode_ms")
+            )
         ),
         "model": llm_norm.get("model") or (providers.get("llm") or {}).get("model"),
         "in_chars": len(llm_in) if llm_in else None,
         "out_chars": len(llm_out_text) if llm_out_text else None,
-        "cold_start": is_first_turn or None,
+        "cold_start": (is_first_turn and not llm_skipped) or None,
     }
     if proj.get("llm_perceived_ttft_ms") is not None:
         llm_block["perceived_ttft_ms"] = proj["llm_perceived_ttft_ms"]
@@ -453,7 +493,7 @@ def _flatten_turn(utt: dict, t0_iso: str | None, first_utt_id, providers: dict) 
         llm_block["llm_wait_ms"] = proj["llm_wait_ms"]
     if proj.get("llm_stage_skipped_reason") is not None:
         llm_block["stage_skipped_reason"] = proj["llm_stage_skipped_reason"]
-    if llm_norm.get("prompt_ingest_ms") is not None:
+    if not llm_skipped and llm_norm.get("prompt_ingest_ms") is not None:
         llm_block["prompt_ingest_ms"] = llm_norm["prompt_ingest_ms"]
 
     # ── TTS block: largely unchanged; prefer detail.voice over the
@@ -487,7 +527,11 @@ def _flatten_turn(utt: dict, t0_iso: str | None, first_utt_id, providers: dict) 
             else (tts_payload.get("chars") or (len(llm_out_text) if llm_out_text else None))
         ),
         "voice": tts_payload.get("voice") or (providers.get("tts") or {}).get("voice"),
-        "cold_start": is_first_turn or None,
+        "cold_start": (
+            True
+            if proj.get("tts_cold_start") is True
+            else (None if tts_cold_start_explicit else (is_first_turn or None))
+        ),
     }
     if proj.get("tts_wait_ms") is not None:
         tts_block["tts_wait_ms"] = proj["tts_wait_ms"]

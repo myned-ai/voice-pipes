@@ -361,7 +361,7 @@ fn assemble_plan_with(
         // 4a. VAD: `auto`, with the auto backend's own settings (its model,
         // which is downloaded). Not a question: auto picks the backend and
         // falls back to energy, so there is nothing to choose between.
-        write_vad(&mut ctx, &mut downloads)?;
+        let vad_insert_at = write_vad(&mut ctx, &mut downloads)?;
 
         // 4b. Turn detection — how the pipeline decides the user has
         // *finished* speaking (consumes Silero's silence signal). See
@@ -373,8 +373,15 @@ fn assemble_plan_with(
             ctx.toml
                 .push_str("mode = \"provider\"\nsilence_timeout_ms = 1500\n\n");
         } else {
-            run_stage(&mut ctx, &turn, &mut manifest, &mut downloads)?;
+            let turn_choice = run_stage(&mut ctx, &turn, &mut manifest, &mut downloads)?;
             ctx.toml.push('\n');
+            // Semantic turn-detector plugins (anything other than the built-in
+            // `silence`/`layered` timeout modes) need VAD to flush pauses early
+            // (350 ms) so batch STTs deliver transcripts before the 1500 ms
+            // fallback fires.
+            if !matches!(turn_choice.provider.as_str(), "silence" | "layered") {
+                ctx.toml.insert_str(vad_insert_at, "min_silence_ms = 350\n");
+            }
         }
 
         ctx.toml
@@ -430,13 +437,15 @@ pub(crate) fn plugin_wizard_choices() -> Vec<(String, voice_pipes_sdk::WizardCho
 /// at its default (a model path at the registry's, so an operator's entry
 /// wins), and queue its download. With no auto backend that gives settings,
 /// `auto` alone: it runs energy.
-fn write_vad(ctx: &mut EmitCtx, downloads: &mut Vec<DownloadSpec>) -> Result<()> {
+fn write_vad(ctx: &mut EmitCtx, downloads: &mut Vec<DownloadSpec>) -> Result<usize> {
     use voice_pipes_sdk::{WizardDeploy, WizardFieldKind};
     let entry = crate::vad::segmenter::auto_backend()
         .and_then(|backend| crate::plugins::vad_wizard_entry(&backend));
     let Some(choice) = entry else {
-        ctx.toml.push_str("[vad]\nmode = \"auto\"\n\n");
-        return Ok(());
+        ctx.toml.push_str("[vad]\nmode = \"auto\"\n");
+        let insert_at = ctx.toml.len();
+        ctx.toml.push('\n');
+        return Ok(insert_at);
     };
     let registry_key = match &choice.deploy {
         WizardDeploy::Registry { key } => Some(key.clone()),
@@ -453,6 +462,7 @@ fn write_vad(ctx: &mut EmitCtx, downloads: &mut Vec<DownloadSpec>) -> Result<()>
     })?;
     ctx.toml.push_str("[vad]\n");
     ctx.toml.push_str(&rendered.toml);
+    let insert_at = ctx.toml.len();
     ctx.toml.push('\n');
     if let (Some(key), Some(dest)) = (registry_key, rendered.model_path) {
         downloads.push(DownloadSpec {
@@ -460,7 +470,7 @@ fn write_vad(ctx: &mut EmitCtx, downloads: &mut Vec<DownloadSpec>) -> Result<()>
             dest,
         });
     }
-    Ok(())
+    Ok(insert_at)
 }
 
 /// One stage's menu: its built-in and plugin entries, by menu rank.

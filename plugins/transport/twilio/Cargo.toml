@@ -1,0 +1,24 @@
+[package]
+name = "voice-pipes-transport-twilio"
+version.workspace = true
+edition = "2024"
+description = "Isolated Twilio Media Streams transport plugin for voice-pipes (depends only on voice-pipes-sdk)."
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+voice-pipes-sdk.workspace = true
+base64.workspace = true
+parking_lot.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+sha2.workspace = true
+tracing.workspace = true
+uuid = { workspace = true, features = ["v4"] }

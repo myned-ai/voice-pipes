@@ -91,6 +91,8 @@ tts-piper = ["dep:voice-pipes-tts-piper"]
 tts-kokoro = ["dep:voice-pipes-tts-kokoro"]
 # Kyutai Pocket-TTS, over the `pocket-tts` HTTP sidecar.
 tts-pocket = ["dep:voice-pipes-tts-pocket"]
+# Kyutai Pocket-TTS, native Rust (Candle) in-process engine.
+tts-pocket-candle = ["dep:voice-pipes-tts-pocket-candle"]
 # Its name before 1.0.
 tts-pocket-http = ["tts-pocket"]
 # OpenAI TTS, and servers speaking its API (the VibeVoice sidecar).
@@ -112,8 +114,8 @@ text-openai-compat = ["llm-openai-compat"]
 llm-gguf = ["dep:voice-pipes-llm-gguf"]
 # Its name before 1.0.
 text-llm = ["llm-gguf"]
-# Run the local GGUF model on an NVIDIA GPU.
-cuda = ["llm-gguf", "voice-pipes-llm-gguf/cuda"]
+# Run local Candle/GGUF models on an NVIDIA GPU.
+cuda = ["llm-gguf", "voice-pipes-llm-gguf/cuda", "voice-pipes-tts-pocket-candle?/cuda"]
 
 # ── Plugin VADs ──────────────────────────────────────────────
 # Silero, local ONNX: the backend `[vad] mode = "auto"` runs when its model
@@ -142,6 +144,10 @@ s2s-openai = ["realtime", "dep:voice-pipes-s2s-openai"]
 # ElevenLabs Agents speech-to-speech as a voice-pipes plugin, on the SDK only.
 s2s-elevenlabs = ["realtime", "dep:voice-pipes-s2s-elevenlabs"]
 
+# ── Plugin telephony / media-stream transports ───────────────
+# Twilio Media Streams (TwiML webhook + JSON/base64 µ-law WebSocket).
+transport-twilio = ["dep:voice-pipes-transport-twilio"]
+
 [dependencies]
 voice-pipes.workspace = true
 # Benchmarking host extension. Drop this dependency (and the wiring in
@@ -158,6 +164,7 @@ voice-pipes-stt-nemotron = { workspace = true, optional = true }
 voice-pipes-stt-google = { workspace = true, optional = true }
 voice-pipes-tts-kokoro = { workspace = true, optional = true }
 voice-pipes-tts-pocket = { workspace = true, optional = true }
+voice-pipes-tts-pocket-candle = { workspace = true, optional = true }
 voice-pipes-tts-openai = { workspace = true, optional = true }
 voice-pipes-stt-assemblyai = { workspace = true, optional = true }
 voice-pipes-tts-elevenlabs = { workspace = true, optional = true }
@@ -171,17 +178,20 @@ voice-pipes-turn-smart = { workspace = true, optional = true }
 voice-pipes-turn-vap = { workspace = true, optional = true }
 voice-pipes-filter-deepfilter = { workspace = true, optional = true }
 voice-pipes-tts-neutts = { workspace = true, optional = true }
+voice-pipes-transport-twilio = { workspace = true, optional = true }
 
 mimalloc.workspace = true
 anyhow.workspace = true
 clap = { workspace = true, features = ["derive"] }
+serde.workspace = true
+serde_json.workspace = true
 tracing.workspace = true
 tokio = { workspace = true, features = ["full"] }
 
 [dev-dependencies]
 # The pipeline tests with the local LLM (tests/pipeline_llm.rs).
 parking_lot.workspace = true
-serde_json.workspace = true
+tempfile.workspace = true
 tokio-util.workspace = true
 # Reads the workspace manifests in tests/workspace_rules.rs.
 toml.workspace = true

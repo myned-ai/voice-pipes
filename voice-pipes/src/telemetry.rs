@@ -79,13 +79,62 @@ pub fn init(json_logs: bool) {
     }
 }
 
-/// Attempt to build an OTLP exporter. Returns None if it can't be configured.
+/// Validate that an OTLP endpoint uses TLS (`https://`) for any non-localhost
+/// destination so API keys (`OTEL_EXPORTER_OTLP_HEADERS`) never travel over
+/// plaintext HTTP to remote collectors.
+pub fn is_allowed_otlp_endpoint(endpoint: &str) -> bool {
+    let trimmed = endpoint.trim();
+    if trimmed.is_empty() {
+        return true;
+    }
+    if trimmed.starts_with("https://") {
+        return true;
+    }
+    if let Some(rest) = trimmed.strip_prefix("http://") {
+        let host = rest.split('/').next().unwrap_or("").trim_start_matches('[');
+        let host_no_port = if host.starts_with("::1]") {
+            "::1"
+        } else {
+            host.split(':').next().unwrap_or("")
+        };
+        return matches!(host_no_port, "localhost" | "127.0.0.1" | "::1");
+    }
+    false
+}
+
+/// Attempt to build an OTLP exporter. Returns None if it can't be configured
+/// or if a remote endpoint violates the TLS policy.
+///
+/// Honors standard OpenTelemetry environment variables:
+/// - `OTEL_EXPORTER_OTLP_PROTOCOL` (`grpc` default, or `http/protobuf`)
+/// - `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`
+/// - `OTEL_EXPORTER_OTLP_HEADERS` (e.g. `X-API-Key=...`)
 #[cfg(feature = "telemetry")]
 fn try_init_otel() -> Option<TracerProvider> {
-    let exporter = opentelemetry_otlp::SpanExporter::builder()
-        .with_tonic()
-        .build()
-        .ok()?;
+    if let Ok(ep) = std::env::var("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
+        .or_else(|_| std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT"))
+        && !is_allowed_otlp_endpoint(&ep)
+    {
+        eprintln!("voice-pipes: refusing plaintext non-localhost OTLP endpoint (use https://)");
+        return None;
+    }
+
+    let protocol =
+        std::env::var("OTEL_EXPORTER_OTLP_PROTOCOL").unwrap_or_else(|_| "grpc".to_string());
+
+    let exporter = if protocol.eq_ignore_ascii_case("http/protobuf")
+        || protocol.eq_ignore_ascii_case("http")
+    {
+        opentelemetry_otlp::SpanExporter::builder()
+            .with_http()
+            .build()
+            .ok()?
+    } else {
+        opentelemetry_otlp::SpanExporter::builder()
+            .with_tonic()
+            .build()
+            .ok()?
+    };
 
     let provider = TracerProvider::builder()
         .with_batch_exporter(exporter, opentelemetry_sdk::runtime::Tokio)
@@ -108,3 +157,23 @@ pub fn shutdown(provider: Option<TracerProvider>) {
 #[cfg(not(feature = "telemetry"))]
 /// Shut down telemetry (no-op when the `telemetry` feature is off).
 pub fn shutdown(_provider: ()) {}
+
+#[cfg(test)]
+mod tests {
+    use super::is_allowed_otlp_endpoint;
+
+    #[test]
+    fn otlp_endpoint_enforces_tls_for_remote_hosts() {
+        assert!(is_allowed_otlp_endpoint(
+            "https://otel.example.com/v1/traces"
+        ));
+        assert!(is_allowed_otlp_endpoint("http://localhost:4318/v1/traces"));
+        assert!(is_allowed_otlp_endpoint("http://127.0.0.1:4317"));
+        assert!(is_allowed_otlp_endpoint("http://[::1]:4318"));
+        assert!(!is_allowed_otlp_endpoint(
+            "http://otel.example.com/v1/traces"
+        ));
+        assert!(!is_allowed_otlp_endpoint("http://10.0.0.5:4318"));
+        assert!(!is_allowed_otlp_endpoint("ftp://example.com"));
+    }
+}

@@ -23,6 +23,7 @@
   - [Piper](guides/providers/tts/piper.md)
   - [Kokoro](guides/providers/tts/kokoro.md)
   - [Pocket-TTS](guides/providers/tts/pocket.md)
+  - [Pocket-TTS Candle (Native Rust)](guides/providers/tts/pocket-candle.md)
   - [VibeVoice](guides/providers/tts/vibevoice.md)
   - [OpenAI TTS and compatible endpoints](guides/providers/tts/openai.md)
   - [Gemini TTS](guides/providers/tts/gemini.md)

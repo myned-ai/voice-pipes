@@ -112,9 +112,10 @@ export function ResourceBreakdownModal({
     sessionDriftMb != null && startRss != null && startRss > 0
       ? (sessionDriftMb / startRss) * 100
       : null;
-  // Scale drift threshold with baseline RSS (at least 25 MB, or 2% for multi-GB ONNX/GGUF workers)
-  // and only flag positive growth — memory reclamation (negative drift) is healthy.
-  const driftThresholdMb = startRss != null ? Math.max(25, startRss * 0.02) : 25;
+  // Scale drift threshold with baseline RSS (at least 150 MB, or 10% for multi-GB ONNX/Candle workers)
+  // so normal allocator-arena working-set growth on longer utterances is not mislabelled as a leak.
+  // Only flag positive growth — memory reclamation (negative drift) is healthy.
+  const driftThresholdMb = startRss != null ? Math.max(150, startRss * 0.10) : 150;
   const hasSignificantDrift = sessionDriftMb != null && sessionDriftMb > driftThresholdMb;
 
   // Recorded component identity & verified device info (no guessed models or memory sizes)
@@ -522,22 +523,31 @@ export function ResourceBreakdownModal({
                           <span title={notRecordedCellTip}>—</span>
                         );
                       if (delta != null) {
-                        if (delta >= 25) {
+                        if (delta >= 512) {
                           statusBadge = (
-                            <span className="text-rose-400 flex items-center gap-1">
+                            <span
+                              className="text-rose-400 flex items-center gap-1"
+                              title="Large single-turn RSS spike (>= 512 MB); check for unbounded buffer or cache growth."
+                            >
                               <AlertTriangle size={12} /> Spike
                             </span>
                           );
-                        } else if (delta >= 10) {
+                        } else if (delta >= 256) {
                           statusBadge = (
-                            <span className="text-amber-400 flex items-center gap-1">
-                              <AlertTriangle size={12} /> Growth
+                            <span
+                              className="text-amber-400 flex items-center gap-1"
+                              title="Elevated working-set allocation (256–512 MB); common on very long neural TTS/STT turns."
+                            >
+                              <AlertTriangle size={12} /> Elevated
                             </span>
                           );
                         } else {
                           statusBadge = (
-                            <span className="text-emerald-500 flex items-center gap-1">
-                              <CheckCircle2 size={12} /> Stable
+                            <span
+                              className="text-emerald-500 flex items-center gap-1"
+                              title="Normal working-set memory; temporary neural inference tensors scale with utterance length and are reclaimed after the turn."
+                            >
+                              <CheckCircle2 size={12} /> Normal
                             </span>
                           );
                         }
@@ -559,11 +569,11 @@ export function ResourceBreakdownModal({
                             {delta != null ? (
                               <span
                                 className={`px-1.5 py-0.5 rounded text-[10px] font-medium ring-1 ${
-                                  delta >= 25
+                                  delta >= 512
                                     ? isDark
                                       ? 'bg-rose-500/20 text-rose-300 ring-rose-500/40'
                                       : 'bg-rose-50 text-rose-700 ring-rose-300'
-                                    : delta >= 10
+                                    : delta >= 256
                                     ? isDark
                                       ? 'bg-amber-500/20 text-amber-300 ring-amber-500/40'
                                       : 'bg-amber-50 text-amber-700 ring-amber-300'

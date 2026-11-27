@@ -78,6 +78,18 @@ impl PacerConfig {
         Self::default()
     }
 
+    /// Tighter pacing for telephony/carrier media streams (e.g., Twilio, Infobip)
+    /// to prevent carrier playback buffer overflow (such as Twilio Error 31931)
+    /// and minimize queued audio that must be flushed on barge-in.
+    pub fn telephony() -> Self {
+        Self {
+            enabled: true,
+            pace_factor: 1.15,
+            burst_ms: 160,
+            max_buffer_ms: 30_000,
+        }
+    }
+
     /// Configuration for transports with independent streams (e.g., WebTransport/QUIC).
     /// Pacing is disabled since control messages travel on a separate stream.
     pub fn independent_streams() -> Self {

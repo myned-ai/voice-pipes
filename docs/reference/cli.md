@@ -43,6 +43,7 @@ Commands:
   healthz          Probe a health endpoint and exit 0 only on a success answer: the container images' `HEALTHCHECK`, which has no other HTTP client
   config-wizard    Launch interactive fleet configurator wizard to generate TOML configurations
   models           Download local model files, or list them, without the wizard
+  verify-audio     Verify synthesized audio quality (acoustics, noise/crackle, prosody, STT pronunciation, and golden WAV comparison). Exits non-zero when any verification gate fails
   help             Print this message or the help of the given subcommand(s)
 
 Options:
@@ -357,6 +358,30 @@ Commands:
   help   Print this message or the help of the given subcommand(s)
 
 Options:
+      --log-format <LOG_FORMAT>        Log format. Without it, `[pipeline] log_format` in the config decides, and compact lines when that is unset [possible values: compact, json]
+      --captures-dir <CAPTURES_DIR>    Enable audit trail and write to this directory
+      --audit-tap <SIDE>               Record audio around resampling stages for auditing. Values: before, after, both
+      --audit-tap-dir <AUDIT_TAP_DIR>  Directory for audit tap WAV files (default: audit_tap/) [default: audit_tap]
+      --config <PATH>                  Path to a TOML configuration file. Auto-discovers voice-pipes.toml in the current directory when not specified
+  -h, --help                           Print help
+```
+
+### `verify-audio`
+
+```text
+Verify synthesized audio quality (acoustics, noise/crackle, prosody, STT pronunciation, and golden WAV comparison). Exits non-zero when any verification gate fails
+
+Usage: voice-pipes verify-audio [OPTIONS]
+
+Options:
+      --audio <PATH>                   Path to a candidate WAV file to verify
+      --golden <PATH>                  Optional pre-approved golden WAV file for Log-Mel DTW & MCD comparison
+      --expected-text <TEXT>           Optional expected transcript for round-trip STT word alignment
+      --stt-config <PATH>              Optional TOML pipeline config providing an [stt] provider for round-trip transcription
+      --suite <PATH>                   Optional golden.toml suite manifest for batch verification
+      --json-out <PATH>                Write the structured JSON report to this file
+      --format <FORMAT>                Output format on stdout [default: text] [possible values: text, json]
+      --approve-to <DEST_WAV>          Copy `--audio` to this golden WAV path if all verification gates pass
       --log-format <LOG_FORMAT>        Log format. Without it, `[pipeline] log_format` in the config decides, and compact lines when that is unset [possible values: compact, json]
       --captures-dir <CAPTURES_DIR>    Enable audit trail and write to this directory
       --audit-tap <SIDE>               Record audio around resampling stages for auditing. Values: before, after, both

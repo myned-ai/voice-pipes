@@ -70,6 +70,24 @@ function PipelineMessageBubbleImpl({ entry }: Props) {
     );
   }
 
+  if (pm.kind === "system" && !pm.payload) {
+    return (
+      <div
+        className={`self-start max-w-[70%] inline-flex items-center gap-2 rounded-lg px-2.5 py-1 text-xs ${
+          isDark
+            ? "bg-slate-800/30 border border-slate-700/40 text-slate-400/80"
+            : "bg-gray-50/70 border border-gray-200/70 text-gray-400"
+        }`}
+      >
+        <Info size={12} className="shrink-0 opacity-60" />
+        <span className="truncate">{pm.text ?? entry.text}</span>
+        <span className="text-[10px] opacity-60 shrink-0">
+          {new Date(entry.timestamp).toLocaleTimeString()}
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div
       className={`self-start max-w-[90%] rounded-xl px-3.5 py-2.5 text-sm ${

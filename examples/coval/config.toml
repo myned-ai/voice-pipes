@@ -1,0 +1,26 @@
+# Voice Pipes + Coval AI (Config-Only Recipe)
+#
+# Zero Coval-specific Rust code is required in Voice Pipes:
+# - Audio connects via `/ws/raw?sample_rate=16000` (with Bearer token) or
+#   `/telephony/twilio/ws` (via the isolated `transport-twilio` plugin).
+# - `correlation_headers` maps `X-Coval-Simulation-Id` -> `SessionMetadata.external_id`.
+# - Standard OTLP/HTTP exports Voice Pipes' STT/LLM/TTS spans to Coval.
+
+[pipeline]
+name = "coval-eval-agent"
+
+[transport]
+enabled = true
+bind = "0.0.0.0"
+port = 8800
+max_sessions = 64
+raw_ws_enabled = true
+correlation_headers = ["x-coval-simulation-id", "x-correlation-id"]
+
+# Optional: enable if testing via Coval's Twilio Media Streams mode
+# (build CLI with `--features transport-twilio` and set TWILIO_AUTH_TOKEN).
+[transport.media_streams.twilio]
+public_webhook_url = "https://your-public-host.example.com/telephony/twilio/voice"
+stream_ws_url = "wss://your-public-host.example.com/telephony/twilio/ws"
+token_ttl_secs = 30
+require_auth = true

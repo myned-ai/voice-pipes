@@ -7,8 +7,8 @@ use voice_pipes_sdk::component::{ComponentCore, ComponentKind};
 use voice_pipes_sdk::{TtsConfig, TtsFactory, TtsProvider};
 
 use crate::config::{
-    DEFAULT_ENDPOINT, DEFAULT_SILENT_START_MS, DEFAULT_SILENT_START_RETRIES, PocketHttpConfig,
-    PocketOptions, SAMPLE_RATE,
+    DEFAULT_ENDPOINT, DEFAULT_MAX_CONCURRENT, DEFAULT_SILENT_START_MS,
+    DEFAULT_SILENT_START_RETRIES, PocketHttpConfig, PocketOptions, SAMPLE_RATE,
 };
 use crate::provider::PocketHttpTts;
 
@@ -81,6 +81,7 @@ impl TtsFactory for PocketHttpTtsFactory {
             endpoint = %config.endpoint,
             voice = %*config.current_voice(),
             timeout_ms = u64::try_from(config.request_timeout.as_millis()).unwrap_or(u64::MAX),
+            max_concurrent = config.max_concurrent,
             "Pocket-TTS HTTP provider initialized"
         );
         if config.endpoint == DEFAULT_ENDPOINT {
@@ -90,12 +91,14 @@ impl TtsFactory for PocketHttpTtsFactory {
             );
         }
 
+        let max_concurrent = config.max_concurrent;
         Ok(Box::new(PocketHttpTts {
             client,
             config,
             audit_tx,
             core: std::sync::Arc::new(ComponentCore::new("tts:pocket-http", ComponentKind::Tts)),
-            serialize: tokio::sync::Mutex::new(()),
+            concurrency: tokio::sync::Semaphore::new(max_concurrent),
+            warmed: std::sync::atomic::AtomicBool::new(false),
         }))
     }
 
@@ -167,6 +170,17 @@ impl TtsFactory for PocketHttpTtsFactory {
                 .cloned()
                 .unwrap_or(serde_json::json!(DEFAULT_SILENT_START_RETRIES)),
         );
+        s.push(
+            ParamDescriptor::static_int_display(
+                "max_concurrent",
+                "Max concurrent requests",
+                "Maximum simultaneous /tts requests in flight to the sidecar across all sessions on this worker.",
+            ),
+            cfg.options
+                .get("max_concurrent")
+                .cloned()
+                .unwrap_or(serde_json::json!(DEFAULT_MAX_CONCURRENT)),
+        );
         s.passthrough_options(
             &cfg.options,
             &[
@@ -174,6 +188,7 @@ impl TtsFactory for PocketHttpTtsFactory {
                 "silent_start_ms",
                 "silent_start_peak",
                 "silent_start_retries",
+                "max_concurrent",
             ],
             "pocket-http-specific option.",
         );

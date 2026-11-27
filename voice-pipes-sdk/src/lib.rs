@@ -113,6 +113,7 @@ pub mod build;
 pub mod component;
 pub mod config;
 pub mod filter;
+pub mod media_stream;
 pub mod options;
 pub mod params;
 pub mod phonemize;

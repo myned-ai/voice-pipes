@@ -177,7 +177,7 @@ describe('ResourceBreakdownModal', () => {
     expect(screen.getByText('Dropped')).toBeInTheDocument();
   });
 
-  it('treats ~1% ONNX arena warmup and negative reclamation as Memory Stable, and flags >2% growth as Drift Detected', () => {
+  it('treats ~1% ONNX arena warmup and negative reclamation as Memory Stable, and flags >10% growth as Drift Detected', () => {
     const mb = 1024 * 1024;
     const onnxWarmup: SessionData = {
       metadata: {},
@@ -208,7 +208,7 @@ describe('ResourceBreakdownModal', () => {
       metadata: {},
       utterances: [
         { utterance_id: 1, resource_usage: { rss_bytes: 11260 * mb } },
-        { utterance_id: 2, resource_usage: { rss_bytes: 11600 * mb } },
+        { utterance_id: 2, resource_usage: { rss_bytes: 12500 * mb } },
       ],
     };
     rerender(
