@@ -1,5 +1,9 @@
 # Pocket-TTS Candle (Native Rust)
 
+**Status:** active
+**Last verified:** 2026-11-27
+**Owner:** Docs
+
 `voice-pipes-tts-pocket-candle` is a pure-Rust implementation of **Kyutai Pocket-TTS** (`FlowLM` + LSD flow matching + streaming `Mimi` decoder & encoder) built on Candle (`0.11.0`). It eliminates Python/GIL contention and supports both **in-process execution** (`provider = "pocket-candle"`) and a **standalone horizontally scalable HTTP server** (`pocket-tts-server`) compatible with `provider = "pocket-http"`.
 
 ## Architecture Advantages
