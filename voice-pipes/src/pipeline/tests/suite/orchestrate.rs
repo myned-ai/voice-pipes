@@ -549,6 +549,134 @@ async fn agent_say_turn_has_null_llm_ttft_and_skip_reason() {
 }
 
 #[tokio::test]
+async fn agent_say_skips_llm_timing_and_user_turn_tags_utterance_id() {
+    let dir = std::env::temp_dir().join("vp_agent_say_llm_timing_audit_test");
+    let _ = std::fs::remove_dir_all(&dir);
+    let store: Arc<dyn crate::audit::store::AuditStore> =
+        Arc::new(crate::audit::LocalFsAuditStore::new(dir.clone()));
+    let session_id = "agent-say-audit";
+    let audit = crate::audit::StreamingAuditSink::spawn(store, session_id.to_string(), 64);
+
+    // 1. AgentSay greeting turn (utt 10001): must NOT emit `llm_timing`,
+    //    must still audit `llm_output` and record TTS cold_start.
+    let (audio_tx, mut audio_rx) = mpsc::channel(32);
+    let (event_tx, _flag) = test_event_channel();
+    let drain = tokio::spawn(async move { while audio_rx.recv().await.is_some() {} });
+    let tts_cold = Arc::new(AtomicBool::new(true));
+    let greeting = Utterance {
+        text: "Hi! How can I help you today?".into(),
+        utterance_id: 10001,
+        confidence: None,
+        stt_latency: None,
+        source: UtteranceSource::AgentSay,
+        endpointing_latency: None,
+        inference_metrics: None,
+        committed_at: None,
+    };
+    let snap_greeting = process_utterance(
+        &greeting,
+        audio_tx,
+        event_tx,
+        Arc::new(vec![Box::new(BlockedTextProcessor)]),
+        Arc::new(vec![]),
+        Arc::new(MockTts { sample_rate: 16000 }),
+        None,
+        None,
+        None,
+        CancellationToken::new(),
+        Some(audit.clone()),
+        None,
+        Arc::new(parking_lot::Mutex::new(AudioLedger::default())),
+        Arc::clone(&tts_cold),
+        None,
+        None,
+        None,
+    )
+    .await;
+    let _ = drain.await;
+
+    let greeting_tts = snap_greeting
+        .component_by_kind("tts")
+        .expect("greeting tts span");
+    assert!(
+        greeting_tts.cold_start,
+        "AgentSay greeting must consume TTS cold_start"
+    );
+
+    // 2. Normal user turn (utt 1): MUST emit `llm_timing` carrying `utterance_id: 1`,
+    //    and TTS is now warm (`cold_start == false`).
+    let (audio_tx2, mut audio_rx2) = mpsc::channel(32);
+    let (event_tx2, _flag2) = test_event_channel();
+    let drain2 = tokio::spawn(async move { while audio_rx2.recv().await.is_some() {} });
+    let user_utt = Utterance {
+        text: "Hello?".into(),
+        utterance_id: 1,
+        confidence: None,
+        stt_latency: None,
+        source: UtteranceSource::Audio,
+        endpointing_latency: None,
+        inference_metrics: None,
+        committed_at: None,
+    };
+    let snap_user = process_utterance(
+        &user_utt,
+        audio_tx2,
+        event_tx2,
+        Arc::new(vec![]),
+        Arc::new(vec![]),
+        Arc::new(MockTts { sample_rate: 16000 }),
+        None,
+        None,
+        None,
+        CancellationToken::new(),
+        Some(audit),
+        None,
+        Arc::new(parking_lot::Mutex::new(AudioLedger::default())),
+        Arc::clone(&tts_cold),
+        None,
+        None,
+        None,
+    )
+    .await;
+    let _ = drain2.await;
+
+    let user_tts = snap_user.component_by_kind("tts").expect("user tts span");
+    assert!(
+        !user_tts.cold_start,
+        "user turn after greeting must be TTS warm"
+    );
+
+    let events_path = dir.join(session_id).join("events.jsonl");
+    crate::audit::test_support::wait_until(crate::audit::test_support::WRITE_TIMEOUT, || {
+        std::fs::read_to_string(&events_path).is_ok_and(|c| c.contains("\"llm_timing\""))
+    })
+    .await;
+
+    let content = std::fs::read_to_string(&events_path).expect("events.jsonl written");
+    let llm_timings: Vec<serde_json::Value> = content
+        .lines()
+        .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+        .filter(|v| v.get("event_type").and_then(|s| s.as_str()) == Some("llm_timing"))
+        .collect();
+
+    assert_eq!(
+        llm_timings.len(),
+        1,
+        "AgentSay must not emit llm_timing; only user turn should: {llm_timings:?}"
+    );
+    assert_eq!(
+        llm_timings[0]
+            .get("payload")
+            .and_then(|p| p.get("utterance_id"))
+            .and_then(serde_json::Value::as_u64),
+        Some(1),
+        "llm_timing payload must carry utterance_id of the user turn: {llm_timings:?}"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[tokio::test]
 async fn speculative_accepted_turn_has_null_llm_ttft_and_skip_reason() {
     let processors: Arc<Vec<Box<dyn TextProcessor>>> = Arc::new(vec![]);
     let tts = Arc::new(MockTts { sample_rate: 16000 });

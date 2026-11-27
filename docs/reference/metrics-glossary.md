@@ -163,3 +163,26 @@ Only the client can measure these; they arrive as `timing_report` and
 | verdict | The report engine's one-line conclusion naming the culprit stage, or "healthy". It reads `unknown` when a session has no measurements to grade, never "healthy". The headline counts the flags a caller would have felt and names the rest as diagnostic |
 | grading rules | The targets and level bands a session is graded by: built-in defaults, then the console's `ADMIN_GRADING_*`, then the pipeline's `[grading]`, then a request's `?targets=`. A grade reached under anything but the defaults says so in its headline and carries `custom_grading` |
 | cold start | The first call against a provider handle in a session; excluded from averages by convention |
+
+## Audio Quality Verifier (`voice-pipes verify-audio`)
+
+Offline waveform, prosody, pronunciation, and golden-reference metrics emitted by `voice-pipes-bench::audio_verify` and `voice-pipes verify-audio`.
+
+| Key | Unit | Default Gate | Meaning / What It Catches |
+|---|---|---|---|
+| `rms_dbfs` | `dBFS` | `-35.0..=-5.0` | Whole-clip RMS loudness; catches silent or over-driven gain |
+| `clipping_pct` | `percent` | `<= 0.5` | Percentage of samples at `|s| >= 0.9999`; catches hard overflow |
+| `speech_band_ratio` | `ratio` | `>= 0.50` | Spectral power in wideband human speech (`80–4000 Hz`) over total power |
+| `high_freq_ratio` | `ratio` | `<= 0.25` | Spectral power above `6 kHz`; catches metallic screeching or ultrasonic hiss |
+| `spectral_flatness` | `ratio` | `<= 0.35` | Wiener entropy (geometric/arithmetic mean power); `~0.04–0.20` speech vs. `>0.6` noise |
+| `segmental_snr_db` | `dB` | diagnostic | Active-speech power minus noise-floor (15th-percentile frame) power |
+| `hnr_db` | `dB` | `>= 6.0` | Autocorrelation Harmonics-to-Noise Ratio on voiced frames; catches harsh/breathy noise |
+| `crackles_per_sec` | `count/s` | `<= 2.0` | 2nd-derivative (`Δ²x[n]`) digital click/pop impulse rate |
+| `boundary_crackle_count` | `count` | `== 0` | Crackles landing within ±2 ms of `80 ms` (Mimi) or `50 ms` (pacer) streaming chunk seams |
+| `median_f0_hz` | `Hz` | diagnostic | Median YIN fundamental pitch across voiced frames (`null` if unvoiced) |
+| `f0_std_semitones` / `f0_range_semitones` | `semitones` | diagnostic | Pitch spread and P95−P5 range; separates flat monotone from expressive intonation |
+| `jitter_pct` / `shimmer_pct` | `percent` | diagnostic | Cycle-to-cycle pitch (`F0`) and frame-to-frame amplitude instability |
+| `dynamic_range_db` / `syllable_rate_hz` | `dB` / `Hz` | diagnostic | Voiced loudness spread (P95−P10) and syllable envelope cadence (`~2–6 Hz` natural) |
+| `wer` / `cer` / `word_recall` | `ratio` | `<= 0.15` / `>= 0.85` | Punctuation-normalized round-trip STT error rates and matched-word recall |
+| `mel_cosine_similarity` / `mcd_db` | `ratio` / `dB` | `>= 0.85` / `<= 9.0` | DTW-aligned 80-bin Log-Mel cosine similarity and Mel-Cepstral Distortion vs. golden WAV |
+| `ltas_cosine_similarity` / `f0_rmse_semitones` | `ratio` / `semitones` | diagnostic | Long-term average spectrum timbre match and DTW-aligned pitch contour RMSE vs. golden WAV |

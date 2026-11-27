@@ -451,18 +451,21 @@ pub async fn process_utterance(
                     latency: llm_generation,
                     is_partial: cancel_bridge.is_cancelled(),
                 });
-                let elapsed_ms = llm_generation.as_secs_f64() * 1000.0;
-                a.record(crate::audit::AuditEvent::Trace(
-                    crate::audit::TraceEvent::new(
-                        format!("llm:{llm_provider_name_for_bridge}"),
-                        "llm_timing",
-                        serde_json::json!({
-                            "elapsed_ms": (elapsed_ms * 10.0).round() / 10.0,
-                            "tokens": token_estimate,
-                            "provider": &llm_provider_name_for_bridge,
-                        }),
-                    ),
-                ));
+                if utterance_source != UtteranceSource::AgentSay {
+                    let elapsed_ms = llm_generation.as_secs_f64() * 1000.0;
+                    a.record(crate::audit::AuditEvent::Trace(
+                        crate::audit::TraceEvent::new(
+                            format!("llm:{llm_provider_name_for_bridge}"),
+                            "llm_timing",
+                            serde_json::json!({
+                                "utterance_id": utterance_id,
+                                "elapsed_ms": (elapsed_ms * 10.0).round() / 10.0,
+                                "tokens": token_estimate,
+                                "provider": &llm_provider_name_for_bridge,
+                            }),
+                        ),
+                    ));
+                }
             }
             // Streams that end without a flagged final fragment deliver the
             // text when the channel closes.

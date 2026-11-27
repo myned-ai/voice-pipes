@@ -769,6 +769,17 @@ async fn run_session_inner(
         }
     };
 
+    // Optional opening greeting configured under `[agent] greeting = "..."`:
+    // fired once on the first loop iteration via the canonical `agent_say` path.
+    let mut pending_greeting: Option<String> = state
+        .config
+        .agent
+        .as_ref()
+        .and_then(|a| a.greeting.as_deref())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(ToString::to_string);
+
     // ── Orchestration loop ──────────────────────────────────
     loop {
         // Arm/disarm the idle countdown from the current turn state
@@ -839,6 +850,28 @@ async fn run_session_inner(
             () = state.shutdown.cancelled() => {
                 info!(session_id = %session_id, "worker shutting down; ending the session");
                 break;
+            }
+
+            // ── Configured opening greeting (`[agent] greeting`) ──
+            () = std::future::ready(()), if pending_greeting.is_some() => {
+                if let Some(text) = pending_greeting.take() {
+                    let mut ctx = make_ctx!();
+                    ctx.handle_agent_event(
+                        crate::agent::AgentEvent::Say {
+                            text,
+                            scheduling: crate::agent::Scheduling::WhenIdle,
+                        },
+                        &mut pending_agent,
+                        &cancel_watch_tx,
+                        &proc_audio_tx,
+                        &session_post_processors,
+                        &session_output_chunking,
+                        &metrics_tx,
+                        &tts_cold_start,
+                        state,
+                    )
+                    .await;
+                }
             }
 
             // ── Server-side barge-in / Interruption ─────────

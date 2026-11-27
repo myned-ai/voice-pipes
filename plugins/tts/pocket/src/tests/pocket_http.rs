@@ -492,7 +492,10 @@ async fn concurrent_synthesize_streams_are_serialized_and_cancel_fast() {
         }
     });
 
-    let tts: Arc<dyn TtsProvider> = Arc::from(provider_for(&format!("http://{addr}"), &[]));
+    let tts: Arc<dyn TtsProvider> = Arc::from(provider_for(
+        &format!("http://{addr}"),
+        &[("max_concurrent", serde_json::json!(1))],
+    ));
     let (tx1, mut rx1) = tokio::sync::mpsc::channel(16);
     let (tx2, mut rx2) = tokio::sync::mpsc::channel(16);
     let (tx3, _rx3) = tokio::sync::mpsc::channel(16);
@@ -543,6 +546,123 @@ async fn concurrent_synthesize_streams_are_serialized_and_cancel_fast() {
     assert!(rx2.recv().await.is_some());
     assert_eq!(max_active.load(Ordering::SeqCst), 1);
     assert_eq!(hits.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn concurrent_synthesize_streams_run_in_parallel_up_to_max_concurrent() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let active = Arc::new(AtomicUsize::new(0));
+    let max_active = Arc::new(AtomicUsize::new(0));
+    let hits = Arc::new(AtomicUsize::new(0));
+    let body = wav(&speech(0.2));
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let active_s = Arc::clone(&active);
+    let max_s = Arc::clone(&max_active);
+    let hits_s = Arc::clone(&hits);
+    tokio::spawn(async move {
+        while let Ok((mut sock, _)) = listener.accept().await {
+            let active_s = Arc::clone(&active_s);
+            let max_s = Arc::clone(&max_s);
+            let hits_s = Arc::clone(&hits_s);
+            let body = body.clone();
+            tokio::spawn(async move {
+                let mut buf = [0u8; 1024];
+                let _ = sock.read(&mut buf).await;
+                hits_s.fetch_add(1, Ordering::SeqCst);
+                let cur = active_s.fetch_add(1, Ordering::SeqCst) + 1;
+                max_s.fetch_max(cur, Ordering::SeqCst);
+                tokio::time::sleep(std::time::Duration::from_millis(80)).await;
+                let hdr = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: audio/wav\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                let _ = sock.write_all(hdr.as_bytes()).await;
+                let _ = sock.write_all(&body).await;
+                active_s.fetch_sub(1, Ordering::SeqCst);
+            });
+        }
+    });
+
+    // Default max_concurrent (4) allows multiple sessions to synthesize in parallel;
+    // cap explicitly at 2 here to assert both parallelism (>1) and enforcement (<=2).
+    let tts: Arc<dyn TtsProvider> = Arc::from(provider_for(
+        &format!("http://{addr}"),
+        &[("max_concurrent", serde_json::json!(2))],
+    ));
+    let (tx1, mut rx1) = tokio::sync::mpsc::channel(16);
+    let (tx2, mut rx2) = tokio::sync::mpsc::channel(16);
+    let (tx3, mut rx3) = tokio::sync::mpsc::channel(16);
+
+    let t1 = {
+        let tts = Arc::clone(&tts);
+        tokio::spawn(async move {
+            tts.synthesize_stream(
+                voice_pipes_sdk::SynthesisRequest::new("User one."),
+                tx1,
+                tokio_util::sync::CancellationToken::new(),
+            )
+            .await
+        })
+    };
+    let t2 = {
+        let tts = Arc::clone(&tts);
+        tokio::spawn(async move {
+            tts.synthesize_stream(
+                voice_pipes_sdk::SynthesisRequest::new("User two."),
+                tx2,
+                tokio_util::sync::CancellationToken::new(),
+            )
+            .await
+        })
+    };
+    let t3 = {
+        let tts = Arc::clone(&tts);
+        tokio::spawn(async move {
+            tts.synthesize_stream(
+                voice_pipes_sdk::SynthesisRequest::new("User three."),
+                tx3,
+                tokio_util::sync::CancellationToken::new(),
+            )
+            .await
+        })
+    };
+
+    let (r1, r2, r3) = tokio::join!(t1, t2, t3);
+    r1.unwrap().unwrap();
+    r2.unwrap().unwrap();
+    r3.unwrap().unwrap();
+    assert!(rx1.recv().await.is_some());
+    assert!(rx2.recv().await.is_some());
+    assert!(rx3.recv().await.is_some());
+    assert_eq!(hits.load(Ordering::SeqCst), 3);
+    assert_eq!(
+        max_active.load(Ordering::SeqCst),
+        2,
+        "up to max_concurrent=2 sessions should synthesize in parallel"
+    );
+}
+
+#[tokio::test]
+async fn warm_up_runs_once_per_provider_instance() {
+    let body = wav(&speech(0.1));
+    let (endpoint, hits) = mock_sidecar(vec![body.clone(), body]).await;
+
+    let tts = provider_for(&endpoint, &[]);
+    tts.warm_up().await.expect("first warm_up should succeed");
+    tts.warm_up()
+        .await
+        .expect("second warm_up should be a no-op");
+
+    assert_eq!(
+        hits.load(std::sync::atomic::Ordering::SeqCst),
+        1,
+        "subsequent session connects must not re-run sidecar warm-up"
+    );
 }
 
 #[tokio::test]

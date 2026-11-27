@@ -256,6 +256,39 @@ class InterruptionUnheardTest(unittest.TestCase):
             self.assertNotIn("stt.interruption_unheard", kinds)
             self.assertIn("vad.non_speech_forwarded", kinds)
 
+    def test_terminated_turn_with_incomplete_server_timing_does_not_blame_stt(self):
+        # Regression: when a turn terminates mid-TTS (e.g. caller disconnects
+        # while slow TTS is still synthesising), TurnMetricsReady is never
+        # emitted, leaving endpointing_ms and tts.ttfb_ms null and
+        # critical_path.total_ms partial (LLM TTFT only). That gap must not
+        # fire `turn.unanswered_wait` against STT.
+        t1 = _turn(utt=1, felt=4595, timed=5294)
+        t1["output"] = {"emit_rtf": 1.05, "source_rtf": 1.05, "chain_overhead_ms": 0, "audio_output_ms": 3300}
+        t1["playback"] = {"underruns": 2, "total_silence_ms": 972, "arrival_rtf": 1.12}
+        t2 = {
+            "utt": 2,
+            "initiator": "user",
+            "interrupted": False,
+            "terminated": True,
+            "stt": {"mode": "streaming", "endpointing_ms": None, "processing_ms": None},
+            "llm": {"ttft_ms": 183.4, "ttft_estimated": True, "generation_ms": 380.0},
+            "tts": {"ttfb_ms": None, "synthesis_ms": None, "rtf": None, "chars": 71},
+            "total_ms": None,
+            "e2e_perceived_ms": 6031.2,
+            "e2e_estimated": False,
+            "critical_path": {"endpointing_ms": 0.0, "llm_ttft_ms": 183.4, "tts_ttfb_ms": 0.0, "total_ms": 183.4},
+            "user_transcript": "my story",
+            "agent_transcript": "Could you tell me more?",
+        }
+        anomalies = _detect_anomalies([t1, t2], TARGETS)
+        self.assertNotIn(
+            "turn.unanswered_wait",
+            [a["kind"] for a in anomalies if a["utt"] == 2],
+        )
+        verdict = _compute_verdict([t1, t2], [], anomalies, {}, model="v2")
+        self.assertEqual(verdict["level"], "broken")
+        self.assertEqual(verdict["primary_culprit"], "tts")
+
 
 if __name__ == "__main__":
     unittest.main()

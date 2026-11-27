@@ -11,6 +11,7 @@ members = [
     "plugins/stt/google",        # Google Cloud STT (Chirp 3), moved out of the engine
     "plugins/tts/kokoro",        # Kokoro TTS (local ONNX), moved out of the engine
     "plugins/tts/pocket",        # Pocket-TTS over its HTTP sidecar
+    "plugins/tts/pocket-candle", # Kyutai Pocket-TTS native Rust (Candle) engine + optional HTTP server
     "plugins/tts/openai",        # OpenAI TTS (and VibeVoice)
     "plugins/stt/assemblyai",    # AssemblyAI streaming STT (WebSocket)
     "plugins/tts/elevenlabs",    # ElevenLabs TTS (REST)
@@ -47,6 +48,7 @@ voice-pipes-stt-google = { path = "plugins/stt/google", version = "0.3.0" }
 voice-pipes-stt-nemotron35 = { path = "plugins/stt/nemotron35", version = "0.3.0" }
 voice-pipes-tts-kokoro = { path = "plugins/tts/kokoro", version = "0.3.0" }
 voice-pipes-tts-pocket = { path = "plugins/tts/pocket", version = "0.3.0" }
+voice-pipes-tts-pocket-candle = { path = "plugins/tts/pocket-candle", version = "0.3.0" }
 voice-pipes-tts-openai = { path = "plugins/tts/openai", version = "0.3.0" }
 voice-pipes-stt-assemblyai = { path = "plugins/stt/assemblyai", version = "0.3.0" }
 voice-pipes-tts-elevenlabs = { path = "plugins/tts/elevenlabs", version = "0.3.0" }

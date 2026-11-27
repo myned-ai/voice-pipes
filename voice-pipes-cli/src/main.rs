@@ -21,6 +21,8 @@ use tracing::error;
 use audit::AuditSink;
 use config::PipelineConfig;
 
+mod verify_audio;
+
 /// Voice Pipes -- local voice pipeline
 #[derive(Parser)]
 #[command(name = "voice-pipes", version)]
@@ -242,6 +244,42 @@ enum Command {
         #[command(subcommand)]
         action: ModelsAction,
     },
+
+    /// Verify synthesized audio quality (acoustics, noise/crackle, prosody, STT pronunciation,
+    /// and golden WAV comparison). Exits non-zero when any verification gate fails.
+    VerifyAudio {
+        /// Path to a candidate WAV file to verify
+        #[arg(long, value_name = "PATH")]
+        audio: Option<PathBuf>,
+
+        /// Optional pre-approved golden WAV file for Log-Mel DTW & MCD comparison
+        #[arg(long, value_name = "PATH")]
+        golden: Option<PathBuf>,
+
+        /// Optional expected transcript for round-trip STT word alignment
+        #[arg(long, value_name = "TEXT")]
+        expected_text: Option<String>,
+
+        /// Optional TOML pipeline config providing an [stt] provider for round-trip transcription
+        #[arg(long, value_name = "PATH")]
+        stt_config: Option<PathBuf>,
+
+        /// Optional golden.toml suite manifest for batch verification
+        #[arg(long, value_name = "PATH")]
+        suite: Option<PathBuf>,
+
+        /// Write the structured JSON report to this file
+        #[arg(long, value_name = "PATH")]
+        json_out: Option<PathBuf>,
+
+        /// Output format on stdout
+        #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
+        format: OutputFormat,
+
+        /// Copy `--audio` to this golden WAV path if all verification gates pass
+        #[arg(long, value_name = "DEST_WAV")]
+        approve_to: Option<PathBuf>,
+    },
 }
 
 /// What `models` does.
@@ -348,7 +386,7 @@ const BUILD_HINTS: &[(voice_pipes::plugins::Stage, &str)] = {
         (Stage::Llm, "llm-gguf or llm-openai-compat"),
         (
             Stage::Tts,
-            "tts-piper, tts-kokoro, tts-openai, tts-elevenlabs, tts-gemini, tts-pocket or tts-neutts",
+            "tts-piper, tts-kokoro, tts-openai, tts-elevenlabs, tts-gemini, tts-pocket, tts-pocket-candle or tts-neutts",
         ),
         (Stage::Realtime, "s2s-gemini, s2s-openai or s2s-elevenlabs"),
         (Stage::Turn, "turn-smart or turn-vap"),
@@ -389,6 +427,7 @@ fn register_each_plugin() -> Result<(), voice_pipes::plugins::RegistrationError>
     plugin!("tts-openai", Tts, voice_pipes_tts_openai);
     plugin!("tts-kokoro", Tts, voice_pipes_tts_kokoro);
     plugin!("tts-pocket", Tts, voice_pipes_tts_pocket);
+    plugin!("tts-pocket-candle", Tts, voice_pipes_tts_pocket_candle);
     plugin!("tts-gemini", Tts, voice_pipes_tts_gemini);
     plugin!("tts-elevenlabs", Tts, voice_pipes_tts_elevenlabs);
     plugin!("tts-neutts", Tts, voice_pipes_tts_neutts);
@@ -670,6 +709,28 @@ async fn run(cli: Cli) -> Result<(), anyhow::Error> {
             ModelsAction::Fetch { names } => voice_pipes::commands::run_models_fetch(&names).await,
             ModelsAction::List => voice_pipes::commands::run_models_list(),
         },
+        Command::VerifyAudio {
+            audio,
+            golden,
+            expected_text,
+            stt_config,
+            suite,
+            json_out,
+            format,
+            approve_to,
+        } => {
+            verify_audio::run_verify_audio(verify_audio::VerifyAudioArgs {
+                audio,
+                golden,
+                expected_text,
+                stt_config,
+                suite,
+                json_out,
+                json_stdout: matches!(format, OutputFormat::Json),
+                approve_to,
+            })
+            .await
+        }
     }
 }
 

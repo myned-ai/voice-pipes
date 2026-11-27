@@ -734,6 +734,28 @@ pub async fn run_realtime_session_inner(
         .map(std::time::Duration::from_millis);
     let mut response_idle_deadline: Option<tokio::time::Instant> = None;
 
+    if let Some(greeting) = state
+        .config
+        .agent
+        .as_ref()
+        .and_then(|a| a.greeting.as_deref())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        let mut ctx = make_ctx!();
+        let _ = ctx
+            .handle_agent_event(
+                crate::agent::AgentEvent::Say {
+                    text: greeting.to_string(),
+                    scheduling: crate::agent::Scheduling::WhenIdle,
+                },
+                &mut responses,
+                &mut kick_pending,
+                &mut pending_agent,
+            )
+            .await;
+    }
+
     loop {
         tokio::select! {
             biased;

@@ -397,6 +397,83 @@ async fn raw_ws_handler(
 
 // ── Plugin Telephony Routes (/telephony/{provider}/*) ───────
 
+fn is_valid_env_var_name(name: &str) -> bool {
+    let bytes = name.as_bytes();
+    let Some(&first) = bytes.first() else {
+        return false;
+    };
+    (first.is_ascii_alphabetic() || first == b'_')
+        && bytes
+            .iter()
+            .all(|&b| b.is_ascii_alphanumeric() || b == b'_')
+}
+
+/// Resolve host environment-variable credentials into a dialect's JSON config
+/// without letting provider crates read `std::env` directly.
+///
+/// Precedence for any `<field>` / `<field>_env` pair (e.g. `auth_token` /
+/// `auth_token_env`, `stream_signing_secret` / `stream_signing_secret_env`):
+/// 1. Explicit non-empty `<field>` in TOML.
+/// 2. Value of the env var named by `<field>_env` in TOML.
+/// 3. For `auth_token` only: value of `default_auth_env` (e.g. `TWILIO_AUTH_TOKEN`).
+fn resolve_media_stream_config_with<F>(
+    raw: &serde_json::Value,
+    default_auth_env: Option<&str>,
+    mut lookup_env: F,
+) -> serde_json::Value
+where
+    F: FnMut(&str) -> Option<String>,
+{
+    let mut obj = match raw.as_object() {
+        Some(map) => map.clone(),
+        None => serde_json::Map::new(),
+    };
+
+    // Collect `<field>_env` mappings first so we don't mutate while iterating.
+    let env_refs: Vec<(String, String)> = obj
+        .iter()
+        .filter_map(|(k, v)| {
+            let target = k.strip_suffix("_env")?;
+            let var_name = v.as_str()?.trim();
+            (!target.is_empty() && is_valid_env_var_name(var_name))
+                .then(|| (target.to_string(), var_name.to_string()))
+        })
+        .collect();
+
+    let has_non_empty = |map: &serde_json::Map<String, serde_json::Value>, key: &str| {
+        map.get(key)
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|s| !s.trim().is_empty())
+    };
+
+    for (target, var_name) in env_refs {
+        if !has_non_empty(&obj, &target)
+            && let Some(val) = lookup_env(&var_name).filter(|s| !s.trim().is_empty())
+        {
+            obj.insert(target, serde_json::Value::String(val));
+        }
+    }
+
+    // Fallback to the dialect's default auth env var (e.g. TWILIO_AUTH_TOKEN)
+    // when neither `auth_token` nor `auth_token_env` provided a value.
+    if !has_non_empty(&obj, "auth_token")
+        && let Some(default_var) = default_auth_env
+        && is_valid_env_var_name(default_var)
+        && let Some(val) = lookup_env(default_var).filter(|s| !s.trim().is_empty())
+    {
+        obj.insert("auth_token".to_string(), serde_json::Value::String(val));
+    }
+
+    serde_json::Value::Object(obj)
+}
+
+fn resolve_media_stream_config(
+    raw: &serde_json::Value,
+    default_auth_env: Option<&str>,
+) -> serde_json::Value {
+    resolve_media_stream_config_with(raw, default_auth_env, |name| std::env::var(name).ok())
+}
+
 /// `GET /telephony/{provider}/ws` — WebSocket media stream dispatched to any
 /// registered [`MediaStreamDialectFactory`](voice_pipes_sdk::media_stream::MediaStreamDialectFactory).
 async fn telephony_ws_handler(
@@ -420,13 +497,14 @@ async fn telephony_ws_handler(
         return (StatusCode::SERVICE_UNAVAILABLE, "max sessions reached").into_response();
     }
 
-    let dialect_cfg = state
+    let raw_cfg = state
         .config
         .transport
         .as_ref()
         .and_then(|t| t.media_streams.get(&provider))
         .cloned()
         .unwrap_or(serde_json::Value::Null);
+    let dialect_cfg = resolve_media_stream_config(&raw_cfg, factory.default_auth_token_env());
 
     let dialect = match factory.create_dialect(&dialect_cfg) {
         Ok(d) => d,
@@ -545,13 +623,14 @@ async fn telephony_webhook_handler(
             .into_response();
     };
 
-    let dialect_cfg = state
+    let raw_cfg = state
         .config
         .transport
         .as_ref()
         .and_then(|t| t.media_streams.get(&provider))
         .cloned()
         .unwrap_or(serde_json::Value::Null);
+    let dialect_cfg = resolve_media_stream_config(&raw_cfg, factory.default_auth_token_env());
 
     let mut hdrs = HashMap::new();
     for (k, v) in &headers {

@@ -1,0 +1,54 @@
+[package]
+name = "voice-pipes-tts-pocket-candle"
+version.workspace = true
+edition = "2024"
+description = "Kyutai Pocket-TTS native Rust (Candle) streaming TTS plugin and standalone HTTP server"
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+readme = "README.md"
+keywords.workspace = true
+categories.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "pocket-tts-server"
+path = "src/bin/pocket_tts_server.rs"
+required-features = ["server"]
+
+[dependencies]
+voice-pipes-sdk.workspace = true
+anyhow.workspace = true
+arc-swap.workspace = true
+async-trait.workspace = true
+candle-core.workspace = true
+candle-nn.workspace = true
+hound.workspace = true
+parking_lot.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+sha2.workspace = true
+tokenizers = { workspace = true, features = ["onig"] }
+tokio = { workspace = true, features = ["sync", "rt", "macros", "time"] }
+tokio-util.workspace = true
+tracing.workspace = true
+
+# Optional standalone HTTP server (`pocket-tts-server`) speaking the `/tts` WAV streaming protocol.
+async-stream = { workspace = true, optional = true }
+axum = { workspace = true, optional = true }
+clap = { workspace = true, features = ["derive", "env"], optional = true }
+futures-util = { workspace = true, optional = true }
+
+[features]
+# Run Pocket-TTS FlowLM + Mimi on an NVIDIA GPU via Candle CUDA kernels.
+cuda = ["candle-core/cuda", "candle-nn/cuda"]
+# Build the standalone `pocket-tts-server` HTTP microservice binary.
+server = ["dep:async-stream", "dep:axum", "dep:clap", "dep:futures-util", "tokio/rt-multi-thread", "tokio/signal", "tokio/net"]
+
+[dev-dependencies]
+voice-pipes-sdk = { workspace = true, features = ["testing"] }
+tempfile.workspace = true
+tokio = { workspace = true, features = ["sync", "rt-multi-thread", "macros", "time"] }
+toml.workspace = true

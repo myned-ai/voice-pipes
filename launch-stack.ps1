@@ -119,7 +119,7 @@ if ($Cpu -or $NoGpu -or $env:VP_DEVICE -eq "cpu" -or $env:VP_FORCE_CPU) {
     }
 }
 
-$liteFeatures = "realtime,stt-parakeet,tts-piper,vad-silero,filter-deepfilter,llm-openai-compat,s2s-gemini,s2s-openai,s2s-elevenlabs,telemetry,wizard,audio-device,session-sqlite,text-grpc,tts-kokoro,tts-pocket,stt-moonshine,tts-openai,tts-elevenlabs,stt-assemblyai,stt-google,tts-gemini,stt-nemotron,stt-nemotron35,turn-smart"
+$liteFeatures = "realtime,stt-parakeet,tts-piper,vad-silero,filter-deepfilter,llm-openai-compat,s2s-gemini,s2s-openai,s2s-elevenlabs,telemetry,wizard,audio-device,session-sqlite,text-grpc,transport-twilio,tts-kokoro,tts-pocket,tts-pocket-candle,stt-moonshine,tts-openai,tts-elevenlabs,stt-assemblyai,stt-google,tts-gemini,stt-nemotron,stt-nemotron35,turn-smart"
 $cfgPath = "voice-pipes/deploy/docker/config/pipeline-custom.toml"
 $useLlamaCpp = [bool]$Full
 if (-not $useLlamaCpp -and $SkipWizard -and (Test-Path $cfgPath) -and (Select-String -Path $cfgPath -Pattern "provider\s*=\s*['""](neutts|gguf)['""]" -Quiet)) {

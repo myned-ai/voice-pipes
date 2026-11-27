@@ -4713,6 +4713,7 @@ dependencies = [
  "chrono",
  "dashmap",
  "futures-util",
+ "rustfft",
  "serde",
  "serde_json",
  "sha2",
@@ -4739,8 +4740,10 @@ dependencies = [
  "mimalloc",
  "parking_lot",
  "proc-macro2",
+ "serde",
  "serde_json",
  "syn 2.0.118",
+ "tempfile",
  "tokio",
  "tokio-util",
  "toml",
@@ -4769,6 +4772,7 @@ dependencies = [
  "voice-pipes-tts-openai",
  "voice-pipes-tts-piper",
  "voice-pipes-tts-pocket",
+ "voice-pipes-tts-pocket-candle",
  "voice-pipes-turn-smart",
  "voice-pipes-turn-vap",
  "voice-pipes-vad-silero",
@@ -5167,6 +5171,33 @@ dependencies = [
  "tokio-util",
  "tracing",
  "voice-pipes-net",
+ "voice-pipes-sdk",
+]
+
+[[package]]
+name = "voice-pipes-tts-pocket-candle"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "arc-swap",
+ "async-stream",
+ "async-trait",
+ "axum 0.8.9",
+ "candle-core",
+ "candle-nn",
+ "clap",
+ "futures-util",
+ "hound",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tokenizers",
+ "tokio",
+ "tokio-util",
+ "toml",
+ "tracing",
  "voice-pipes-sdk",
 ]
 

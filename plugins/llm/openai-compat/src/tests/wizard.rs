@@ -45,7 +45,7 @@ fn a_gemma_preset_writes_what_the_built_in_did() {
          base_url = \"http://llama-server:8081/v1\"\n\
          model = \"gemma-3-1b-it\"\n\
          api_key = \"\"\n\
-         system_prompt = \"You are a friendly voice assistant. Keep responses to one or two short sentences.\"\n\
+         system_prompt = \"You are a friendly voice assistant. Keep responses to one or two short sentences. If your previous message ends with [interrupted by user], the user cut you off—do not continue or restart what you were saying unless asked; respond naturally to what they just said.\"\n\
          max_tokens = 1024\n\
          temperature = 1.0\n\
          top_p = 0.95\n"

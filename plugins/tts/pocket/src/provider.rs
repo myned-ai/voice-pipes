@@ -1,6 +1,7 @@
 //! The `TtsProvider`: the `POST /tts` request, the streamed WAV reply turned
 //! into audio frames, and the silent-start probe that re-requests a fragment.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
@@ -28,9 +29,13 @@ pub(crate) struct PocketHttpTts {
     pub(crate) config: PocketHttpConfig,
     pub(crate) audit_tx: Option<mpsc::Sender<TraceEvent>>,
     pub(crate) core: std::sync::Arc<ComponentCore>,
-    /// Serializes `/tts` requests to the single-process CPU-only sidecar so
-    /// sentence-chunking prefetch doesn't cause CPU thread contention.
-    pub(crate) serialize: tokio::sync::Mutex<()>,
+    /// Bounds concurrent `/tts` requests in flight to the sidecar across all
+    /// sessions on this worker (`max_concurrent` option, default 4).
+    pub(crate) concurrency: tokio::sync::Semaphore,
+    /// Tracks whether the shared sidecar has already completed one warm-up
+    /// request so subsequent session connects do not steal synthesis capacity
+    /// from active callers.
+    pub(crate) warmed: AtomicBool,
 }
 
 impl std::fmt::Debug for PocketHttpTts {
@@ -58,10 +63,12 @@ impl PocketHttpTts {
         audio_tx: mpsc::Sender<AudioFrame>,
         cancel: tokio_util::sync::CancellationToken,
     ) -> Result<(), TtsError> {
-        let _serialize_guard = tokio::select! {
+        let _permit = tokio::select! {
             biased;
             () = cancel.cancelled() => return Ok(()),
-            g = self.serialize.lock() => g,
+            permit = self.concurrency.acquire() => {
+                permit.map_err(|e| TtsError::InferenceFailed(format!("pocket-tts concurrency limiter closed: {e}")))?
+            }
         };
         let attempts = 1 + self.config.silent_start.map_or(0, |g| g.retries);
         for attempt in 1..=attempts {
@@ -134,7 +141,10 @@ impl PocketHttpTts {
             .form(&form)
             .send()
             .await
-            .map_err(|e| TtsError::NetworkError(format!("pocket-tts request failed: {e}")))?;
+            .map_err(|e| {
+                self.warmed.store(false, Ordering::Relaxed);
+                TtsError::NetworkError(format!("pocket-tts request failed: {e}"))
+            })?;
 
         let status = response.status();
         if !status.is_success() {
@@ -269,7 +279,15 @@ impl TtsProvider for PocketHttpTts {
     /// Result is discarded and does not record turn metrics or audit timing.
     #[instrument(skip_all, fields(provider = "pocket-http"))]
     async fn warm_up(&self) -> Result<(), TtsError> {
-        let _serialize_guard = self.serialize.lock().await;
+        if self.warmed.load(Ordering::Relaxed) {
+            return Ok(());
+        }
+        let _permit = self.concurrency.acquire().await.map_err(|e| {
+            TtsError::InferenceFailed(format!("pocket-tts concurrency limiter closed: {e}"))
+        })?;
+        if self.warmed.load(Ordering::Relaxed) {
+            return Ok(());
+        }
         let voice = (*self.config.current_voice()).clone();
         let url = self.url();
         let form = [("text", "Hi."), ("voice_url", voice.as_str())];
@@ -306,6 +324,7 @@ impl TtsProvider for PocketHttpTts {
                 "pocket-tts warm-up: server returned empty/invalid WAV stream".into(),
             ));
         }
+        self.warmed.store(true, Ordering::Relaxed);
         Ok(())
     }
 

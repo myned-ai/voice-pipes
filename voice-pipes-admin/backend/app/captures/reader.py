@@ -221,6 +221,7 @@ def project_snapshot_metrics(snap: dict | None) -> dict:
         "output_wait_ms": None,
         "commit_to_first_audio_ms": None,
         "tts_stage_skipped_reason": None,
+        "tts_cold_start": None,
         "synthesis_ms": None,
         "audio_duration_ms": None,
         "rtf": None,
@@ -314,6 +315,8 @@ def project_snapshot_metrics(snap: dict | None) -> dict:
         tts_skip = ex.get("stage_skipped_reason")
         if isinstance(tts_skip, str) and tts_skip:
             out["tts_stage_skipped_reason"] = tts_skip
+        if tts.get("cold_start") is True:
+            out["tts_cold_start"] = True
         out["synthesis_ms"] = _num(ex.get("synthesis_ms"))
         out["audio_duration_ms"] = _num(ex.get("audio_duration_ms"))
         out["rtf"] = _num(ex.get("rtf"))
@@ -1247,11 +1250,25 @@ def _read_capture_artifacts(
             # Unreadable file: timing payloads stay unattributed.
             pass
 
+    # Turns that bypassed the LLM provider (`agent_say`, `speculative_accept`)
+    # still emit `llm_completed` (for spoken text / history) and in legacy
+    # captures emitted a synthetic `llm_timing`, but NEVER invoke the LLM
+    # provider and therefore never emit `llm_detail`. Exclude them from the
+    # positional `llm_detail` sequence so subsequent user turns keep their own
+    # provider breakdown (`connect_ms`, `first_token_ms`, `prompt_ingest_ms`).
+    skipped_llm_uids = {
+        uid
+        for uid, u in utterances.items()
+        if project_snapshot_metrics(u.get("metric_snapshot")).get("llm_stage_skipped_reason")
+        is not None
+    }
+    expected_llm_detail = [uid for uid in expected_llm if uid not in skipped_llm_uids]
+
     # Walk events.jsonl in order, assigning each typed payload to its utterance.
     seq_for: dict[str, list[int]] = {
         "stt_timing": expected_stt,
         "llm_timing": expected_llm,
-        "llm_detail": expected_llm,
+        "llm_detail": expected_llm_detail,
         "tts_timing": expected_tts,
         "tts_detail": expected_tts,
     }
@@ -1298,16 +1315,21 @@ def _read_capture_artifacts(
             # Direct-keyed events (client_timing, barge_in_rtt) carry utterance_id
             # in their payload and are handled above; skip here.
             continue
-        seq = seq_for[etype]
-        i = seq_idx[etype]
-        if i >= len(seq):
-            # More events of this type than expected (e.g. legacy capture or
-            # provider double-emit) — drop the surplus rather than misattribute.
-            continue
-        uid = seq[i]
-        seq_idx[etype] = i + 1
+        payload = evt.get("payload") or {}
+        direct_uid = payload.get("utterance_id")
+        if isinstance(direct_uid, int) and not isinstance(direct_uid, bool):
+            uid = direct_uid
+        else:
+            seq = seq_for[etype]
+            i = seq_idx[etype]
+            if i >= len(seq):
+                # More events of this type than expected (e.g. legacy capture or
+                # provider double-emit) — drop the surplus rather than misattribute.
+                continue
+            uid = seq[i]
+            seq_idx[etype] = i + 1
         utt = utterances.setdefault(uid, {"utterance_id": uid})
-        utt[etype] = evt.get("payload") or {}
+        utt[etype] = payload
         # The server's own estimate of when the user finished speaking, used
         # when the client sent no `speech_end` -- which is every turn the user
         # started by talking over the agent, since a client report is

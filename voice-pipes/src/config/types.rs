@@ -124,6 +124,11 @@ pub struct AgentSettings {
     /// decide the wording itself.
     #[serde(default = "default_idle_message")]
     pub idle_message: String,
+    /// Optional opening greeting spoken automatically as soon as a client
+    /// connects (right after `session_ready` + initial `Listening` state),
+    /// via the same `agent_say` path as `action: "say"`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub greeting: Option<String>,
 }
 
 fn default_idle_max_prompts() -> u32 {

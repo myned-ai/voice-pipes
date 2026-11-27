@@ -108,7 +108,7 @@ else
     fi
 fi
 
-LITE_FEATURES="realtime,stt-parakeet,tts-piper,vad-silero,filter-deepfilter,llm-openai-compat,s2s-gemini,s2s-openai,s2s-elevenlabs,telemetry,wizard,audio-device,session-sqlite,text-grpc,tts-kokoro,tts-pocket,stt-moonshine,tts-openai,tts-elevenlabs,stt-assemblyai,stt-google,tts-gemini,stt-nemotron,stt-nemotron35,turn-smart"
+LITE_FEATURES="realtime,stt-parakeet,tts-piper,vad-silero,filter-deepfilter,llm-openai-compat,s2s-gemini,s2s-openai,s2s-elevenlabs,telemetry,wizard,audio-device,session-sqlite,text-grpc,transport-twilio,tts-kokoro,tts-pocket,tts-pocket-candle,stt-moonshine,tts-openai,tts-elevenlabs,stt-assemblyai,stt-google,tts-gemini,stt-nemotron,stt-nemotron35,turn-smart"
 CFG_PATH="voice-pipes/deploy/docker/config/pipeline-custom.toml"
 if [ "$FULL_BUILD" -eq 0 ] && [ "$SKIP_WIZARD" -eq 1 ] && [ -f "$CFG_PATH" ] && grep -Eq 'provider\s*=\s*["'"'"'](neutts|gguf)["'"'"']' "$CFG_PATH"; then
     FULL_BUILD=1

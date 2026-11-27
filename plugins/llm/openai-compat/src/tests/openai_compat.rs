@@ -447,6 +447,14 @@ fn truncate_history_replaces_last_assistant_message_with_interrupted_marker() {
         req.messages[2].content,
         "Once upon a time... [interrupted by user]"
     );
+    assert_eq!(req.messages[3].role, "user");
+    assert!(
+        req.messages[3]
+            .content
+            .starts_with("(interrupted you mid-sentence) "),
+        "next user turn after barge-in carries inline interruption cue, got {:?}",
+        req.messages[3].content
+    );
 
     // A duplicate truncation for the same turn is a no-op.
     assert_eq!(proc.truncate_history("Once"), None);

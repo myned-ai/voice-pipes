@@ -26,6 +26,7 @@
 /plugins/stt/nemotron35/        @goran-j
 /plugins/tts/kokoro/            @goran-j
 /plugins/tts/pocket/            @goran-j
+/plugins/tts/pocket-candle/     @goran-j
 /plugins/tts/openai/            @goran-j
 /plugins/stt/assemblyai/        @goran-j
 /plugins/tts/elevenlabs/        @goran-j

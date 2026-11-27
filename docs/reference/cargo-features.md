@@ -158,6 +158,7 @@ Out-of-tree providers built on the SDK. The engine knows nothing of them: this c
 | `tts-piper` | `dep:voice-pipes-tts-piper` | Piper VITS, local ONNX with espeak-ng phonemes: the default voice. |
 | `tts-kokoro` | `dep:voice-pipes-tts-kokoro` | Kokoro-82M, local ONNX with espeak-ng phonemes. |
 | `tts-pocket` | `dep:voice-pipes-tts-pocket` | Kyutai Pocket-TTS, over the `pocket-tts` HTTP sidecar. |
+| `tts-pocket-candle` | `dep:voice-pipes-tts-pocket-candle` | Kyutai Pocket-TTS, native Rust (Candle) in-process engine. |
 | `tts-pocket-http` | `tts-pocket` | Its name before 1.0. |
 | `tts-openai` | `dep:voice-pipes-tts-openai` | OpenAI TTS, and servers speaking its API (the VibeVoice sidecar). |
 | `tts-elevenlabs` | `dep:voice-pipes-tts-elevenlabs` | ElevenLabs TTS (REST streaming, word timestamps). |
@@ -172,7 +173,7 @@ Out-of-tree providers built on the SDK. The engine knows nothing of them: this c
 | `text-openai-compat` | `llm-openai-compat` | Its name before 1.0. |
 | `llm-gguf` | `dep:voice-pipes-llm-gguf` | A local GGUF model (candle), SmolLM2 by default. Built by default. |
 | `text-llm` | `llm-gguf` | Its name before 1.0. |
-| `cuda` | `llm-gguf`, `voice-pipes-llm-gguf/cuda` | Run the local GGUF model on an NVIDIA GPU. |
+| `cuda` | `llm-gguf`, `voice-pipes-llm-gguf/cuda`, `voice-pipes-tts-pocket-candle?/cuda` | Run local Candle/GGUF models on an NVIDIA GPU. |
 
 ### Plugin VADs
 

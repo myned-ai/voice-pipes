@@ -292,6 +292,13 @@ pub trait MediaStreamDialectFactory: Send + Sync {
     ) -> Result<Option<WebhookResponse>, WebhookError> {
         Ok(None)
     }
+
+    /// Default environment variable name the host checks when `auth_token`
+    /// is omitted from `[transport.media_streams.<name>]` (e.g.,
+    /// `Some("TWILIO_AUTH_TOKEN")`).
+    fn default_auth_token_env(&self) -> Option<&'static str> {
+        None
+    }
 }
 
 // ── Global registry ─────────────────────────────────────────

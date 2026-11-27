@@ -1803,6 +1803,8 @@ const PUBLIC_API: &[(&str, &[&str])] = &[
     ),
     // The bench runs VAP directly in its turn-detection bake-off.
     ("voice-pipes-turn-vap", &["VapTurnDetector"]),
+    // Standalone `pocket-tts-server` binary (behind `--features server`) uses this module.
+    ("voice-pipes-tts-pocket-candle", &["mod server_support"]),
     // Providers and configs the crates' own integration tests build.
     ("voice-pipes-tts-kokoro", &["KokoroTts"]),
     (

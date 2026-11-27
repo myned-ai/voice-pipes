@@ -196,6 +196,9 @@ fn ct_eq(a: &[u8], b: &[u8]) -> bool {
 
 // ── Axum middleware ─────────────────────────────────────────
 
+/// Surface label for the worker WebSocket / telephony transport server.
+pub const WS_TRANSPORT_SURFACE: &str = "WS transport";
+
 /// Paths that stay open even on an enforced surface: Kubernetes /
 /// load-balancer probes cannot carry credentials, and none of these
 /// serve secrets.
@@ -232,7 +235,16 @@ fn presented_token(headers: &HeaderMap, query: Option<&str>) -> Option<String> {
 }
 
 async fn auth_middleware(State(auth): State<SurfaceAuth>, req: Request, next: Next) -> Response {
-    if OPEN_PATHS.contains(&req.uri().path()) {
+    let path = req.uri().path();
+    if OPEN_PATHS.contains(&path) {
+        return next.run(req).await;
+    }
+    // Carrier telephony endpoints (`/telephony/{provider}/voice` and `/ws`)
+    // perform their own fail-closed cryptographic authentication (e.g.,
+    // `X-Twilio-Signature` + single-use signed stream tokens) because CPaaS
+    // carriers cannot send `VP_CLIENT_TOKEN`. Exempt them on the client
+    // transport surface only; `/ws` and `/ws/raw` still enforce `VP_CLIENT_TOKEN`.
+    if auth.surface == WS_TRANSPORT_SURFACE && path.starts_with("/telephony/") {
         return next.run(req).await;
     }
     let presented = presented_token(req.headers(), req.uri().query());

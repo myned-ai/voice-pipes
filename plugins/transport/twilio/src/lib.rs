@@ -25,6 +25,7 @@
 mod crypto;
 
 use std::collections::HashMap;
+use std::fmt::Write as _;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -32,7 +33,7 @@ use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use tracing::debug;
+use tracing::{debug, warn};
 use voice_pipes_sdk::media_stream::{
     DialectError, DialectInbound, DialectStart, MediaStreamDialect, MediaStreamDialectFactory,
     MediaStreamEncoding, MediaStreamFrame, WebhookError, WebhookRequest, WebhookResponse,
@@ -250,28 +251,45 @@ fn xml_escape(input: &str) -> String {
 /// Never interpolates untrusted caller fields (`From`, `To`, query params).
 pub(crate) fn build_twiml_connect_stream(
     stream_ws_url: &str,
-    auth_token: &str,
+    auth_token: Option<&str>,
     tenant_id: Option<&str>,
 ) -> String {
     let escaped_url = xml_escape(stream_ws_url);
-    let escaped_auth = xml_escape(auth_token);
-    let tenant_param = match tenant_id {
-        Some(t) if !t.trim().is_empty() => format!(
-            "\n      <Parameter name=\"tenant_id\" value=\"{}\" />",
-            xml_escape(t.trim())
-        ),
-        _ => String::new(),
-    };
-    format!(
-        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
-         <Response>\n  \
-           <Connect>\n    \
-             <Stream url=\"{escaped_url}\">\n      \
-               <Parameter name=\"auth\" value=\"{escaped_auth}\" />{tenant_param}\n    \
-             </Stream>\n  \
-           </Connect>\n\
-         </Response>"
-    )
+    let mut params = String::new();
+    if let Some(tok) = auth_token {
+        let escaped_tok = xml_escape(tok);
+        let _ = write!(
+            params,
+            "\n      <Parameter name=\"auth\" value=\"{escaped_tok}\" />"
+        );
+    }
+    if let Some(t) = tenant_id.map(str::trim).filter(|t| !t.is_empty()) {
+        let escaped_tenant = xml_escape(t);
+        let _ = write!(
+            params,
+            "\n      <Parameter name=\"tenant_id\" value=\"{escaped_tenant}\" />"
+        );
+    }
+    if params.is_empty() {
+        format!(
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+             <Response>\n  \
+               <Connect>\n    \
+                 <Stream url=\"{escaped_url}\" />\n  \
+               </Connect>\n\
+             </Response>"
+        )
+    } else {
+        format!(
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+             <Response>\n  \
+               <Connect>\n    \
+                 <Stream url=\"{escaped_url}\">{params}\n    \
+                 </Stream>\n  \
+               </Connect>\n\
+             </Response>"
+        )
+    }
 }
 
 // ── Wire Protocol Schemas ───────────────────────────────────
@@ -559,6 +577,10 @@ impl MediaStreamDialectFactory for TwilioDialectFactory {
         "twilio"
     }
 
+    fn default_auth_token_env(&self) -> Option<&'static str> {
+        Some("TWILIO_AUTH_TOKEN")
+    }
+
     fn create_dialect(
         &self,
         config: &serde_json::Value,
@@ -578,6 +600,25 @@ impl MediaStreamDialectFactory for TwilioDialectFactory {
         let cfg = TwilioConfig::from_json(config)
             .map_err(|e| WebhookError::Misconfigured(e.to_string()))?;
 
+        let stream_ws_url = cfg
+            .stream_ws_url
+            .as_deref()
+            .filter(|s| s.starts_with("wss://"))
+            .ok_or_else(|| {
+                WebhookError::Misconfigured(
+                    "stream_ws_url must be configured as a wss:// URL".to_string(),
+                )
+            })?;
+
+        if !cfg.require_auth {
+            warn!(
+                "twilio webhook require_auth=false; skipping X-Twilio-Signature validation (simulated/dev mode only)"
+            );
+            let twiml =
+                build_twiml_connect_stream(stream_ws_url, None, cfg.default_tenant_id.as_deref());
+            return Ok(Some(WebhookResponse::ok("text/xml; charset=utf-8", twiml)));
+        }
+
         let auth_token = cfg.effective_auth_token().ok_or_else(|| {
             WebhookError::Misconfigured(
                 "TWILIO_AUTH_TOKEN (or auth_token) is required for webhook validation".to_string(),
@@ -590,15 +631,6 @@ impl MediaStreamDialectFactory for TwilioDialectFactory {
             .ok_or_else(|| {
                 WebhookError::Misconfigured(
                     "public_webhook_url must be configured as an https:// URL".to_string(),
-                )
-            })?;
-        let stream_ws_url = cfg
-            .stream_ws_url
-            .as_deref()
-            .filter(|s| s.starts_with("wss://"))
-            .ok_or_else(|| {
-                WebhookError::Misconfigured(
-                    "stream_ws_url must be configured as a wss:// URL".to_string(),
                 )
             })?;
 
@@ -634,8 +666,11 @@ impl MediaStreamDialectFactory for TwilioDialectFactory {
             cfg.default_tenant_id.clone(),
             cfg.token_ttl_secs,
         )?;
-        let twiml =
-            build_twiml_connect_stream(stream_ws_url, &token, cfg.default_tenant_id.as_deref());
+        let twiml = build_twiml_connect_stream(
+            stream_ws_url,
+            Some(&token),
+            cfg.default_tenant_id.as_deref(),
+        );
         Ok(Some(WebhookResponse::ok("text/xml; charset=utf-8", twiml)))
     }
 }
@@ -853,12 +888,33 @@ mod tests {
     fn twiml_escapes_xml_special_characters() {
         let xml = build_twiml_connect_stream(
             "wss://example.com/ws?a=1&b=2",
-            "tok<>&\"'",
+            Some("tok<>&\"'"),
             Some("tenant<1>"),
         );
         assert!(xml.contains("wss://example.com/ws?a=1&amp;b=2"));
         assert!(xml.contains("tok&lt;&gt;&amp;&quot;&apos;"));
         assert!(xml.contains("tenant&lt;1&gt;"));
+    }
+
+    #[test]
+    fn webhook_allows_unsigned_simulated_caller_when_require_auth_false() {
+        let factory = TwilioDialectFactory::default();
+        let cfg = serde_json::json!({
+            "stream_ws_url": "wss://tunnel.example.com/telephony/twilio/ws",
+            "require_auth": false
+        });
+        let req = WebhookRequest::new();
+        let resp = factory
+            .handle_webhook(&cfg, &req)
+            .expect("webhook ok")
+            .expect("some response");
+        assert_eq!(resp.status_code, 200);
+        assert!(resp.body.contains("<Connect>"));
+        assert!(
+            resp.body
+                .contains("wss://tunnel.example.com/telephony/twilio/ws")
+        );
+        assert!(!resp.body.contains("name=\"auth\""));
     }
 
     fn assert_transport_metrics_conformance(
